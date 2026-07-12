@@ -1,0 +1,76 @@
+# --- Build artifacts ---
+target/
+build/checkstyle/target/
+build/spotless/
+out/
+bin/
+dist/
+*.class
+
+# --- Gradle ---
+.gradle/
+gradle-app.setting
+!gradle-wrapper.jar
+.gradletasknamecache
+
+# --- Maven ---
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+.mvn/timing.properties
+.mvn/wrapper/maven-wrapper.jar
+
+# --- IDEs ---
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.settings/
+.project
+.classpath
+.factorypath
+*.swp
+*~
+
+# --- Eclipse ---
+.metadata
+.recommenders
+
+# --- OS ---
+.DS_Store
+Thumbs.db
+
+# --- Logs ---
+*.log
+logs/
+log/
+
+# --- Runtime / local config (may contain secrets) ---
+*.local.yml
+*.local.yaml
+*.local.properties
+application-local.*
+application-*local.*
+
+# --- Env files ---
+.env
+.env.*
+!.env.example
+
+# --- Claude Code local settings ---
+.claude/settings.local.json
+
+# --- gstack local working dir ---
+.gstack/
+
+# --- Node / frontend (reserved for future UI) ---
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*

@@ -1,0 +1,24 @@
+spring:
+  profiles:
+    active: all-in-one
+  datasource:
+    url: jdbc:h2:mem:observe;DB_CLOSE_DELAY=-1;MODE=MySQL
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: ""
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+    open-in-view: false
+
+observe:
+  worker:
+    enabled: true
+    runner-core: 4
+    runner-max: 16
+    runner-queue: 1000
+    cron-pool-size: 2
+    cron-period-millis: 60000

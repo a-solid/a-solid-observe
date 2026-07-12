@@ -1,0 +1,123 @@
+package com.imsw.observe.config.infrastructure.persistence;
+
+import java.time.Duration;
+import java.time.Instant;
+import java.util.Set;
+import java.util.stream.Collectors;
+
+import com.imsw.observe.config.domain.Subscription;
+import com.imsw.observe.config.infrastructure.ConditionCodec;
+import com.imsw.observe.kernel.event.model.Op;
+import com.imsw.observe.kernel.event.model.SourceType;
+
+public final class SubscriptionMapper {
+
+    private SubscriptionMapper() {}
+
+    public static Subscription toEntity(final SubscriptionPo po, final ConditionCodec codec) {
+        if (po == null) {
+            return null;
+        }
+        return new Subscription(
+                po.id,
+                po.pipelineId,
+                nullSafeInt(po.pipelineVersion),
+                po.mq,
+                po.topic,
+                po.db,
+                po.tableName,
+                toOpSet(po.opTypes),
+                toSourceType(po.sourceType),
+                codec.fromJson(po.fieldFilter),
+                toActionType(po.actionType),
+                toDuration(po.scheduleDelayMs),
+                po.scheduleCorrelationKeyPath,
+                po.name,
+                po.description,
+                toStatus(po.status),
+                po.createdBy,
+                po.createdAt,
+                po.updatedAt);
+    }
+
+    public static SubscriptionPo toPo(final Subscription entity, final ConditionCodec codec) {
+        if (entity == null) {
+            return null;
+        }
+        SubscriptionPo po = new SubscriptionPo();
+        po.id = entity.id();
+        po.pipelineId = entity.pipelineId();
+        po.pipelineVersion = entity.pipelineVersion();
+        po.mq = entity.mq();
+        po.topic = entity.topic();
+        po.db = entity.db();
+        po.tableName = entity.table();
+        po.opTypes = fromOpSet(entity.opTypes());
+        po.sourceType = fromSourceType(entity.sourceType());
+        po.fieldFilter = codec.toJson(entity.fieldFilter());
+        po.actionType = fromActionType(entity.actionType());
+        po.scheduleDelayMs = fromDuration(entity.scheduleDelay());
+        po.scheduleCorrelationKeyPath = entity.scheduleCorrelationKeyPath();
+        po.name = entity.name();
+        po.description = entity.description();
+        po.status = fromStatus(entity.status());
+        po.createdBy = entity.createdBy();
+        po.createdAt = nullSafeNow(entity.createdAt());
+        po.updatedAt = nullSafeNow(entity.updatedAt());
+        return po;
+    }
+
+    private static int nullSafeInt(final Integer value) {
+        return value == null ? 0 : value;
+    }
+
+    private static Instant nullSafeNow(final Instant value) {
+        return value == null ? Instant.now() : value;
+    }
+
+    private static Set<Op> toOpSet(final Set<String> raw) {
+        if (raw == null) {
+            return Set.of();
+        }
+        return raw.stream().map(Op::valueOf).collect(Collectors.toSet());
+    }
+
+    private static Set<String> fromOpSet(final Set<Op> ops) {
+        if (ops == null) {
+            return null;
+        }
+        return ops.stream().map(Op::name).collect(Collectors.toSet());
+    }
+
+    private static SourceType toSourceType(final String raw) {
+        return raw == null ? null : SourceType.valueOf(raw);
+    }
+
+    private static String fromSourceType(final SourceType type) {
+        return type == null ? null : type.name();
+    }
+
+    private static Subscription.ActionType toActionType(final String raw) {
+        return raw == null ? null : Subscription.ActionType.valueOf(raw);
+    }
+
+    private static String fromActionType(final Subscription.ActionType type) {
+        return type == null ? "RUN" : type.name();
+    }
+
+    private static Subscription.Status toStatus(final String raw) {
+        return raw == null ? null : Subscription.Status.valueOf(raw);
+    }
+
+    private static String fromStatus(final Subscription.Status status) {
+        return status == null ? "ACTIVE" : status.name();
+    }
+
+    private static Duration toDuration(final Long millis) {
+        return millis == null ? null : Duration.ofMillis(millis);
+    }
+
+    private static Long fromDuration(final Duration duration) {
+        return duration == null ? null : duration.toMillis();
+    }
+}
