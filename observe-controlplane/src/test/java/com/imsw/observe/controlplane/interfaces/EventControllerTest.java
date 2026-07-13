@@ -1,9 +1,9 @@
 package com.imsw.observe.controlplane.interfaces;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
@@ -56,7 +56,7 @@ class EventControllerTest {
         // eventId 放进 attributes
         String eventId = (String) submitted.meta().attributes().get("eventId");
         assertNotNull(eventId);
-        assertTrue(!eventId.isEmpty());
+        assertFalse(eventId.isEmpty());
         // 响应里的 eventId 与提交进 Event 的一致
         assertEquals(eventId, resp.eventId());
     }
@@ -79,5 +79,28 @@ class EventControllerTest {
                 new EventController.SubmitEventRequest(null, null, null, null, null, null);
         assertThrows(IllegalArgumentException.class, () -> controller.submit(req));
         verify(apiSource, times(0)).submit(any(Event.class));
+    }
+
+    @Test
+    void submitRejectsUnknownOp() {
+        EventController.SubmitEventRequest req =
+                new EventController.SubmitEventRequest("svc", null, "BOGUS", null, null, null);
+        assertThrows(IllegalArgumentException.class, () -> controller.submit(req));
+        verify(apiSource, times(0)).submit(any(Event.class));
+    }
+
+    @Test
+    void submitOverwritesClientSuppliedEventId() {
+        EventController.SubmitEventRequest req = new EventController.SubmitEventRequest(
+                "svc", null, null, null, null, Map.of("eventId", "client-supplied"));
+
+        EventController.SubmitEventResponse resp = controller.submit(req);
+
+        ArgumentCaptor<Event> captor = ArgumentCaptor.forClass(Event.class);
+        verify(apiSource).submit(captor.capture());
+        String submittedEventId = (String) captor.getValue().meta().attributes().get("eventId");
+        assertNotNull(submittedEventId);
+        org.junit.jupiter.api.Assertions.assertNotEquals("client-supplied", submittedEventId);
+        assertEquals(submittedEventId, resp.eventId());
     }
 }
