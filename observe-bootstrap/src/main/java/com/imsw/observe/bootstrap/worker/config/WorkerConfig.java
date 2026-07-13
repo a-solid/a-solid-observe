@@ -6,6 +6,8 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
+import javax.jms.JMSException;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationRunner;
@@ -14,6 +16,10 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.Scheduled;
 
+import com.ibm.mq.jms.MQConnectionFactory;
+import com.ibm.msg.client.wmq.common.CommonConstants;
+import com.imsw.observe.bootstrap.worker.source.IbmMqCdcSource;
+import com.imsw.observe.bootstrap.worker.source.IbmMqXmlParser;
 import com.imsw.observe.bootstrap.worker.source.InMemoryCdcSource;
 import com.imsw.observe.config.application.ConfigLoader;
 import com.imsw.observe.config.application.PipelineHotReloader;
@@ -95,6 +101,26 @@ public class WorkerConfig {
     @Bean
     public InMemoryCdcSource inMemoryCdcSource(final SourceDispatcher dispatcher) {
         InMemoryCdcSource source = new InMemoryCdcSource();
+        source.start(dispatcher::onBatch);
+        return source;
+    }
+
+    @Bean
+    @ConditionalOnProperty(prefix = "observe.worker.ibm-mq", name = "enabled", havingValue = "true")
+    public IbmMqCdcSource ibmMqCdcSource(final SourceDispatcher dispatcher, final IbmMqProperties props) {
+        MQConnectionFactory cf = new MQConnectionFactory();
+        try {
+            cf.setHostName(props.getHost());
+            cf.setPort(props.getPort());
+            cf.setQueueManager(props.getQueueManager());
+            cf.setChannel(props.getChannel());
+            cf.setTransportType(CommonConstants.WMQ_CM_CLIENT);
+        } catch (JMSException e) {
+            throw new IllegalStateException("cannot configure IBM MQ connection factory", e);
+        }
+        IbmMqXmlParser parser = new IbmMqXmlParser();
+        IbmMqCdcSource source =
+                new IbmMqCdcSource(cf, props.getQueue(), parser, props.getBatchSize(), props.getBatchTimeoutMillis());
         source.start(dispatcher::onBatch);
         return source;
     }

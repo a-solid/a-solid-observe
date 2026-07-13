@@ -22,3 +22,12 @@ observe:
     runner-queue: 1000
     cron-pool-size: 2
     cron-period-millis: 60000
+    ibm-mq:
+      enabled: false
+      host: localhost
+      port: 1414
+      queue-manager: QM1
+      channel: DEV.APP.SVRCONN
+      queue: APP.Q
+      batch-size: 50
+      batch-timeout-millis: 200
