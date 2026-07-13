@@ -14,7 +14,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import com.imsw.observe.alerting.infrastructure.persistence.alert.AlertPo;
 import com.imsw.observe.alerting.infrastructure.persistence.alert.AlertRepository;
 import com.imsw.observe.alerting.infrastructure.persistence.evidence.EvidenceRepository;
-import com.imsw.observe.bootstrap.worker.source.InMemoryCdcMessageSource;
+import com.imsw.observe.bootstrap.worker.source.InMemoryCdcSource;
 import com.imsw.observe.config.application.PipelineCrudService;
 import com.imsw.observe.config.application.PipelineHotReloader;
 import com.imsw.observe.config.application.SubscriptionCrudService;
@@ -47,7 +47,7 @@ class EndToEndFlowTest {
     private PipelineHotReloader hotReloader;
 
     @Autowired
-    private InMemoryCdcMessageSource cdcSource;
+    private InMemoryCdcSource cdcSource;
 
     @Autowired
     private AlertRepository alertRepository;

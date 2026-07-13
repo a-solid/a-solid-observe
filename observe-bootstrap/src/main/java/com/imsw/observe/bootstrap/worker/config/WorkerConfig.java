@@ -14,7 +14,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.Scheduled;
 
-import com.imsw.observe.bootstrap.worker.source.InMemoryCdcMessageSource;
+import com.imsw.observe.bootstrap.worker.source.InMemoryCdcSource;
 import com.imsw.observe.config.application.ConfigLoader;
 import com.imsw.observe.config.application.PipelineHotReloader;
 import com.imsw.observe.config.application.PipelineRegistryLoader;
@@ -23,7 +23,6 @@ import com.imsw.observe.pipeline.application.PipelineRunner;
 import com.imsw.observe.pipeline.application.SourceDispatcher;
 import com.imsw.observe.pipeline.application.SubscriptionMatcher;
 import com.imsw.observe.pipeline.infrastructure.source.ApiSource;
-import com.imsw.observe.pipeline.infrastructure.source.CdcMqSource;
 import com.imsw.observe.pipeline.infrastructure.source.CronSource;
 
 @Configuration
@@ -94,13 +93,8 @@ public class WorkerConfig {
     }
 
     @Bean
-    public InMemoryCdcMessageSource cdcMessageSource() {
-        return new InMemoryCdcMessageSource();
-    }
-
-    @Bean
-    public CdcMqSource cdcMqSource(final InMemoryCdcMessageSource cdcMessageSource, final SourceDispatcher dispatcher) {
-        CdcMqSource source = new CdcMqSource(cdcMessageSource);
+    public InMemoryCdcSource inMemoryCdcSource(final SourceDispatcher dispatcher) {
+        InMemoryCdcSource source = new InMemoryCdcSource();
         source.start(dispatcher::onBatch);
         return source;
     }
