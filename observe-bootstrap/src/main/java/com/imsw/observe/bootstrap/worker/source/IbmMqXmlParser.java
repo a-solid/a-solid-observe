@@ -2,7 +2,6 @@ package com.imsw.observe.bootstrap.worker.source;
 
 import java.io.StringReader;
 import java.time.Instant;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -46,6 +45,12 @@ public final class IbmMqXmlParser implements MessageParser<TextMessage> {
         try {
             DocumentBuilderFactory f = DocumentBuilderFactory.newInstance();
             f.setNamespaceAware(false);
+            f.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+            f.setFeature("http://xml.org/sax/features/external-general-entities", false);
+            f.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+            f.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
+            f.setXIncludeAware(false);
+            f.setExpandEntityReferences(false);
             this.documentBuilder = f.newDocumentBuilder();
         } catch (Exception e) {
             throw new IllegalStateException("cannot init DocumentBuilder", e);
@@ -59,6 +64,9 @@ public final class IbmMqXmlParser implements MessageParser<TextMessage> {
             xml = raw.getText();
         } catch (JMSException e) {
             throw new MessageParseException("cannot read text from JMS message", e);
+        }
+        if (xml == null) {
+            throw new MessageParseException("null JMS text");
         }
         Document doc;
         try {
@@ -81,7 +89,7 @@ public final class IbmMqXmlParser implements MessageParser<TextMessage> {
         return new Event(meta, before, after, op, Instant.now());
     }
 
-    private static Op parseOp(final String raw) {
+    private static Op parseOp(final String raw) throws MessageParseException {
         if (raw == null || raw.isBlank()) {
             return Op.INSERT;
         }
@@ -89,7 +97,11 @@ public final class IbmMqXmlParser implements MessageParser<TextMessage> {
         if ("CREATE".equals(upper)) {
             return Op.INSERT;
         }
-        return Op.valueOf(upper);
+        try {
+            return Op.valueOf(upper);
+        } catch (IllegalArgumentException e) {
+            throw new MessageParseException("unknown <op>: " + raw.trim(), e);
+        }
     }
 
     private static String childText(final Element parent, final String name) {
@@ -114,6 +126,6 @@ public final class IbmMqXmlParser implements MessageParser<TextMessage> {
                 map.put(n.getNodeName(), n.getTextContent());
             }
         }
-        return Map.copyOf(new HashMap<>(map));
+        return Map.copyOf(map);
     }
 }

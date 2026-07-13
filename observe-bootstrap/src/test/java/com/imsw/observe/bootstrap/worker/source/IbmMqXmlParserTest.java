@@ -81,4 +81,32 @@ class IbmMqXmlParserTest {
         TextMessage msg = textMessage("<event><op>INSERT</op></event>");
         assertThrows(MessageParseException.class, () -> parser.parse(msg));
     }
+
+    @Test
+    void rejectsUnknownOp() throws Exception {
+        TextMessage msg = textMessage(
+                """
+                <event>
+                  <source>svc</source>
+                  <op>UPSERT</op>
+                </event>
+                """);
+        assertThrows(MessageParseException.class, () -> parser.parse(msg));
+    }
+
+    @Test
+    void emptyAfterYieldsEmptyMap() throws Exception {
+        TextMessage msg = textMessage(
+                """
+                <event>
+                  <source>svc</source>
+                  <after></after>
+                </event>
+                """);
+
+        var event = parser.parse(msg);
+
+        assertEquals(SourceType.CDC, event.meta().sourceType());
+        org.junit.jupiter.api.Assertions.assertTrue(event.after().isEmpty());
+    }
 }
