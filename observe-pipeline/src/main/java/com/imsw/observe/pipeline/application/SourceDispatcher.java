@@ -1,7 +1,6 @@
 package com.imsw.observe.pipeline.application;
 
 import java.util.List;
-import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
 
 import org.slf4j.Logger;
@@ -33,6 +32,14 @@ public final class SourceDispatcher implements EventListener {
         this.delayedActionHandler = delayedActionHandler;
     }
 
+    /**
+     * Dispatch a batch of events to matched pipelines.
+     *
+     * <p>Contract: this method throws {@link java.util.concurrent.RejectedExecutionException} when
+     * the runner pool is saturated. Callers that require at-least-once semantics (e.g. the IBM MQ
+     * source) rely on this propagation to treat the batch as failed and avoid acking a dropped
+     * event.
+     */
     @Override
     public void onBatch(final List<Event> events) {
         if (events == null || events.isEmpty()) {
@@ -54,20 +61,14 @@ public final class SourceDispatcher implements EventListener {
             if (delayedActionHandler.handle(m.subscription(), event, pipeline)) {
                 continue;
             }
-            try {
-                runnerPool.execute(() -> {
-                    try {
-                        runner.run(pipeline, event, subscriptionId);
-                    } catch (RuntimeException e) {
-                        LOG.warn("pipeline {} (subscription {}) execution threw", pipeline.id(), subscriptionId, e);
-                    }
-                });
-            } catch (RejectedExecutionException e) {
-                LOG.warn(
-                        "runner pool rejected pipeline {} (subscription {}); queue full",
-                        pipeline.id(),
-                        subscriptionId);
-            }
+            // 让 RejectedExecutionException 传播到调用方 (如 IbmMqCdcSource.flush) 以保证 at-least-once.
+            runnerPool.execute(() -> {
+                try {
+                    runner.run(pipeline, event, subscriptionId);
+                } catch (RuntimeException e) {
+                    LOG.warn("pipeline {} (subscription {}) execution threw", pipeline.id(), subscriptionId, e);
+                }
+            });
         }
     }
 }
