@@ -40,6 +40,8 @@ public final class IbmMqCdcSource implements Source, MessageListener {
 
     private final ReentrantLock lock = new ReentrantLock();
 
+    private volatile boolean stopped = false;
+
     private EventListener listener;
 
     private Connection connection;
@@ -81,32 +83,36 @@ public final class IbmMqCdcSource implements Source, MessageListener {
             lastFlushMs = System.currentTimeMillis();
             LOG.info("IbmMqCdcSource started, queue={}", queueName);
         } catch (JMSException e) {
+            closeQuietly(consumer);
+            closeQuietly(session);
+            closeQuietly(connection);
+            consumer = null;
+            session = null;
+            connection = null;
             throw new IllegalStateException("cannot start IBM MQ CDC source", e);
         }
     }
 
     @Override
     public void stop() {
-        try {
-            if (consumer != null) {
-                consumer.close();
-            }
-            if (session != null) {
-                session.close();
-            }
-            if (connection != null) {
-                connection.close();
-            }
-        } catch (JMSException e) {
-            LOG.warn("error closing IBM MQ CDC source", e);
-        }
+        stopped = true;
+        closeQuietly(consumer);
+        closeQuietly(session);
+        closeQuietly(connection);
+        consumer = null;
+        session = null;
+        connection = null;
         LOG.info("IbmMqCdcSource stopped");
     }
 
     @Override
     public void onMessage(final Message message) {
+        // JMS 单 session 的 MessageListener 本就串行; 此锁为防御性, 兼容非规范 provider.
         lock.lock();
         try {
+            if (stopped) {
+                return;
+            }
             Event event;
             try {
                 event = parser.parse((TextMessage) message);
@@ -143,13 +149,13 @@ public final class IbmMqCdcSource implements Source, MessageListener {
                 LOG.warn("listener.onBatch failed, batch will be redelivered ({} events)", events.size(), e);
                 throw e;
             }
-            // 成功 -> 逐条 ack. 单条 ack 异常不影响已派发批次, 仅记日志; 未成功 ack 的消息会被 MQ 重投.
-            for (Message m : msgs) {
-                try {
-                    m.acknowledge();
-                } catch (JMSException e) {
-                    LOG.warn("acknowledge failed, message may be redelivered", e);
-                }
+            // CLIENT_ACKNOWLEDGE: ack 一条即 ack 本 session 当前窗口内所有已投递消息.
+            // 用本批最后一条 ack; 若失败则整批未 ack, MQ 重投 (at-least-once).
+            Message last = msgs.get(msgs.size() - 1);
+            try {
+                last.acknowledge();
+            } catch (JMSException e) {
+                LOG.warn("acknowledge failed, batch may be redelivered ({} events)", events.size(), e);
             }
         } finally {
             eventBuffer.clear();
@@ -167,5 +173,38 @@ public final class IbmMqCdcSource implements Source, MessageListener {
             }
         }
         return "<non-text>";
+    }
+
+    private static void closeQuietly(final MessageConsumer c) {
+        if (c == null) {
+            return;
+        }
+        try {
+            c.close();
+        } catch (JMSException e) {
+            LOG.warn("error closing JMS consumer", e);
+        }
+    }
+
+    private static void closeQuietly(final Session s) {
+        if (s == null) {
+            return;
+        }
+        try {
+            s.close();
+        } catch (JMSException e) {
+            LOG.warn("error closing JMS session", e);
+        }
+    }
+
+    private static void closeQuietly(final Connection c) {
+        if (c == null) {
+            return;
+        }
+        try {
+            c.close();
+        } catch (JMSException e) {
+            LOG.warn("error closing JMS connection", e);
+        }
     }
 }
