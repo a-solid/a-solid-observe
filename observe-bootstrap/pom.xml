@@ -56,6 +56,11 @@
             <artifactId>h2</artifactId>
             <scope>runtime</scope>
         </dependency>
+        <dependency>
+            <groupId>com.ibm.mq</groupId>
+            <artifactId>com.ibm.mq.allclient</artifactId>
+            <version>${ibm-mq-client.version}</version>
+        </dependency>
     </dependencies>
 
     <build>
