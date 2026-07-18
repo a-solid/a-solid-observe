@@ -30,3 +30,9 @@ observe:
       queue: APP.Q
       batch-size: 50
       batch-timeout-millis: 200
+  alerting:
+    resolve-job:
+      interval-millis: 60000
+      batch-size: 1000
+    silence:
+      cache-ttl-millis: 10000

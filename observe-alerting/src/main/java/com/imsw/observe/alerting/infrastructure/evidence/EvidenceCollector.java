@@ -29,6 +29,7 @@ public final class EvidenceCollector {
         Sized sized = enforceLimit(outputs);
         EvidenceEntity entity = new EvidenceEntity(
                 null,
+                null,
                 meta.namespace(),
                 meta.pipelineId(),
                 meta.pipelineVersion(),
@@ -38,7 +39,8 @@ public final class EvidenceCollector {
                 meta.traceId(),
                 meta.spanId(),
                 Instant.now(),
-                sized.truncated);
+                sized.truncated,
+                0);
         return new Collected(entity, sized.sizeBytes, sized.truncated);
     }
 

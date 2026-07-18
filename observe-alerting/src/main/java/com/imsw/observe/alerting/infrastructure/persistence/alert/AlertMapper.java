@@ -33,7 +33,9 @@ public final class AlertMapper {
                 po.resolvedAt,
                 po.status == null ? null : AlertStatus.valueOf(po.status),
                 po.dedupCount == null ? 0 : po.dedupCount,
-                po.generatorUrl,
+                po.ackNote,
+                po.ackBy,
+                po.ackAt,
                 po.traceId);
     }
 
@@ -60,7 +62,9 @@ public final class AlertMapper {
         po.resolvedAt = entity.resolvedAt();
         po.status = entity.status() == null ? null : entity.status().name();
         po.dedupCount = entity.dedupCount();
-        po.generatorUrl = entity.generatorURL();
+        po.ackNote = entity.ackNote();
+        po.ackBy = entity.ackBy();
+        po.ackAt = entity.ackAt();
         po.traceId = entity.traceId();
         Instant now = Instant.now();
         po.createdAt = now;

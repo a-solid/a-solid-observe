@@ -32,6 +32,24 @@ public interface AlertRepository extends JpaRepository<AlertPo, Long> {
             + "where a.id in :ids and a.status = 'FIRING'")
     int resolveBatch(@Param("ids") List<Long> ids, @Param("now") Instant now);
 
+    /**
+     * ADR-0005 §4：ack/resolve/ignore 的 CAS 式处置更新。{@code fromStatus} 作为乐观锁条件——
+     * 影响 0 行表示并发已转移，service 层抛 ConflictException。
+     */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("update AlertPo a set a.status = :toStatus, a.ackNote = :note, a.ackBy = :by, "
+            + "a.ackAt = :at, a.resolvedAt = coalesce(:resolvedAt, a.resolvedAt), a.updatedAt = :at "
+            + "where a.id = :id and a.namespace = :namespace and a.status = :fromStatus")
+    int applyDisposition(
+            @Param("id") Long id,
+            @Param("namespace") String namespace,
+            @Param("fromStatus") String fromStatus,
+            @Param("toStatus") String toStatus,
+            @Param("note") String note,
+            @Param("by") String by,
+            @Param("at") Instant at,
+            @Param("resolvedAt") Instant resolvedAt);
+
     // ---------- B6 聚合统计（namespace 下推 where，可选过滤 :x is null or ...） ----------
 
     @Query("select new com.imsw.observe.alerting.application.DimensionCount(a.severity, count(a)) "

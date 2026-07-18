@@ -29,9 +29,14 @@ import com.imsw.observe.kernel.error.ObserveException;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
-    @ExceptionHandler(ResourceNotFoundException.class)
-    public ResponseEntity<ErrorBody> handleNotFound(final ResourceNotFoundException e) {
-        return body(e.code(), message(e), HttpStatus.NOT_FOUND);
+    @ExceptionHandler({ResourceNotFoundException.class, com.imsw.observe.kernel.error.ResourceNotFoundException.class})
+    public ResponseEntity<ErrorBody> handleNotFound(final RuntimeException e) {
+        return body(ErrorCode.NOT_FOUND, message(e), HttpStatus.NOT_FOUND);
+    }
+
+    @ExceptionHandler(com.imsw.observe.kernel.error.ConflictException.class)
+    public ResponseEntity<ErrorBody> handleConflict(final com.imsw.observe.kernel.error.ConflictException e) {
+        return body(ErrorCode.CONFLICT, message(e), HttpStatus.CONFLICT);
     }
 
     @ExceptionHandler(ErrorResponseException.class)

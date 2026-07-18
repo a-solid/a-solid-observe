@@ -52,6 +52,21 @@ class DefaultAlertSinkIntegrationTest {
     @Autowired
     private ObjectMapper objectMapper;
 
+    @Autowired
+    private com.imsw.observe.alerting.infrastructure.persistence.silence.AlertSilenceRepository silenceRepository;
+
+    /** 构造一个接真实 silence repo 的 sink（无规则时 matcher 不命中）。 */
+    private DefaultAlertSink newSink() {
+        return new DefaultAlertSink(
+                alertRepository,
+                evidenceRepository,
+                new EvidenceCollector(objectMapper),
+                new AnnotationRenderer(),
+                new com.imsw.observe.alerting.infrastructure.AlertSilenceMatcher(
+                        silenceRepository, java.time.Duration.ofMillis(1000)),
+                SNOWFLAKE);
+    }
+
     @BeforeEach
     void cleanTables() {
         runInTx(() -> {
@@ -62,12 +77,7 @@ class DefaultAlertSinkIntegrationTest {
 
     @Test
     void emitsPersistsAndDedupsAlert() {
-        DefaultAlertSink sink = new DefaultAlertSink(
-                alertRepository,
-                evidenceRepository,
-                new EvidenceCollector(objectMapper),
-                new AnnotationRenderer(),
-                SNOWFLAKE);
+        DefaultAlertSink sink = newSink();
 
         runInTx(() -> sink.drainAndPersist(newContext(alertSignal("fp-1", null))));
         runInTx(() -> sink.drainAndPersist(newContext(alertSignal("fp-1", null))));
@@ -79,18 +89,14 @@ class DefaultAlertSinkIntegrationTest {
         assertThat(alert.fingerprint).isEqualTo("fp-1");
         assertThat(alert.namespace).isEqualTo("trade"); // 告警继承执行上下文的 namespace (ADR-0002)
         assertThat(alert.dedupCount).isEqualTo(2);
-        assertThat(evidenceRepository.findAll()).hasSize(1);
+        // ADR-0005 §2：1:N —— 每次 emit（含 dedup 命中）各写一条证据
+        assertThat(evidenceRepository.findAll()).hasSize(2);
     }
 
     @Test
     void resolveJobFlipsExpiredFiringToResolved() {
-        DefaultAlertSink sink = new DefaultAlertSink(
-                alertRepository,
-                evidenceRepository,
-                new EvidenceCollector(objectMapper),
-                new AnnotationRenderer(),
-                SNOWFLAKE);
-        AlertResolveJob resolveJob = new AlertResolveJob(alertRepository);
+        DefaultAlertSink sink = newSink();
+        AlertResolveJob resolveJob = new AlertResolveJob(alertRepository, 1000);
 
         runInTx(() -> sink.drainAndPersist(newContext(alertSignal("fp-2", Duration.ofMillis(1)))));
 

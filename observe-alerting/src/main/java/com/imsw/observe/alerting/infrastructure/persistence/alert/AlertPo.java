@@ -73,8 +73,15 @@ public class AlertPo {
     @Column(name = "dedup_count", nullable = false)
     public Integer dedupCount = 1;
 
-    @Column(name = "generator_url")
-    public String generatorUrl;
+    // ADR-0005 disposition（ack/ignore）
+    @Column(name = "ack_note")
+    public String ackNote;
+
+    @Column(name = "ack_by")
+    public String ackBy;
+
+    @Column(name = "ack_at")
+    public Instant ackAt;
 
     @Column(name = "trace_id")
     public String traceId;

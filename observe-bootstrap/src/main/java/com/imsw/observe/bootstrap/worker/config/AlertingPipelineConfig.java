@@ -44,14 +44,29 @@ public class AlertingPipelineConfig {
             final EvidenceRepository evidenceRepository,
             final EvidenceCollector evidenceCollector,
             final AnnotationRenderer annotationRenderer,
+            final com.imsw.observe.alerting.infrastructure.AlertSilenceMatcher silenceMatcher,
             final com.imsw.observe.kernel.util.SnowflakeIdGenerator snowflakeIdGenerator) {
         return new DefaultAlertSink(
-                alertRepository, evidenceRepository, evidenceCollector, annotationRenderer, snowflakeIdGenerator);
+                alertRepository,
+                evidenceRepository,
+                evidenceCollector,
+                annotationRenderer,
+                silenceMatcher,
+                snowflakeIdGenerator);
     }
 
     @Bean
     public AlertResolveJob alertResolveJob(final AlertRepository alertRepository) {
-        return new AlertResolveJob(alertRepository);
+        return new AlertResolveJob(alertRepository, 1000);
+    }
+
+    @Bean
+    public com.imsw.observe.alerting.infrastructure.AlertSilenceMatcher alertSilenceMatcher(
+            final com.imsw.observe.alerting.infrastructure.persistence.silence.AlertSilenceRepository silenceRepository,
+            final org.springframework.core.env.Environment env) {
+        long ttlMillis = env.getProperty("observe.alerting.silence.cache-ttl-millis", Long.class, 10_000L);
+        return new com.imsw.observe.alerting.infrastructure.AlertSilenceMatcher(
+                silenceRepository, java.time.Duration.ofMillis(ttlMillis));
     }
 
     @Bean

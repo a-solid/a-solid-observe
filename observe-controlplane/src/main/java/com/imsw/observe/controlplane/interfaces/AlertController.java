@@ -1,12 +1,21 @@
 package com.imsw.observe.controlplane.interfaces;
 
+import java.util.List;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.imsw.observe.alerting.application.AlertDispositionService;
 import com.imsw.observe.alerting.application.AlertQueryService;
+import com.imsw.observe.alerting.domain.AlertEntity;
 import com.imsw.observe.controlplane.interfaces.dto.AlertDto;
 import com.imsw.observe.controlplane.interfaces.dto.EvidenceDto;
 import com.imsw.observe.controlplane.interfaces.web.ApiResponse;
@@ -15,11 +24,9 @@ import com.imsw.observe.controlplane.interfaces.web.Pages;
 import com.imsw.observe.controlplane.interfaces.web.ResourceNotFoundException;
 
 /**
- * Alerts 查询接口（ADR-0002 软隔离铁律）。
+ * Alerts 查询 + 处置接口（ADR-0002 软隔离铁律；ADR-0005 ack/resolve/ignore + 1:N evidence）。
  *
- * <p>Alerts/Evidence 是运行时派生行，以 snowflake BIGINT id 为物理主键，namespace 仅作软隔离过滤——
- * 故 namespace 不进路径，而以必填查询参数 {@code ?namespace=} 形式出现（与既有的 {@code ?status=&team=&pipeline_id=}
- * 过滤参数一致）。单条按 {@code (namespace, id)} 软校验：namespace 不匹配视为 404，避免跨租户探测。
+ * <p>namespace 作必填查询参数 {@code ?namespace=}；单条按 {@code (namespace, id)} 软校验，不匹配返回 404。
  */
 @RestController
 @RequestMapping("/api/v1/alerts")
@@ -27,8 +34,12 @@ public class AlertController {
 
     private final AlertQueryService alertQueryService;
 
-    public AlertController(final AlertQueryService alertQueryService) {
+    private final AlertDispositionService dispositionService;
+
+    public AlertController(
+            final AlertQueryService alertQueryService, final AlertDispositionService dispositionService) {
         this.alertQueryService = alertQueryService;
+        this.dispositionService = dispositionService;
     }
 
     @GetMapping
@@ -62,13 +73,55 @@ public class AlertController {
                         () -> new ResourceNotFoundException("alert " + id + " not found in namespace " + namespace));
     }
 
+    /** ADR-0005 §2：1:N 证据列表。 */
     @GetMapping("/{id}/evidence")
-    public ApiResponse<EvidenceDto> getEvidence(@PathVariable final Long id, @RequestParam final String namespace) {
-        return alertQueryService
-                .findEvidenceByAlertId(namespace, id)
+    public ApiResponse<List<EvidenceDto>> getEvidence(
+            @PathVariable final Long id, @RequestParam final String namespace) {
+        if (alertQueryService.findById(namespace, id).isEmpty()) {
+            throw new ResourceNotFoundException("alert " + id + " not found in namespace " + namespace);
+        }
+        return ApiResponse.ok(alertQueryService.findEvidencesByAlertId(namespace, id).stream()
                 .map(EvidenceDto::from)
-                .map(ApiResponse::ok)
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "evidence for alert " + id + " not found in namespace " + namespace));
+                .toList());
     }
+
+    // ---------- ADR-0005 §4 disposition ----------
+
+    @PostMapping("/{id}/ack")
+    public ApiResponse<AlertDto> acknowledge(
+            @PathVariable final Long id,
+            @RequestParam final String namespace,
+            @Valid @RequestBody(required = false) final DispositionRequest req) {
+        AlertEntity alert = dispositionService.acknowledge(namespace, id, noteOf(req), byOf(req));
+        return ApiResponse.ok(AlertDto.from(alert));
+    }
+
+    @PostMapping("/{id}/resolve")
+    public ApiResponse<AlertDto> resolve(
+            @PathVariable final Long id,
+            @RequestParam final String namespace,
+            @Valid @RequestBody(required = false) final DispositionRequest req) {
+        AlertEntity alert = dispositionService.resolve(namespace, id, noteOf(req), byOf(req));
+        return ApiResponse.ok(AlertDto.from(alert));
+    }
+
+    @PostMapping("/{id}/ignore")
+    public ApiResponse<AlertDto> ignore(
+            @PathVariable final Long id,
+            @RequestParam final String namespace,
+            @Valid @RequestBody(required = false) final DispositionRequest req) {
+        AlertEntity alert = dispositionService.ignore(namespace, id, noteOf(req), byOf(req));
+        return ApiResponse.ok(AlertDto.from(alert));
+    }
+
+    private static String noteOf(final DispositionRequest req) {
+        return req == null ? null : req.note();
+    }
+
+    private static String byOf(final DispositionRequest req) {
+        return req == null ? null : req.by();
+    }
+
+    /** ack/resolve/ignore 请求体（均可选）。 */
+    public record DispositionRequest(String note, @NotBlank String by) {}
 }

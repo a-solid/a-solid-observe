@@ -80,9 +80,20 @@ public class AlertQueryService {
             return Optional.empty();
         }
         return evidenceRepository
-                .findByAlertId(alertId)
+                .findFirstByAlertIdOrderByCapturedAtAsc(alertId)
                 .map(EvidenceMapper::toEntity)
                 .filter(e -> namespace.equals(e.namespace()));
+    }
+
+    /** ADR-0005 §2：1:N 证据列表（按捕获时间升序），namespace 软校验。alert 不存在或无证据返回空列表。 */
+    public List<EvidenceEntity> findEvidencesByAlertId(final String namespace, final Long alertId) {
+        if (alertId == null) {
+            return List.of();
+        }
+        return evidenceRepository.findAllByAlertIdOrderByCapturedAtAsc(alertId).stream()
+                .map(EvidenceMapper::toEntity)
+                .filter(e -> namespace.equals(e.namespace()))
+                .toList();
     }
 
     // ---------- B6 聚合统计 ----------

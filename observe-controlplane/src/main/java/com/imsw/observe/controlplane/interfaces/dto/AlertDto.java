@@ -6,6 +6,7 @@ import java.util.Map;
 import com.imsw.observe.alerting.domain.AlertEntity;
 import com.imsw.observe.kernel.alert.model.Severity;
 
+/** 告警 DTO（含 ADR-0005 disposition 字段 ackNote/ackBy/ackAt）。 */
 public record AlertDto(
         Long id,
         String namespace,
@@ -25,6 +26,9 @@ public record AlertDto(
         Instant resolvedAt,
         String status,
         int dedupCount,
+        String ackNote,
+        String ackBy,
+        Instant ackAt,
         String traceId) {
 
     public static AlertDto from(final AlertEntity e) {
@@ -47,6 +51,9 @@ public record AlertDto(
                 e.resolvedAt(),
                 e.status() == null ? null : e.status().name(),
                 e.dedupCount(),
+                e.ackNote(),
+                e.ackBy(),
+                e.ackAt(),
                 e.traceId());
     }
 }

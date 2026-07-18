@@ -27,6 +27,11 @@ import com.imsw.observe.kernel.event.model.ExecutionContext;
 import com.imsw.observe.kernel.event.model.ExecutionMeta;
 import com.imsw.observe.kernel.util.SnowflakeIdGenerator;
 
+/**
+ * 告警落库（ADR-0005 wave + 1:N evidence + silence 拦截）。
+ *
+ * <p>每次 emit（含 wave 内 dedup 命中）都写一条 evidence（1:N）。emit 前查 silence matcher，命中则不建告警。
+ */
 public final class DefaultAlertSink implements com.imsw.observe.kernel.alert.spi.AlertSink {
 
     private static final Logger LOG = LoggerFactory.getLogger(DefaultAlertSink.class);
@@ -39,6 +44,8 @@ public final class DefaultAlertSink implements com.imsw.observe.kernel.alert.spi
 
     private final AnnotationRenderer annotationRenderer;
 
+    private final AlertSilenceMatcher silenceMatcher;
+
     private final SnowflakeIdGenerator snowflake;
 
     public DefaultAlertSink(
@@ -46,11 +53,13 @@ public final class DefaultAlertSink implements com.imsw.observe.kernel.alert.spi
             final EvidenceRepository evidenceRepository,
             final EvidenceCollector evidenceCollector,
             final AnnotationRenderer annotationRenderer,
+            final AlertSilenceMatcher silenceMatcher,
             final SnowflakeIdGenerator snowflake) {
         this.alertRepository = alertRepository;
         this.evidenceRepository = evidenceRepository;
         this.evidenceCollector = evidenceCollector;
         this.annotationRenderer = annotationRenderer;
+        this.silenceMatcher = silenceMatcher;
         this.snowflake = snowflake;
     }
 
@@ -76,9 +85,17 @@ public final class DefaultAlertSink implements com.imsw.observe.kernel.alert.spi
         Instant now = Instant.now();
         Instant endsAt = now.plus(ttl);
 
+        // ADR-0005 §3：emit 前查 silence，命中则静默（不建告警、不写证据）
+        if (silenceMatcher.silenced(meta.namespace(), fingerprint, labels, meta.pipelineId())) {
+            return;
+        }
+
         Optional<AlertPo> existing = alertRepository.findFirstByFingerprintAndStatusOrderByIdAsc(fingerprint, "FIRING");
+        EvidenceCollector.Collected evidence = evidenceCollector.collect(signal, ctx);
         if (existing.isPresent()) {
+            // wave 内 dedup：刷新 wave + 写一条新证据（1:N）
             alertRepository.updateEmit(existing.get().id, now, endsAt);
+            writeEvidence(existing.get().id, evidence, now);
             LOG.info(
                     "alert deduped pipeline={} fingerprint={} dedup_count={}",
                     meta.pipelineId(),
@@ -87,16 +104,37 @@ public final class DefaultAlertSink implements com.imsw.observe.kernel.alert.spi
             return;
         }
         Map<String, String> annotations = annotationRenderer.render(signal.annotations(), ctx);
-        EvidenceCollector.Collected evidence = evidenceCollector.collect(signal, ctx);
         AlertEntity entity = buildAlertEntity(signal, meta, labels, annotations, fingerprint, now, endsAt);
         AlertPo alertPo = AlertMapper.toPo(entity);
         alertRepository.save(alertPo);
-        persistEvidence(alertPo.id, evidence.entity(), evidence.sizeBytes(), evidence.truncated());
+        writeEvidence(alertPo.id, evidence, now);
         LOG.info(
                 "alert inserted pipeline={} fingerprint={} severity={}",
                 meta.pipelineId(),
                 fingerprint,
                 signal.severity());
+    }
+
+    private void writeEvidence(
+            final Long alertId, final EvidenceCollector.Collected evidence, final Instant capturedAt) {
+        EvidenceEntity entity = evidence.entity();
+        int emitSeq = (int) evidenceRepository.countByAlertId(alertId) + 1;
+        EvidenceEntity withMeta = new EvidenceEntity(
+                snowflake.next(),
+                alertId,
+                entity.namespace(),
+                entity.pipelineId(),
+                entity.pipelineVersion(),
+                entity.executionId(),
+                entity.nodeName(),
+                entity.outputs(),
+                entity.traceId(),
+                entity.spanId(),
+                capturedAt,
+                evidence.truncated(),
+                emitSeq);
+        EvidencePo po = EvidenceMapper.toPo(withMeta);
+        evidenceRepository.save(po);
     }
 
     private AlertEntity buildAlertEntity(
@@ -127,23 +165,17 @@ public final class DefaultAlertSink implements com.imsw.observe.kernel.alert.spi
                 AlertStatus.FIRING,
                 1,
                 null,
+                null,
+                null,
                 meta.traceId());
     }
 
-    private void persistEvidence(
-            final Long alertId, final EvidenceEntity entity, final int sizeBytes, final boolean truncated) {
-        EvidencePo po = EvidenceMapper.toPo(entity);
-        po.alertId = alertId;
-        po.sizeBytes = sizeBytes;
-        po.truncated = truncated;
-        evidenceRepository.save(po);
-    }
-
+    /** ADR-0005 §1：默认 wave TTL C30/W10/I5（覆盖旧 C60/W30/I15）。 */
     private static Duration defaultTtl(final Severity severity) {
         return switch (severity) {
-            case CRITICAL -> Duration.ofMinutes(60);
-            case WARNING -> Duration.ofMinutes(30);
-            case INFO -> Duration.ofMinutes(15);
+            case CRITICAL -> Duration.ofMinutes(30);
+            case WARNING -> Duration.ofMinutes(10);
+            case INFO -> Duration.ofMinutes(5);
         };
     }
 }

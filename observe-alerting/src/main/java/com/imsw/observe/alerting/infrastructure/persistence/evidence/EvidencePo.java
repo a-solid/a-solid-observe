@@ -11,11 +11,17 @@ import jakarta.persistence.Table;
 
 import com.imsw.observe.kernel.util.MapStringObjectToJsonConverter;
 
+/**
+ * 证据 PO（ADR-0005 §2：1:N）。PK 改为 snowflake {@code id}，{@code alert_id} 降为普通引用列。
+ */
 @Entity
 @Table(name = "alerts_evidence")
 public class EvidencePo {
 
     @Id
+    @Column(name = "id", nullable = false)
+    public Long id;
+
     @Column(name = "alert_id", nullable = false)
     public Long alertId;
 
@@ -52,4 +58,8 @@ public class EvidencePo {
 
     @Column(name = "size_bytes", nullable = false)
     public Integer sizeBytes;
+
+    // ADR-0005 §2：该 alert 内的证据序号
+    @Column(name = "emit_seq", nullable = false)
+    public Integer emitSeq;
 }
