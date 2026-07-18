@@ -111,7 +111,15 @@ public final class PipelineRegistryLoader {
         com.imsw.observe.config.domain.SubscriptionDefinition entity =
                 com.imsw.observe.config.infrastructure.persistence.SubscriptionMapper.toEntity(po, conditionCodec);
         Subscription.SourceRef source = new Subscription.SourceRef(
-                entity.mq(), entity.topic(), entity.db(), entity.table(), entity.opTypes(), entity.sourceType());
+                entity.mq(),
+                entity.topic(),
+                entity.db(),
+                entity.table(),
+                entity.opTypes(),
+                entity.sourceType(),
+                entity.cronExpression(),
+                entity.cronName(),
+                toSourceConcurrent(entity.concurrent()));
         return new Subscription(
                 entity.id(),
                 entity.namespace(),
@@ -120,6 +128,17 @@ public final class PipelineRegistryLoader {
                 source,
                 entity.fieldFilter(),
                 toAction(entity));
+    }
+
+    private static Subscription.SourceRef.Concurrent toSourceConcurrent(
+            final com.imsw.observe.config.domain.SubscriptionDefinition.Concurrent concurrent) {
+        if (concurrent == null) {
+            return null;
+        }
+        return switch (concurrent) {
+            case SKIP -> Subscription.SourceRef.Concurrent.SKIP;
+            case ALLOW -> Subscription.SourceRef.Concurrent.ALLOW;
+        };
     }
 
     private static Action toAction(final com.imsw.observe.config.domain.SubscriptionDefinition entity) {

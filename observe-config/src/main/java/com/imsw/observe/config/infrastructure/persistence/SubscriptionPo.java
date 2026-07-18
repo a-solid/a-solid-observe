@@ -57,6 +57,16 @@ public class SubscriptionPo {
     @Column(name = "schedule_correlation_key_path")
     public String scheduleCorrelationKeyPath;
 
+    // Cron per-subscription scheduling (B4, ADR-0007)：仅 source_type == CRON 的订阅使用。
+    @Column(name = "cron_expression")
+    public String cronExpression;
+
+    @Column(name = "cron_name")
+    public String cronName;
+
+    @Column(name = "concurrent")
+    public String concurrent;
+
     @Column(name = "name")
     public String name;
 

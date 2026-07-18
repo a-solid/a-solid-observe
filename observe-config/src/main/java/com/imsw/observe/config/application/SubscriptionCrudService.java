@@ -3,6 +3,7 @@ package com.imsw.observe.config.application;
 import java.time.Instant;
 import java.util.List;
 
+import org.springframework.scheduling.support.CronExpression;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,6 +17,7 @@ import com.imsw.observe.config.infrastructure.persistence.PipelineVersionReposit
 import com.imsw.observe.config.infrastructure.persistence.SubscriptionMapper;
 import com.imsw.observe.config.infrastructure.persistence.SubscriptionPo;
 import com.imsw.observe.config.infrastructure.persistence.SubscriptionRepository;
+import com.imsw.observe.kernel.event.model.SourceType;
 import com.imsw.observe.kernel.util.SnowflakeIdGenerator;
 
 @Service
@@ -60,6 +62,7 @@ public class SubscriptionCrudService {
             throw new IllegalArgumentException("subscription name must not be blank");
         }
         validatePipeline(subscription);
+        validateCron(subscription);
         SubscriptionPo po = SubscriptionMapper.toPo(subscription, conditionCodec);
         po.id = snowflakeIdGenerator.next();
         Instant now = Instant.now();
@@ -82,6 +85,7 @@ public class SubscriptionCrudService {
                 .findByNamespaceAndName(namespace, name)
                 .orElseThrow(() -> new IllegalArgumentException("subscription not found: " + namespace + "/" + name));
         validatePipeline(subscription);
+        validateCron(subscription);
         SubscriptionPo po = SubscriptionMapper.toPo(subscription, conditionCodec);
         po.id = existing.id;
         po.namespace = existing.namespace;
@@ -133,6 +137,33 @@ public class SubscriptionCrudService {
         if (!"PUBLISHED".equals(version.status)) {
             throw new IllegalArgumentException("pipeline version not published: " + subscription.pipelineId() + " v"
                     + subscription.pipelineVersion());
+        }
+    }
+
+    /**
+     * Cron 订阅校验（B4, ADR-0007）。
+     *
+     * <p>当 {@code sourceType == CRON} 时：{@code cronExpression} 必须非空/非空白，且必须可被
+     * Spring {@link CronExpression} 解析（解析失败抛 {@link IllegalArgumentException}，此处转译为清晰错误）。
+     * 当 {@code sourceType != CRON} 时：cron 字段对其它源类型无意义，{@code cronExpression} 必须为空
+     * （避免 CRON 配置泄漏到 CDC/API 订阅造成歧义）。{@code concurrent} 默认 SKIP 由调用方/Loader 处理。
+     */
+    private void validateCron(final SubscriptionDefinition subscription) {
+        if (subscription.sourceType() == SourceType.CRON) {
+            if (subscription.cronExpression() == null
+                    || subscription.cronExpression().isBlank()) {
+                throw new IllegalArgumentException("cronExpression must not be blank when sourceType is CRON");
+            }
+            try {
+                CronExpression.parse(subscription.cronExpression());
+            } catch (IllegalArgumentException e) {
+                throw new IllegalArgumentException(
+                        "invalid cronExpression '" + subscription.cronExpression() + "': " + e.getMessage(), e);
+            }
+        } else if (subscription.cronExpression() != null
+                && !subscription.cronExpression().isBlank()) {
+            throw new IllegalArgumentException("cronExpression must be null when sourceType is "
+                    + subscription.sourceType() + " (only CRON subscriptions use cronExpression)");
         }
     }
 }

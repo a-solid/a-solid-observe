@@ -1,5 +1,6 @@
 package com.imsw.observe.config.application;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -17,8 +18,11 @@ import com.imsw.observe.config.domain.SubscriptionDefinition;
 import com.imsw.observe.config.infrastructure.ConditionCodec;
 import com.imsw.observe.config.infrastructure.persistence.PipelineDefinitionPo;
 import com.imsw.observe.config.infrastructure.persistence.PipelineDefinitionRepository;
+import com.imsw.observe.config.infrastructure.persistence.PipelineVersionPk;
+import com.imsw.observe.config.infrastructure.persistence.PipelineVersionPo;
 import com.imsw.observe.config.infrastructure.persistence.PipelineVersionRepository;
 import com.imsw.observe.config.infrastructure.persistence.SubscriptionRepository;
+import com.imsw.observe.kernel.event.model.SourceType;
 import com.imsw.observe.kernel.util.SnowflakeIdGenerator;
 
 class SubscriptionCrudServiceTest {
@@ -66,6 +70,9 @@ class SubscriptionCrudServiceTest {
                 "desc",
                 SubscriptionDefinition.Status.ACTIVE,
                 "alice",
+                null,
+                null,
+                null,
                 null,
                 null);
 
@@ -115,6 +122,9 @@ class SubscriptionCrudServiceTest {
                 SubscriptionDefinition.Status.ACTIVE,
                 "alice",
                 null,
+                null,
+                null,
+                null,
                 null);
 
         assertThatThrownBy(() -> service.create(blankName))
@@ -160,6 +170,9 @@ class SubscriptionCrudServiceTest {
                 SubscriptionDefinition.Status.ACTIVE,
                 "alice",
                 null,
+                null,
+                null,
+                null,
                 null);
 
         assertThatThrownBy(() -> service.create(sub))
@@ -169,5 +182,178 @@ class SubscriptionCrudServiceTest {
 
         verify(repository, never()).save(any());
         verify(pipelineDefRepo, never()).findById(any());
+    }
+
+    @Test
+    void createRejectsCronSubscriptionWithoutCronExpression() {
+        // B4：sourceType==CRON 时 cronExpression 必填（ADR-0007）。覆盖到 validateCron 校验路径：
+        // namespace + pipeline 全部合法，仅 cronExpression 缺失时被拒，未触达写库。
+        SubscriptionRepository repository = mock(SubscriptionRepository.class);
+        PipelineDefinitionRepository pipelineDefRepo = mock(PipelineDefinitionRepository.class);
+        PipelineVersionRepository pipelineVersionRepo = mock(PipelineVersionRepository.class);
+        ConditionCodec codec = mock(ConditionCodec.class);
+        NamespaceCrudService namespaceCrudService = mock(NamespaceCrudService.class);
+        SnowflakeIdGenerator generator = new SnowflakeIdGenerator(1L, 0L);
+
+        stubValidPipeline(namespaceCrudService, pipelineDefRepo, pipelineVersionRepo, "billing", 100L, 1);
+        SubscriptionCrudService service = new SubscriptionCrudService(
+                repository, pipelineDefRepo, pipelineVersionRepo, codec, generator, namespaceCrudService);
+
+        SubscriptionDefinition sub = cronSubscription("billing", 100L, 1, "billing-rule", null);
+
+        assertThatThrownBy(() -> service.create(sub))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("cronExpression must not be blank");
+
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void createRejectsCronSubscriptionWithUnparseableCronExpression() {
+        // B4：cronExpression 必须可被 Spring CronExpression 解析；解析失败转译为清晰错误。
+        SubscriptionRepository repository = mock(SubscriptionRepository.class);
+        PipelineDefinitionRepository pipelineDefRepo = mock(PipelineDefinitionRepository.class);
+        PipelineVersionRepository pipelineVersionRepo = mock(PipelineVersionRepository.class);
+        ConditionCodec codec = mock(ConditionCodec.class);
+        NamespaceCrudService namespaceCrudService = mock(NamespaceCrudService.class);
+        SnowflakeIdGenerator generator = new SnowflakeIdGenerator(1L, 0L);
+
+        stubValidPipeline(namespaceCrudService, pipelineDefRepo, pipelineVersionRepo, "billing", 100L, 1);
+        SubscriptionCrudService service = new SubscriptionCrudService(
+                repository, pipelineDefRepo, pipelineVersionRepo, codec, generator, namespaceCrudService);
+
+        SubscriptionDefinition sub = cronSubscription("billing", 100L, 1, "billing-rule", "not-a-valid-cron-expr-999");
+
+        assertThatThrownBy(() -> service.create(sub))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("invalid cronExpression")
+                .hasMessageContaining("not-a-valid-cron-expr-999");
+
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void createAcceptsCronSubscriptionWithValidCronExpression() {
+        // B4：合法 cronExpression（6 字段 Spring CronExpression）通过校验并落库。
+        SubscriptionRepository repository = mock(SubscriptionRepository.class);
+        PipelineDefinitionRepository pipelineDefRepo = mock(PipelineDefinitionRepository.class);
+        PipelineVersionRepository pipelineVersionRepo = mock(PipelineVersionRepository.class);
+        ConditionCodec codec = mock(ConditionCodec.class);
+        NamespaceCrudService namespaceCrudService = mock(NamespaceCrudService.class);
+        SnowflakeIdGenerator generator = new SnowflakeIdGenerator(1L, 0L);
+
+        stubValidPipeline(namespaceCrudService, pipelineDefRepo, pipelineVersionRepo, "billing", 100L, 1);
+        when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        SubscriptionCrudService service = new SubscriptionCrudService(
+                repository, pipelineDefRepo, pipelineVersionRepo, codec, generator, namespaceCrudService);
+
+        SubscriptionDefinition sub = cronSubscription("billing", 100L, 1, "billing-rule", "0 */5 * * * *");
+
+        SubscriptionDefinition saved = service.create(sub);
+        assertThat(saved.cronExpression()).isEqualTo("0 */5 * * * *");
+        verify(repository).save(any());
+    }
+
+    @Test
+    void createRejectsNonCronSubscriptionCarryingCronExpression() {
+        // B4：sourceType != CRON 时 cronExpression 必须为 null，避免 CRON 配置泄漏到 CDC/API 订阅。
+        SubscriptionRepository repository = mock(SubscriptionRepository.class);
+        PipelineDefinitionRepository pipelineDefRepo = mock(PipelineDefinitionRepository.class);
+        PipelineVersionRepository pipelineVersionRepo = mock(PipelineVersionRepository.class);
+        ConditionCodec codec = mock(ConditionCodec.class);
+        NamespaceCrudService namespaceCrudService = mock(NamespaceCrudService.class);
+        SnowflakeIdGenerator generator = new SnowflakeIdGenerator(1L, 0L);
+
+        stubValidPipeline(namespaceCrudService, pipelineDefRepo, pipelineVersionRepo, "billing", 100L, 1);
+        SubscriptionCrudService service = new SubscriptionCrudService(
+                repository, pipelineDefRepo, pipelineVersionRepo, codec, generator, namespaceCrudService);
+
+        SubscriptionDefinition sub = new SubscriptionDefinition(
+                null,
+                "billing",
+                100L,
+                1,
+                null,
+                null,
+                null,
+                null,
+                null,
+                SourceType.CDC,
+                null,
+                SubscriptionDefinition.ActionType.RUN,
+                null,
+                null,
+                "cdc-with-cron",
+                "desc",
+                SubscriptionDefinition.Status.ACTIVE,
+                "alice",
+                null,
+                null,
+                "0 */5 * * * *", // 不该出现在 CDC 订阅上
+                null,
+                null);
+
+        assertThatThrownBy(() -> service.create(sub))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("cronExpression must be null")
+                .hasMessageContaining("CDC");
+
+        verify(repository, never()).save(any());
+    }
+
+    /** 构造一条合法结构（除 cronExpression 外）的 CRON 订阅。 */
+    private static SubscriptionDefinition cronSubscription(
+            final String namespace,
+            final Long pipelineId,
+            final int pipelineVersion,
+            final String name,
+            final String cronExpression) {
+        return new SubscriptionDefinition(
+                null,
+                namespace,
+                pipelineId,
+                pipelineVersion,
+                "cron-source",
+                null,
+                null,
+                null,
+                null,
+                SourceType.CRON,
+                null,
+                SubscriptionDefinition.ActionType.RUN,
+                null,
+                null,
+                name,
+                "desc",
+                SubscriptionDefinition.Status.ACTIVE,
+                "alice",
+                null,
+                null,
+                cronExpression,
+                null,
+                null);
+    }
+
+    /** 桩一个 namespace 下 PUBLISHED 的 pipeline + pipeline_version，使 validatePipeline 通过。 */
+    private static void stubValidPipeline(
+            final NamespaceCrudService namespaceCrudService,
+            final PipelineDefinitionRepository pipelineDefRepo,
+            final PipelineVersionRepository pipelineVersionRepo,
+            final String namespace,
+            final Long pipelineId,
+            final int version) {
+        when(namespaceCrudService.findByName(eq(namespace)))
+                .thenReturn(new Namespace(2L, namespace, namespace, null, null));
+        PipelineDefinitionPo def = new PipelineDefinitionPo();
+        def.id = pipelineId;
+        def.namespace = namespace;
+        def.status = "PUBLISHED";
+        when(pipelineDefRepo.findById(eq(pipelineId))).thenReturn(Optional.of(def));
+        PipelineVersionPo versionPo = new PipelineVersionPo();
+        versionPo.pipelineId = pipelineId;
+        versionPo.version = version;
+        versionPo.status = "PUBLISHED";
+        when(pipelineVersionRepo.findById(eq(new PipelineVersionPk(pipelineId, version))))
+                .thenReturn(Optional.of(versionPo));
     }
 }

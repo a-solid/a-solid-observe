@@ -44,7 +44,8 @@ class DefaultSubscriptionMatcherTest {
                 "smoke",
                 1L,
                 1,
-                new Subscription.SourceRef("mq", "topic", "trade_db", "orders", Set.of(CdcOp.INSERT), SourceType.CDC),
+                new Subscription.SourceRef(
+                        "mq", "topic", "trade_db", "orders", Set.of(CdcOp.INSERT), SourceType.CDC, null, null, null),
                 new Condition.Compare("after.status", Condition.Compare.Op.EQ, "PAID"),
                 new Action.Run());
         PipelineRegistry registry = new PipelineRegistry();
@@ -72,7 +73,8 @@ class DefaultSubscriptionMatcherTest {
                 "smoke",
                 1L,
                 1,
-                new Subscription.SourceRef("nightly-sync", null, null, null, Set.of(), SourceType.CRON),
+                new Subscription.SourceRef(
+                        "nightly-sync", null, null, null, Set.of(), SourceType.CRON, null, null, null),
                 null,
                 new Action.Run());
         PipelineRegistry registry = new PipelineRegistry();
@@ -96,7 +98,8 @@ class DefaultSubscriptionMatcherTest {
                 "smoke",
                 1L,
                 1,
-                new Subscription.SourceRef("order-webhook", null, null, null, Set.of(), SourceType.API),
+                new Subscription.SourceRef(
+                        "order-webhook", null, null, null, Set.of(), SourceType.API, null, null, null),
                 null,
                 new Action.Run());
         PipelineRegistry registry = new PipelineRegistry();
@@ -121,7 +124,8 @@ class DefaultSubscriptionMatcherTest {
                 "smoke",
                 1L,
                 1,
-                new Subscription.SourceRef(null, null, "trade_db", "orders", Set.of(), SourceType.CDC),
+                new Subscription.SourceRef(
+                        null, null, "trade_db", "orders", Set.of(), SourceType.CDC, null, null, null),
                 null,
                 new Action.Run());
         PipelineRegistry registry = new PipelineRegistry();

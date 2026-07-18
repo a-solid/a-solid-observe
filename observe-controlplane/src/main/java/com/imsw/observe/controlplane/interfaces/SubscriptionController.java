@@ -85,13 +85,18 @@ public class SubscriptionController {
             String scheduleCorrelationKeyPath,
             String name,
             String description,
-            String status) {
+            String status,
+            String cronExpression,
+            String cronName,
+            String concurrent) {
 
         SubscriptionDefinition toDomain(final String namespace) {
             Duration delay = scheduleDelayMs == null ? null : Duration.ofMillis(scheduleDelayMs);
             SubscriptionDefinition.ActionType action =
                     actionType == null ? ActionType.RUN : ActionType.valueOf(actionType);
             SubscriptionDefinition.Status stat = status == null ? Status.ACTIVE : Status.valueOf(status);
+            SubscriptionDefinition.Concurrent conc =
+                    concurrent == null ? null : SubscriptionDefinition.Concurrent.valueOf(concurrent);
             return new SubscriptionDefinition(
                     null,
                     namespace,
@@ -112,7 +117,10 @@ public class SubscriptionController {
                     stat,
                     null,
                     null,
-                    null);
+                    null,
+                    cronExpression,
+                    cronName,
+                    conc);
         }
     }
 

@@ -38,7 +38,10 @@ public final class SubscriptionMapper {
                 toStatus(po.status),
                 po.createdBy,
                 po.createdAt,
-                po.updatedAt);
+                po.updatedAt,
+                po.cronExpression,
+                po.cronName,
+                toConcurrent(po.concurrent));
     }
 
     public static SubscriptionPo toPo(final SubscriptionDefinition entity, final ConditionCodec codec) {
@@ -60,6 +63,9 @@ public final class SubscriptionMapper {
         po.actionType = fromActionType(entity.actionType());
         po.scheduleDelayMs = fromDuration(entity.scheduleDelay());
         po.scheduleCorrelationKeyPath = entity.scheduleCorrelationKeyPath();
+        po.cronExpression = entity.cronExpression();
+        po.cronName = entity.cronName();
+        po.concurrent = fromConcurrent(entity.concurrent());
         po.name = entity.name();
         po.description = entity.description();
         po.status = fromStatus(entity.status());
@@ -121,5 +127,13 @@ public final class SubscriptionMapper {
 
     private static Long fromDuration(final Duration duration) {
         return duration == null ? null : duration.toMillis();
+    }
+
+    private static SubscriptionDefinition.Concurrent toConcurrent(final String raw) {
+        return raw == null ? null : SubscriptionDefinition.Concurrent.valueOf(raw);
+    }
+
+    private static String fromConcurrent(final SubscriptionDefinition.Concurrent concurrent) {
+        return concurrent == null ? null : concurrent.name();
     }
 }

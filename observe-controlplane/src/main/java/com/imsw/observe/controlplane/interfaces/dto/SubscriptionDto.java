@@ -25,7 +25,10 @@ public record SubscriptionDto(
         String scheduleCorrelationKeyPath,
         String name,
         String description,
-        String status) {
+        String status,
+        String cronExpression,
+        String cronName,
+        String concurrent) {
 
     public static SubscriptionDto from(final SubscriptionDefinition s) {
         Duration delay = s.scheduleDelay();
@@ -46,6 +49,9 @@ public record SubscriptionDto(
                 s.scheduleCorrelationKeyPath(),
                 s.name(),
                 s.description(),
-                s.status() == null ? null : s.status().name());
+                s.status() == null ? null : s.status().name(),
+                s.cronExpression(),
+                s.cronName(),
+                s.concurrent() == null ? null : s.concurrent().name());
     }
 }

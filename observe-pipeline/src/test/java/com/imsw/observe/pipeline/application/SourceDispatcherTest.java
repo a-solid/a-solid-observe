@@ -32,7 +32,8 @@ class SourceDispatcherTest {
                 "smoke",
                 1L,
                 1,
-                new Subscription.SourceRef("mq", "topic", "trade_db", "orders", Set.of(CdcOp.INSERT), SourceType.CDC),
+                new Subscription.SourceRef(
+                        "mq", "topic", "trade_db", "orders", Set.of(CdcOp.INSERT), SourceType.CDC, null, null, null),
                 null,
                 new Action.Run());
         PipelineRegistry registry = new PipelineRegistry();

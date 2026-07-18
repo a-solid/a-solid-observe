@@ -63,6 +63,11 @@ CREATE TABLE subscriptions (
     schedule_delay_ms BIGINT,
     schedule_correlation_key_path VARCHAR,
 
+    -- Cron per-subscription scheduling (B4, ADR-0007)：仅 source_type == CRON 的订阅使用，均允许 NULL。
+    cron_expression VARCHAR,
+    cron_name VARCHAR,
+    concurrent VARCHAR,
+
     name VARCHAR NOT NULL,
     description VARCHAR,
     status VARCHAR NOT NULL DEFAULT 'ACTIVE',
