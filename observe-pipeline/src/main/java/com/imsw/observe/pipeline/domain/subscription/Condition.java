@@ -2,10 +2,10 @@ package com.imsw.observe.pipeline.domain.subscription;
 
 import java.math.BigDecimal;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 import com.imsw.observe.kernel.event.model.Event;
+import com.imsw.observe.kernel.event.model.EventPaths;
 
 public sealed interface Condition permits Condition.And, Condition.Or, Condition.Compare, Condition.In {
 
@@ -62,44 +62,17 @@ public sealed interface Condition permits Condition.And, Condition.Or, Condition
 
         private Fields() {}
 
+        /**
+         * 路径解析统一委托 {@link EventPaths#get}（kernel 唯一实现，避免重复）。
+         *
+         * <p>fieldFilter 主要对 CDC 订阅有意义（before/after/op/meta.db/table）；
+         * 对 {@link com.imsw.observe.kernel.event.model.TickEvent} /
+         * {@link com.imsw.observe.kernel.event.model.ApiEvent} /
+         * {@link com.imsw.observe.kernel.event.model.DelayedEvent}，按对应子类型的可解析路径
+         * （payload/meta.apiName/meta.cronName/meta.attributes 等）返回，CDC 专属路径返回 null。
+         */
         static Object resolve(final Event event, final String path) {
-            if (path == null || path.isEmpty()) {
-                return null;
-            }
-            if ("op".equals(path)) {
-                return event.op() == null ? null : event.op().name();
-            }
-            if (path.startsWith("before.")) {
-                return event.before() == null ? null : event.before().get(path.substring("before.".length()));
-            }
-            if (path.startsWith("after.")) {
-                return event.after() == null ? null : event.after().get(path.substring("after.".length()));
-            }
-            if (path.startsWith("meta.")) {
-                return resolveMeta(event, path.substring("meta.".length()));
-            }
-            return null;
-        }
-
-        private static Object resolveMeta(final Event event, final String rest) {
-            Event.EventMeta meta = event.meta();
-            if (meta == null) {
-                return null;
-            }
-            if (rest.equals("db")) {
-                return meta.db();
-            }
-            if (rest.equals("table")) {
-                return meta.table();
-            }
-            if (rest.equals("source")) {
-                return meta.source();
-            }
-            if (rest.startsWith("attributes.")) {
-                Map<String, Object> attrs = meta.attributes();
-                return attrs == null ? null : attrs.get(rest.substring("attributes.".length()));
-            }
-            return null;
+            return EventPaths.get(event, path);
         }
     }
 

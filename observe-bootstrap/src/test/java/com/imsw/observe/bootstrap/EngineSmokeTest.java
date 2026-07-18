@@ -14,10 +14,11 @@ import com.imsw.observe.alerting.infrastructure.alert.DefaultAlertsApi;
 import com.imsw.observe.kernel.alert.model.AlertSignal;
 import com.imsw.observe.kernel.alert.model.Severity;
 import com.imsw.observe.kernel.alert.spi.AlertSink;
+import com.imsw.observe.kernel.event.model.CdcEvent;
+import com.imsw.observe.kernel.event.model.CdcMeta;
+import com.imsw.observe.kernel.event.model.CdcOp;
 import com.imsw.observe.kernel.event.model.Event;
 import com.imsw.observe.kernel.event.model.ExecutionContext;
-import com.imsw.observe.kernel.event.model.Op;
-import com.imsw.observe.kernel.event.model.SourceType;
 import com.imsw.observe.kernel.execution.model.ErrorType;
 import com.imsw.observe.kernel.execution.spi.ExecutionRecorder;
 import com.imsw.observe.kernel.script.spi.DbApi;
@@ -135,8 +136,9 @@ class EngineSmokeTest {
     }
 
     private static Event mockEvent(final long amount) {
-        Event.EventMeta meta = new Event.EventMeta(SourceType.CDC, "smoke-mq", "test_db", "orders", Map.of());
-        return new Event(meta, Map.of(), Map.of("amount", amount), Op.INSERT, Instant.now());
+        // ADR-0006：CDC 触发事件现为 CdcEvent（Groovy 脚本读 event.after.amount，CdcEvent 保留 after 字段）。
+        CdcMeta meta = new CdcMeta("smoke-mq", "test_db", "orders", Map.of());
+        return new CdcEvent(meta, Map.of(), Map.of("amount", amount), CdcOp.INSERT, Instant.now());
     }
 
     /** 收集型 AlertSink：把 ctx 里 emit 的告警收集起来供断言（区别于 demo 的丢弃型）。 */

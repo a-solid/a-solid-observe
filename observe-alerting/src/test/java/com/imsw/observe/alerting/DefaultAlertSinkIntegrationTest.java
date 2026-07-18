@@ -26,10 +26,11 @@ import com.imsw.observe.alerting.infrastructure.persistence.alert.AlertRepositor
 import com.imsw.observe.alerting.infrastructure.persistence.evidence.EvidenceRepository;
 import com.imsw.observe.kernel.alert.model.AlertSignal;
 import com.imsw.observe.kernel.alert.model.Severity;
-import com.imsw.observe.kernel.event.model.Event;
+import com.imsw.observe.kernel.event.model.CdcEvent;
+import com.imsw.observe.kernel.event.model.CdcMeta;
+import com.imsw.observe.kernel.event.model.CdcOp;
 import com.imsw.observe.kernel.event.model.ExecutionData;
 import com.imsw.observe.kernel.event.model.ExecutionMeta;
-import com.imsw.observe.kernel.event.model.Op;
 import com.imsw.observe.kernel.event.model.SourceType;
 import com.imsw.observe.kernel.util.SnowflakeIdGenerator;
 
@@ -106,8 +107,9 @@ class DefaultAlertSinkIntegrationTest {
     }
 
     private TestExecutionContext newContext(final AlertSignal signal) {
-        Event.EventMeta meta = new Event.EventMeta(SourceType.CDC, "t", "db", "tbl", Map.of());
-        Event event = new Event(meta, Map.of(), Map.of("amount", 2000L), Op.INSERT, Instant.now());
+        // ADR-0006：触发事件为 CdcEvent（triggerType 仍用 SourceType.CDC）。
+        CdcMeta meta = new CdcMeta("t", "db", "tbl", Map.of());
+        CdcEvent event = new CdcEvent(meta, Map.of(), Map.of("amount", 2000L), CdcOp.INSERT, Instant.now());
         ExecutionMeta execMeta = new ExecutionMeta(
                 1001L,
                 "trade",

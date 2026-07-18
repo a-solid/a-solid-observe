@@ -9,9 +9,15 @@ import java.util.Set;
 
 import org.junit.jupiter.api.Test;
 
+import com.imsw.observe.kernel.event.model.ApiEvent;
+import com.imsw.observe.kernel.event.model.ApiMeta;
+import com.imsw.observe.kernel.event.model.CdcEvent;
+import com.imsw.observe.kernel.event.model.CdcMeta;
+import com.imsw.observe.kernel.event.model.CdcOp;
 import com.imsw.observe.kernel.event.model.Event;
-import com.imsw.observe.kernel.event.model.Op;
 import com.imsw.observe.kernel.event.model.SourceType;
+import com.imsw.observe.kernel.event.model.TickEvent;
+import com.imsw.observe.kernel.event.model.TickMeta;
 import com.imsw.observe.pipeline.application.PipelineRegistry;
 import com.imsw.observe.pipeline.application.SubscriptionMatcher;
 import com.imsw.observe.pipeline.domain.Pipeline;
@@ -26,19 +32,19 @@ class DefaultSubscriptionMatcherTest {
         PipelineRegistry registry = new PipelineRegistry();
         SubscriptionMatcher matcher = new DefaultSubscriptionMatcher(registry);
         assertThat(matcher.isLoaded()).isFalse();
-        assertThat(matcher.match(event("trade_db", "orders", Op.INSERT, Map.of())))
+        assertThat(matcher.match(cdcEvent("trade_db", "orders", CdcOp.INSERT, Map.of())))
                 .isEmpty();
     }
 
     @Test
-    void matchesByDbTableOpAndFieldFilter() {
+    void matchesCdcByDbTableOpAndFieldFilter() {
         Pipeline pipeline = pipeline(1L, 1);
         Subscription sub = new Subscription(
                 10L,
                 "smoke",
                 1L,
                 1,
-                new Subscription.SourceRef("mq", "topic", "trade_db", "orders", Set.of(Op.INSERT), SourceType.CDC),
+                new Subscription.SourceRef("mq", "topic", "trade_db", "orders", Set.of(CdcOp.INSERT), SourceType.CDC),
                 new Condition.Compare("after.status", Condition.Compare.Op.EQ, "PAID"),
                 new Action.Run());
         PipelineRegistry registry = new PipelineRegistry();
@@ -46,15 +52,65 @@ class DefaultSubscriptionMatcherTest {
 
         SubscriptionMatcher matcher = new DefaultSubscriptionMatcher(registry);
 
-        Event hit = event("trade_db", "orders", Op.INSERT, Map.of("status", "PAID"));
-        Event wrongStatus = event("trade_db", "orders", Op.INSERT, Map.of("status", "NEW"));
-        Event wrongOp = event("trade_db", "orders", Op.UPDATE, Map.of("status", "PAID"));
-        Event wrongTable = event("trade_db", "payments", Op.INSERT, Map.of("status", "PAID"));
+        Event hit = cdcEvent("trade_db", "orders", CdcOp.INSERT, Map.of("status", "PAID"));
+        Event wrongStatus = cdcEvent("trade_db", "orders", CdcOp.INSERT, Map.of("status", "NEW"));
+        Event wrongOp = cdcEvent("trade_db", "orders", CdcOp.UPDATE, Map.of("status", "PAID"));
+        Event wrongTable = cdcEvent("trade_db", "payments", CdcOp.INSERT, Map.of("status", "PAID"));
 
         assertThat(matcher.match(hit)).hasSize(1);
         assertThat(matcher.match(wrongStatus)).isEmpty();
         assertThat(matcher.match(wrongOp)).isEmpty();
         assertThat(matcher.match(wrongTable)).isEmpty();
+    }
+
+    @Test
+    void matchesTickBySourceName() {
+        Pipeline pipeline = pipeline(1L, 1);
+        // Cron 订阅：source name "nightly-sync" 复用 SourceRef.mq 槽（见 PipelineRegistry.Snapshot 注释）。
+        Subscription sub = new Subscription(
+                11L,
+                "smoke",
+                1L,
+                1,
+                new Subscription.SourceRef("nightly-sync", null, null, null, Set.of(), SourceType.CRON),
+                null,
+                new Action.Run());
+        PipelineRegistry registry = new PipelineRegistry();
+        registry.replace(PipelineRegistry.Snapshot.loaded(Map.of(1L, pipeline), List.of(sub)));
+
+        SubscriptionMatcher matcher = new DefaultSubscriptionMatcher(registry);
+
+        TickEvent hit = new TickEvent(new TickMeta("nightly-sync", "nightly-sync", null, Map.of()), Instant.now());
+        TickEvent wrongName = new TickEvent(new TickMeta("hourly-sync", "hourly-sync", null, Map.of()), Instant.now());
+
+        assertThat(matcher.match(hit)).hasSize(1);
+        assertThat(matcher.match(wrongName)).isEmpty();
+    }
+
+    @Test
+    void matchesApiBySourceName() {
+        Pipeline pipeline = pipeline(1L, 1);
+        // Api 订阅：source name "order-webhook" 复用 SourceRef.mq 槽。
+        Subscription sub = new Subscription(
+                12L,
+                "smoke",
+                1L,
+                1,
+                new Subscription.SourceRef("order-webhook", null, null, null, Set.of(), SourceType.API),
+                null,
+                new Action.Run());
+        PipelineRegistry registry = new PipelineRegistry();
+        registry.replace(PipelineRegistry.Snapshot.loaded(Map.of(1L, pipeline), List.of(sub)));
+
+        SubscriptionMatcher matcher = new DefaultSubscriptionMatcher(registry);
+
+        ApiEvent hit = new ApiEvent(
+                new ApiMeta("order-webhook", "order-webhook", Map.of()), Map.of("amt", 100), Instant.now());
+        ApiEvent wrongName =
+                new ApiEvent(new ApiMeta("refund-webhook", "refund-webhook", Map.of()), Map.of(), Instant.now());
+
+        assertThat(matcher.match(hit)).hasSize(1);
+        assertThat(matcher.match(wrongName)).isEmpty();
     }
 
     @Test
@@ -72,7 +128,7 @@ class DefaultSubscriptionMatcherTest {
         registry.replace(PipelineRegistry.Snapshot.loaded(Map.of(1L, pipeline), List.of(sub)));
 
         SubscriptionMatcher matcher = new DefaultSubscriptionMatcher(registry);
-        assertThat(matcher.match(event("trade_db", "orders", Op.INSERT, Map.of())))
+        assertThat(matcher.match(cdcEvent("trade_db", "orders", CdcOp.INSERT, Map.of())))
                 .isEmpty();
     }
 
@@ -92,8 +148,8 @@ class DefaultSubscriptionMatcherTest {
                 0.0);
     }
 
-    private Event event(final String db, final String table, final Op op, final Map<String, Object> after) {
-        Event.EventMeta meta = new Event.EventMeta(SourceType.CDC, "mq", db, table, Map.of());
-        return new Event(meta, Map.of(), after, op, Instant.now());
+    private Event cdcEvent(final String db, final String table, final CdcOp op, final Map<String, Object> after) {
+        CdcMeta meta = new CdcMeta("ibm-mq", db, table, Map.of());
+        return new CdcEvent(meta, Map.of(), after, op, Instant.now());
     }
 }

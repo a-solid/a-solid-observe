@@ -12,8 +12,10 @@ import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.Test;
 
+import com.imsw.observe.kernel.event.model.CdcEvent;
+import com.imsw.observe.kernel.event.model.CdcMeta;
+import com.imsw.observe.kernel.event.model.CdcOp;
 import com.imsw.observe.kernel.event.model.Event;
-import com.imsw.observe.kernel.event.model.Op;
 import com.imsw.observe.kernel.event.model.SourceType;
 import com.imsw.observe.pipeline.domain.Pipeline;
 import com.imsw.observe.pipeline.domain.subscription.Action;
@@ -30,7 +32,7 @@ class SourceDispatcherTest {
                 "smoke",
                 1L,
                 1,
-                new Subscription.SourceRef("mq", "topic", "trade_db", "orders", Set.of(Op.INSERT), SourceType.CDC),
+                new Subscription.SourceRef("mq", "topic", "trade_db", "orders", Set.of(CdcOp.INSERT), SourceType.CDC),
                 null,
                 new Action.Run());
         PipelineRegistry registry = new PipelineRegistry();
@@ -43,8 +45,8 @@ class SourceDispatcherTest {
         SourceDispatcher dispatcher =
                 new SourceDispatcher(new DefaultSubscriptionMatcher(registry), runner, pool, delayedHandler);
 
-        dispatcher.onBatch(List.of(event("trade_db", "orders", Op.INSERT)));
-        dispatcher.onBatch(List.of(event("trade_db", "payments", Op.INSERT)));
+        dispatcher.onBatch(List.of(event("trade_db", "orders", CdcOp.INSERT)));
+        dispatcher.onBatch(List.of(event("trade_db", "payments", CdcOp.INSERT)));
 
         pool.shutdown();
         pool.awaitTermination(2, TimeUnit.SECONDS);
@@ -69,9 +71,10 @@ class SourceDispatcherTest {
                 0.0);
     }
 
-    private static Event event(final String db, final String table, final Op op) {
-        Event.EventMeta meta = new Event.EventMeta(SourceType.CDC, "mq", db, table, Map.of());
-        return new Event(meta, Map.of(), Map.of("amount", 1), op, Instant.now());
+    private static Event event(final String db, final String table, final CdcOp op) {
+        // ADR-0006：CDC 事件现为 CdcEvent + CdcMeta（sourceType 不再挂 meta，由子类型隐式）。
+        CdcMeta meta = new CdcMeta("mq", db, table, Map.of());
+        return new CdcEvent(meta, Map.of(), Map.of("amount", 1), op, Instant.now());
     }
 
     static final class RecordingRunner implements PipelineRunner {

@@ -3,12 +3,29 @@ package com.imsw.observe.pipeline.infrastructure.subscription;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.imsw.observe.kernel.event.model.ApiEvent;
+import com.imsw.observe.kernel.event.model.CdcEvent;
+import com.imsw.observe.kernel.event.model.DelayedEvent;
 import com.imsw.observe.kernel.event.model.Event;
+import com.imsw.observe.kernel.event.model.SourceType;
+import com.imsw.observe.kernel.event.model.TickEvent;
 import com.imsw.observe.pipeline.application.PipelineRegistry;
 import com.imsw.observe.pipeline.application.SubscriptionMatcher;
 import com.imsw.observe.pipeline.domain.Pipeline;
 import com.imsw.observe.pipeline.domain.subscription.Subscription;
 
+/**
+ * 订阅匹配器（按 Event 子类型分发，ADR-0006 §4）。
+ *
+ * <p>{@link #match(Event)} 用 pattern match 按 {@link Event} 子类型选索引：
+ * <ul>
+ *   <li>{@link CdcEvent} → Snapshot 的 CDC（db/table）索引；额外校验 sourceType==CDC、opTypes 含 {@code cdc.op()}、fieldFilter。</li>
+ *   <li>{@link TickEvent} → Snapshot 的 source 索引（cron name）；校验 sourceType==CRON。非 CDC 子类型不跑 opTypes/fieldFilter
+ *       （fieldFilter 主要面向 CDC 的 before/after 路径；Cron/Api 订阅语义靠 sourceType + source 名硬匹配）。</li>
+ *   <li>{@link ApiEvent} → Snapshot 的 source 索引（api name）；校验 sourceType==API。</li>
+ *   <li>{@link DelayedEvent} → 直接返回空（DelayedEvent 绕过 SourceDispatcher/matcher，直调 PipelineRunner，ADR-0006 §9.2）。</li>
+ * </ul>
+ */
 public final class DefaultSubscriptionMatcher implements SubscriptionMatcher {
 
     private final PipelineRegistry registry;
@@ -20,25 +37,41 @@ public final class DefaultSubscriptionMatcher implements SubscriptionMatcher {
     @Override
     public List<MatchedSubscription> match(final Event event) {
         List<MatchedSubscription> matched = new ArrayList<>();
-        if (!registry.isLoaded() || event == null || event.meta() == null) {
+        if (!registry.isLoaded() || event == null || event instanceof DelayedEvent) {
+            // DelayedEvent 绕过 matcher：原事件已在首次 match 时匹配过，延时重放直调 PipelineRunner。
             return matched;
         }
         PipelineRegistry.Snapshot snapshot = registry.snapshot();
-        for (Subscription sub :
-                snapshot.subscriptionsFor(event.meta().db(), event.meta().table())) {
-            if (!matchesSource(sub, event)) {
-                continue;
+        for (Subscription sub : snapshot.subscriptionsFor(event)) {
+            Pipeline pipeline = tryMatch(sub, event, snapshot);
+            if (pipeline != null) {
+                matched.add(new MatchedSubscription(sub, pipeline));
             }
-            if (sub.fieldFilter() != null && !sub.fieldFilter().matches(event)) {
-                continue;
-            }
-            Pipeline pipeline = snapshot.pipelineById(sub.pipelineId());
-            if (pipeline == null || pipeline.version() != sub.pipelineVersion()) {
-                continue;
-            }
-            matched.add(new MatchedSubscription(sub, pipeline));
         }
         return matched;
+    }
+
+    private static Pipeline tryMatch(
+            final Subscription sub, final Event event, final PipelineRegistry.Snapshot snapshot) {
+        if (!matchesSource(sub, event)) {
+            return null;
+        }
+        if (!passesFieldFilter(sub, event)) {
+            return null;
+        }
+        Pipeline pipeline = snapshot.pipelineById(sub.pipelineId());
+        if (pipeline == null || pipeline.version() != sub.pipelineVersion()) {
+            return null;
+        }
+        return pipeline;
+    }
+
+    private static boolean passesFieldFilter(final Subscription sub, final Event event) {
+        // fieldFilter 仅对 CDC 有意义（before/after 路径）；Cron/Api 子类型无对应路径解析，跳过过滤。
+        if (!(event instanceof CdcEvent)) {
+            return true;
+        }
+        return sub.fieldFilter() == null || sub.fieldFilter().matches(event);
     }
 
     @Override
@@ -50,16 +83,41 @@ public final class DefaultSubscriptionMatcher implements SubscriptionMatcher {
         if (sub.source() == null) {
             return false;
         }
-        if (sub.source().opTypes() != null
-                && !sub.source().opTypes().isEmpty()
-                && !sub.source().opTypes().contains(event.op())) {
+        if (event instanceof CdcEvent cdc) {
+            return matchesCdc(sub, cdc);
+        }
+        if (event instanceof TickEvent tick) {
+            return matchesNamed(sub, SourceType.CRON, tick.meta().source());
+        }
+        if (event instanceof ApiEvent api) {
+            return matchesNamed(sub, SourceType.API, api.meta().source());
+        }
+        return false;
+    }
+
+    private static boolean matchesCdc(final Subscription sub, final CdcEvent cdc) {
+        SourceType type = sub.source().sourceType();
+        if (type != null && type != SourceType.CDC) {
             return false;
         }
-        if (sub.source().sourceType() != null
-                && event.meta().sourceType() != null
-                && sub.source().sourceType() != event.meta().sourceType()) {
+        // opTypes 仅 CDC 订阅生效（CdcOp），空集 = 不限 op。
+        return sub.source().opTypes() == null
+                || sub.source().opTypes().isEmpty()
+                || sub.source().opTypes().contains(cdc.op());
+    }
+
+    /**
+     * Cron/Api 订阅按 sourceType + source name 硬匹配。
+     *
+     * <p>订阅的 source name 存在 SourceRef.mq 槽（见 {@link PipelineRegistry.Snapshot} 注释）。
+     */
+    private static boolean matchesNamed(
+            final Subscription sub, final SourceType expected, final String eventSourceName) {
+        SourceType type = sub.source().sourceType();
+        if (type != null && type != expected) {
             return false;
         }
-        return true;
+        String subSourceName = sub.source().mq();
+        return subSourceName != null && !subSourceName.isBlank() && subSourceName.equals(eventSourceName);
     }
 }

@@ -17,10 +17,11 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.imsw.observe.kernel.error.NodeExecutionException;
-import com.imsw.observe.kernel.event.model.Event;
+import com.imsw.observe.kernel.event.model.CdcEvent;
+import com.imsw.observe.kernel.event.model.CdcMeta;
+import com.imsw.observe.kernel.event.model.CdcOp;
 import com.imsw.observe.kernel.event.model.ExecutionData;
 import com.imsw.observe.kernel.event.model.ExecutionMeta;
-import com.imsw.observe.kernel.event.model.Op;
 import com.imsw.observe.kernel.event.model.SourceType;
 import com.imsw.observe.kernel.execution.model.ErrorType;
 import com.imsw.observe.kernel.util.SnowflakeIdGenerator;
@@ -97,8 +98,9 @@ class JpaExecutionRecorderTest {
     }
 
     private DefaultExecutionContext newContext() {
-        Event.EventMeta meta = new Event.EventMeta(SourceType.CDC, "t", "db", "orders", Map.of());
-        Event event = new Event(meta, Map.of(), Map.of("amount", 2000L), Op.INSERT, Instant.now());
+        // ADR-0006：触发事件为 CdcEvent（triggerType 仍用 SourceType.CDC 表达执行链路来源）。
+        CdcMeta meta = new CdcMeta("t", "db", "orders", Map.of());
+        CdcEvent event = new CdcEvent(meta, Map.of(), Map.of("amount", 2000L), CdcOp.INSERT, Instant.now());
         ExecutionMeta execMeta = new ExecutionMeta(
                 1001L,
                 "trade",

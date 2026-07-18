@@ -13,10 +13,15 @@ import com.imsw.observe.kernel.error.ScriptCompilationException;
 import com.imsw.observe.kernel.error.ScriptExecutionException;
 import com.imsw.observe.kernel.error.ScriptSandboxException;
 import com.imsw.observe.kernel.error.ScriptTimeoutException;
+import com.imsw.observe.kernel.event.model.ApiEvent;
+import com.imsw.observe.kernel.event.model.CdcEvent;
+import com.imsw.observe.kernel.event.model.DelayedEvent;
 import com.imsw.observe.kernel.event.model.Event;
 import com.imsw.observe.kernel.event.model.ExecutionContext;
 import com.imsw.observe.kernel.event.model.ExecutionData;
 import com.imsw.observe.kernel.event.model.ExecutionMeta;
+import com.imsw.observe.kernel.event.model.SourceType;
+import com.imsw.observe.kernel.event.model.TickEvent;
 import com.imsw.observe.kernel.execution.model.ErrorType;
 import com.imsw.observe.kernel.execution.spi.ExecutionRecorder;
 import com.imsw.observe.kernel.transaction.spi.TransactionOperator;
@@ -126,10 +131,32 @@ public final class DefaultPipelineRunner implements PipelineRunner {
                 pipeline.labels() == null ? Map.of() : pipeline.labels(),
                 null,
                 null,
-                triggerEvent == null ? null : triggerEvent.meta().sourceType(),
+                sourceTypeOf(triggerEvent),
                 triggerEvent,
                 Instant.now(),
                 subscriptionId);
+    }
+
+    /**
+     * 由 sealed Event 子类型推导 ExecutionMeta.triggerType（ADR-0006：sourceType 隐含于子类型）。
+     *
+     * <p>{@link DelayedEvent} 是延时重放包装，其本身不是一种独立的触发来源——递归取 originalEvent 的
+     * sourceType（延时重放 CDC 事件 → triggerType=CDC）。若 nested 仍为 Delayed（理论上不会），递归到 null。
+     */
+    private static SourceType sourceTypeOf(final Event event) {
+        if (event instanceof CdcEvent) {
+            return SourceType.CDC;
+        }
+        if (event instanceof TickEvent) {
+            return SourceType.CRON;
+        }
+        if (event instanceof ApiEvent) {
+            return SourceType.API;
+        }
+        if (event instanceof DelayedEvent delayed) {
+            return sourceTypeOf(delayed.originalEvent());
+        }
+        return null;
     }
 
     private static void count(final LongCounter counter, final Long pipelineId, final String tagKey, final String tag) {

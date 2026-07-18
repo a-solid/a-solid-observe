@@ -19,7 +19,7 @@ import com.imsw.observe.config.domain.SubscriptionDefinition;
 import com.imsw.observe.config.domain.SubscriptionDefinition.ActionType;
 import com.imsw.observe.config.domain.SubscriptionDefinition.Status;
 import com.imsw.observe.controlplane.interfaces.dto.SubscriptionDto;
-import com.imsw.observe.kernel.event.model.Op;
+import com.imsw.observe.kernel.event.model.CdcOp;
 import com.imsw.observe.kernel.event.model.SourceType;
 import com.imsw.observe.pipeline.domain.subscription.Condition;
 
@@ -77,7 +77,7 @@ public class SubscriptionController {
             String topic,
             String db,
             String table,
-            Set<Op> opTypes,
+            Set<CdcOp> opTypes,
             SourceType sourceType,
             Condition fieldFilter,
             String actionType,

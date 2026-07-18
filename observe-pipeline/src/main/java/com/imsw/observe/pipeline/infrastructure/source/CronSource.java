@@ -11,11 +11,19 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.imsw.observe.kernel.event.model.Event;
-import com.imsw.observe.kernel.event.model.Op;
 import com.imsw.observe.kernel.event.model.SourceType;
+import com.imsw.observe.kernel.event.model.TickEvent;
+import com.imsw.observe.kernel.event.model.TickMeta;
 import com.imsw.observe.pipeline.application.EventListener;
 import com.imsw.observe.pipeline.application.Source;
 
+/**
+ * B3 占位 Cron 源：固定周期调度（{@code periodMillis}），{@link TickMeta#cronExpression()} 暂传 {@code null}。
+ *
+ * <p>仅用于 B3 阶段打通 CRON source 的事件链路（{@link TickEvent} → matcher → runner）。
+ * <b>B4 会用真正的 {@code CronScheduler} 替换本类</b>——按 cron 表达式调度、{@link TickMeta} 带真实
+ * {@code cronExpression}。在那之前本类的固定周期语义不应当作 cron 真实语义对外承诺。
+ */
 public final class CronSource implements Source {
 
     private static final Logger LOG = LoggerFactory.getLogger(CronSource.class);
@@ -60,8 +68,10 @@ public final class CronSource implements Source {
         if (listener == null) {
             return;
         }
-        Event.EventMeta meta = new Event.EventMeta(SourceType.CRON, "cron:" + name, null, null, Map.of());
-        Event event = new Event(meta, null, null, Op.TICK, Instant.now());
+        // B3 占位：保持固定周期调度；TickMeta 为 B4 CronScheduler + cronExpression 预留
+        // （此处 cronExpression 传 null，待 B4 用真实表达式填充）。
+        TickMeta meta = new TickMeta("cron:" + name, name, null, Map.of());
+        Event event = new TickEvent(meta, Instant.now());
         try {
             listener.onBatch(List.of(event));
         } catch (RuntimeException e) {

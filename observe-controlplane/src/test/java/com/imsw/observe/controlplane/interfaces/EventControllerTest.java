@@ -1,7 +1,7 @@
 package com.imsw.observe.controlplane.interfaces;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
@@ -15,11 +15,16 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
-import com.imsw.observe.kernel.event.model.Event;
-import com.imsw.observe.kernel.event.model.Op;
-import com.imsw.observe.kernel.event.model.SourceType;
+import com.imsw.observe.kernel.event.model.ApiEvent;
 import com.imsw.observe.pipeline.infrastructure.source.ApiSource;
 
+/**
+ * EventController 适配 sealed ApiEvent（ADR-0006 §3.5）后的契约测试。
+ *
+ * <p>Controller 把 {@code SubmitEventRequest(source, payload, attributes)} 映射成 {@link ApiEvent}：
+ * apiName=source、payload 透传、attributes 带 controller 生成的 eventId。不再有 table/op/before/after 概念
+ * （那些是 CDC 事件语义，ApiEvent 只有 payload + apiName）。
+ */
 class EventControllerTest {
 
     private ApiSource apiSource;
@@ -34,73 +39,74 @@ class EventControllerTest {
 
     @Test
     void submitMapsFieldsAndReturnsAccepted() {
-        Map<String, Object> after = Map.of("id", 123, "status", "PAID");
-        // record 字段顺序: (source, table, op, before, after, attributes)
+        Map<String, Object> payload = Map.of("id", 123, "status", "PAID");
+        // record 字段顺序: (source, payload, attributes)
         EventController.SubmitEventRequest req =
-                new EventController.SubmitEventRequest("order-service", "orders", "UPDATE", null, after, Map.of());
+                new EventController.SubmitEventRequest("order-service", payload, Map.of());
 
         EventController.SubmitEventResponse resp = controller.submit(req);
 
-        // submit 被调用一次
-        ArgumentCaptor<Event> captor = ArgumentCaptor.forClass(Event.class);
+        // submit 被调用一次，参数是 ApiEvent
+        ArgumentCaptor<ApiEvent> captor = ArgumentCaptor.forClass(ApiEvent.class);
         verify(apiSource, times(1)).submit(captor.capture());
-        Event submitted = captor.getValue();
-
-        // 字段映射
-        assertEquals(SourceType.API, submitted.meta().sourceType());
-        assertEquals("order-service", submitted.meta().source());
-        assertEquals("orders", submitted.meta().table());
-        assertEquals(Op.UPDATE, submitted.op());
-        assertEquals(after, submitted.after());
-        assertNotNull(submitted.sourceTs());
+        ApiEvent apiEvent = captor.getValue();
+        // apiName == 提交的 source（显式字段便于脚本/索引）
+        assertEquals("order-service", apiEvent.meta().apiName());
+        // source 标识保留 "api:" + source 前缀（来自 EventController）
+        assertEquals("api:order-service", apiEvent.meta().source());
+        // payload 透传
+        assertEquals(payload, apiEvent.payload());
+        // sourceTs 由 controller 填充
+        assertNotNull(apiEvent.sourceTs());
         // eventId 放进 attributes
-        String eventId = (String) submitted.meta().attributes().get("eventId");
+        String eventId = (String) apiEvent.meta().attributes().get("eventId");
         assertNotNull(eventId);
-        assertFalse(eventId.isEmpty());
         // 响应里的 eventId 与提交进 Event 的一致
         assertEquals(eventId, resp.eventId());
     }
 
     @Test
-    void submitDefaultsOpToInsertWhenNull() {
-        EventController.SubmitEventRequest req =
-                new EventController.SubmitEventRequest("svc", null, null, null, null, null);
+    void submitDefaultsPayloadToEmptyMapWhenNull() {
+        EventController.SubmitEventRequest req = new EventController.SubmitEventRequest("svc", null, null);
 
         controller.submit(req);
 
-        ArgumentCaptor<Event> captor = ArgumentCaptor.forClass(Event.class);
+        ArgumentCaptor<ApiEvent> captor = ArgumentCaptor.forClass(ApiEvent.class);
         verify(apiSource).submit(captor.capture());
-        assertEquals(Op.INSERT, captor.getValue().op());
+        ApiEvent apiEvent = captor.getValue();
+        // payload 为 null 时 controller 给空 Map，不抛 NPE
+        assertEquals(Map.of(), apiEvent.payload());
+        // 即使 attributes 为 null，eventId 也必须存在
+        assertNotNull(apiEvent.meta().attributes().get("eventId"));
     }
 
     @Test
     void submitRejectsMissingSource() {
-        EventController.SubmitEventRequest req =
-                new EventController.SubmitEventRequest(null, null, null, null, null, null);
+        EventController.SubmitEventRequest req = new EventController.SubmitEventRequest(null, null, null);
         assertThrows(IllegalArgumentException.class, () -> controller.submit(req));
-        verify(apiSource, times(0)).submit(any(Event.class));
+        verify(apiSource, times(0)).submit(any(ApiEvent.class));
     }
 
     @Test
-    void submitRejectsUnknownOp() {
-        EventController.SubmitEventRequest req =
-                new EventController.SubmitEventRequest("svc", null, "BOGUS", null, null, null);
+    void submitRejectsBlankSource() {
+        EventController.SubmitEventRequest req = new EventController.SubmitEventRequest("   ", null, null);
         assertThrows(IllegalArgumentException.class, () -> controller.submit(req));
-        verify(apiSource, times(0)).submit(any(Event.class));
+        verify(apiSource, times(0)).submit(any(ApiEvent.class));
     }
 
     @Test
     void submitOverwritesClientSuppliedEventId() {
-        EventController.SubmitEventRequest req = new EventController.SubmitEventRequest(
-                "svc", null, null, null, null, Map.of("eventId", "client-supplied"));
+        EventController.SubmitEventRequest req =
+                new EventController.SubmitEventRequest("svc", null, Map.of("eventId", "client-supplied"));
 
         EventController.SubmitEventResponse resp = controller.submit(req);
 
-        ArgumentCaptor<Event> captor = ArgumentCaptor.forClass(Event.class);
+        ArgumentCaptor<ApiEvent> captor = ArgumentCaptor.forClass(ApiEvent.class);
         verify(apiSource).submit(captor.capture());
-        String submittedEventId = (String) captor.getValue().meta().attributes().get("eventId");
+        ApiEvent apiEvent = captor.getValue();
+        String submittedEventId = (String) apiEvent.meta().attributes().get("eventId");
         assertNotNull(submittedEventId);
-        org.junit.jupiter.api.Assertions.assertNotEquals("client-supplied", submittedEventId);
+        assertNotEquals("client-supplied", submittedEventId);
         assertEquals(submittedEventId, resp.eventId());
     }
 }

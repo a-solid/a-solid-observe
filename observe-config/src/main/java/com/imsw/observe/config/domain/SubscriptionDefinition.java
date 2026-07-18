@@ -3,7 +3,7 @@ package com.imsw.observe.config.domain;
 import java.time.Duration;
 import java.util.Set;
 
-import com.imsw.observe.kernel.event.model.Op;
+import com.imsw.observe.kernel.event.model.CdcOp;
 import com.imsw.observe.kernel.event.model.SourceType;
 import com.imsw.observe.pipeline.domain.subscription.Condition;
 
@@ -16,7 +16,7 @@ public record SubscriptionDefinition(
         String topic,
         String db,
         String table,
-        Set<Op> opTypes,
+        Set<CdcOp> opTypes,
         SourceType sourceType,
         Condition fieldFilter,
         ActionType actionType,

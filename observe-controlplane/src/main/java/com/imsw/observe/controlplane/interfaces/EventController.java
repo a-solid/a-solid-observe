@@ -12,9 +12,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.imsw.observe.kernel.event.model.Event;
-import com.imsw.observe.kernel.event.model.Op;
-import com.imsw.observe.kernel.event.model.SourceType;
+import com.imsw.observe.kernel.event.model.ApiEvent;
+import com.imsw.observe.kernel.event.model.ApiMeta;
 import com.imsw.observe.pipeline.infrastructure.source.ApiSource;
 
 @RestController
@@ -33,7 +32,6 @@ public class EventController {
         if (req.source() == null || req.source().isBlank()) {
             throw new IllegalArgumentException("source is required");
         }
-        Op op = req.op() == null ? Op.INSERT : Op.valueOf(req.op());
         String eventId = UUID.randomUUID().toString();
 
         Map<String, Object> attributes = new HashMap<>();
@@ -42,24 +40,17 @@ public class EventController {
         }
         attributes.put("eventId", eventId);
 
-        Event event = new Event(
-                new Event.EventMeta(SourceType.API, req.source(), null, req.table(), attributes),
-                req.before(),
-                req.after(),
-                op,
-                Instant.now());
+        // ADR-0006 §3.5：ApiSource 产 ApiEvent。source 即 apiName；payload 为 HTTP body 数据字段，
+        // 由调用方按需组装（默认透传请求 payload，无则空 Map）。
+        Map<String, Object> payload = req.payload() == null ? Map.of() : Map.copyOf(req.payload());
+        ApiMeta meta = new ApiMeta("api:" + req.source(), req.source(), Map.copyOf(attributes));
+        ApiEvent event = new ApiEvent(meta, payload, Instant.now());
 
         apiSource.submit(event);
         return new SubmitEventResponse(eventId);
     }
 
-    public record SubmitEventRequest(
-            String source,
-            String table,
-            String op,
-            Map<String, Object> before,
-            Map<String, Object> after,
-            Map<String, Object> attributes) {}
+    public record SubmitEventRequest(String source, Map<String, Object> payload, Map<String, Object> attributes) {}
 
     public record SubmitEventResponse(String eventId) {}
 }

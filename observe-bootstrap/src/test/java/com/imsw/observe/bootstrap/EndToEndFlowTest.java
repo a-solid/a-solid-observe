@@ -21,8 +21,10 @@ import com.imsw.observe.config.application.PipelineHotReloader;
 import com.imsw.observe.config.application.SubscriptionCrudService;
 import com.imsw.observe.config.application.VersionPublishService;
 import com.imsw.observe.config.domain.SubscriptionDefinition;
+import com.imsw.observe.kernel.event.model.CdcEvent;
+import com.imsw.observe.kernel.event.model.CdcMeta;
+import com.imsw.observe.kernel.event.model.CdcOp;
 import com.imsw.observe.kernel.event.model.Event;
-import com.imsw.observe.kernel.event.model.Op;
 import com.imsw.observe.kernel.event.model.SourceType;
 import com.imsw.observe.pipeline.application.PipelineRegistry;
 import com.imsw.observe.pipeline.domain.ErrorPolicy;
@@ -89,7 +91,7 @@ class EndToEndFlowTest {
                 "topic",
                 "trade_db",
                 "orders",
-                Set.of(Op.INSERT),
+                Set.of(CdcOp.INSERT),
                 SourceType.CDC,
                 null,
                 SubscriptionDefinition.ActionType.RUN,
@@ -106,8 +108,10 @@ class EndToEndFlowTest {
         hotReloader.refresh();
         assertThat(registry.isLoaded()).isTrue();
 
-        Event.EventMeta meta = new Event.EventMeta(SourceType.CDC, "mq", "trade_db", "orders", Map.of());
-        Event event = new Event(meta, Map.of(), Map.of("amount", 5000L), Op.INSERT, Instant.now());
+        // ADR-0006 keystone：CDC→CdcEvent→match→pipeline→alert 全链路用 sealed Event 子类型走通。
+        // CdcMeta 不再带 sourceType（由 CdcEvent 子类型隐式 = CDC）；source 仍为 CDC 通道标识。
+        CdcMeta meta = new CdcMeta("mq", "trade_db", "orders", Map.of());
+        Event event = new CdcEvent(meta, Map.of(), Map.of("amount", 5000L), CdcOp.INSERT, Instant.now());
         cdcSource.push(List.of(event));
 
         AlertPo alert = waitForFirstAlert();
