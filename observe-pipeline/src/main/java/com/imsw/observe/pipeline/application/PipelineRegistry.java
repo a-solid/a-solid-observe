@@ -145,11 +145,6 @@ public final class PipelineRegistry {
             return List.of();
         }
 
-        /** 旧 CDC 直查入口（按 db/table），保留供测试与兼容路径使用。 */
-        public List<Subscription> subscriptionsFor(final String db, final String table) {
-            return subscriptionsByDbTable.getOrDefault(dbTableKey(db, table), List.of());
-        }
-
         public Pipeline pipelineById(final Long pipelineId) {
             return pipelinesById.get(pipelineId);
         }

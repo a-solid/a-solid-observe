@@ -17,6 +17,13 @@ import com.imsw.observe.kernel.event.model.TickMeta;
 import com.imsw.observe.pipeline.application.EventListener;
 import com.imsw.observe.pipeline.application.Source;
 
+/**
+ * B3 占位 Cron 源：固定周期调度（{@code periodMillis}），{@link TickMeta#cronExpression()} 暂传 {@code null}。
+ *
+ * <p>仅用于 B3 阶段打通 CRON source 的事件链路（{@link TickEvent} → matcher → runner）。
+ * <b>B4 会用真正的 {@code CronScheduler} 替换本类</b>——按 cron 表达式调度、{@link TickMeta} 带真实
+ * {@code cronExpression}。在那之前本类的固定周期语义不应当作 cron 真实语义对外承诺。
+ */
 public final class CronSource implements Source {
 
     private static final Logger LOG = LoggerFactory.getLogger(CronSource.class);
