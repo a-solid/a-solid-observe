@@ -76,7 +76,12 @@ class EngineSmokeTest {
         DbApi dbApi = new NoopDbApi();
         PipelineExecutor executor = new LinearPipelineExecutor(
                 spec -> new ScriptNode(engine, ctx -> new DefaultAlertsApi(ctx), () -> dbApi));
-        return new DefaultPipelineRunner(executor, sink, new NoopTransactionOperator(), new NoopExecutionRecorder());
+        return new DefaultPipelineRunner(
+                executor,
+                sink,
+                new NoopTransactionOperator(),
+                new NoopExecutionRecorder(),
+                new com.imsw.observe.kernel.util.SnowflakeIdGenerator(1L, 0L));
     }
 
     private static Pipeline buildPipeline() {
@@ -115,7 +120,7 @@ class EngineSmokeTest {
                 Set.of(),
                 Set.of("amt"));
         return new Pipeline(
-                "smoke-pipeline",
+                1L,
                 1,
                 "smoke-team",
                 "smoke-app",

@@ -57,7 +57,7 @@ public final class SourceDispatcher implements EventListener {
         }
         for (SubscriptionMatcher.MatchedSubscription m : matched) {
             Pipeline pipeline = m.pipeline();
-            String subscriptionId = m.subscription().id();
+            Long subscriptionId = m.subscription().id();
             if (delayedActionHandler.handle(m.subscription(), event, pipeline)) {
                 continue;
             }

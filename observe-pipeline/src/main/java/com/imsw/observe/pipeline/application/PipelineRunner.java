@@ -5,5 +5,5 @@ import com.imsw.observe.pipeline.domain.Pipeline;
 
 public interface PipelineRunner {
 
-    void run(Pipeline pipeline, Event triggerEvent, String subscriptionId);
+    void run(Pipeline pipeline, Event triggerEvent, Long subscriptionId);
 }

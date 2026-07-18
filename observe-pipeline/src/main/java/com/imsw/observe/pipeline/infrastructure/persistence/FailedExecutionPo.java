@@ -12,17 +12,17 @@ import jakarta.persistence.Table;
 public class FailedExecutionPo {
 
     @Id
-    @Column(name = "id", length = 36, nullable = false)
-    public String id;
+    @Column(name = "id", nullable = false)
+    public Long id;
 
-    @Column(name = "pipeline_id", length = 64, nullable = false)
-    public String pipelineId;
+    @Column(name = "pipeline_id", nullable = false)
+    public Long pipelineId;
 
     @Column(name = "pipeline_version", nullable = false)
     public Integer pipelineVersion;
 
     @Column(name = "execution_id")
-    public String executionId;
+    public Long executionId;
 
     @Column(name = "team", nullable = false)
     public String team;
@@ -37,7 +37,7 @@ public class FailedExecutionPo {
     public String triggerEvent;
 
     @Column(name = "subscription_id")
-    public String subscriptionId;
+    public Long subscriptionId;
 
     @Column(name = "node_name")
     public String nodeName;

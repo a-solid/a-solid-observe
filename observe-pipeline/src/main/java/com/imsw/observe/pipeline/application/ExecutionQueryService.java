@@ -30,27 +30,27 @@ public class ExecutionQueryService {
         this.failedExecutionRepository = failedExecutionRepository;
     }
 
-    public List<Execution> findExecutions(final String pipelineId, final int limit) {
+    public List<Execution> findExecutions(final Long pipelineId, final int limit) {
         int safeLimit = sanitize(limit);
         return executionRepository.findAll(PageRequest.of(0, safeLimit)).stream()
-                .filter(e -> pipelineId == null || pipelineId.isBlank() || pipelineId.equals(e.pipelineId))
+                .filter(e -> pipelineId == null || pipelineId.equals(e.pipelineId))
                 .map(ExecutionQueryService::toExecution)
                 .toList();
     }
 
-    public Optional<Execution> findExecution(final String id) {
+    public Optional<Execution> findExecution(final Long id) {
         return executionRepository.findById(id).map(ExecutionQueryService::toExecution);
     }
 
-    public List<FailedExecution> findFailedExecutions(final String pipelineId, final int limit) {
+    public List<FailedExecution> findFailedExecutions(final Long pipelineId, final int limit) {
         int safeLimit = sanitize(limit);
         return failedExecutionRepository.findAll(PageRequest.of(0, safeLimit)).stream()
-                .filter(e -> pipelineId == null || pipelineId.isBlank() || pipelineId.equals(e.pipelineId))
+                .filter(e -> pipelineId == null || pipelineId.equals(e.pipelineId))
                 .map(ExecutionQueryService::toFailedExecution)
                 .toList();
     }
 
-    public Optional<FailedExecution> findFailedExecution(final String id) {
+    public Optional<FailedExecution> findFailedExecution(final Long id) {
         return failedExecutionRepository.findById(id).map(ExecutionQueryService::toFailedExecution);
     }
 

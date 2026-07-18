@@ -23,6 +23,7 @@ import com.imsw.observe.kernel.event.model.ExecutionMeta;
 import com.imsw.observe.kernel.event.model.Op;
 import com.imsw.observe.kernel.event.model.SourceType;
 import com.imsw.observe.kernel.execution.model.ErrorType;
+import com.imsw.observe.kernel.util.SnowflakeIdGenerator;
 import com.imsw.observe.pipeline.infrastructure.script.DefaultExecutionContext;
 
 @ExtendWith(SpringExtension.class)
@@ -43,9 +44,11 @@ class JpaExecutionRecorderTest {
 
     private JpaExecutionRecorder recorder;
 
+    private final SnowflakeIdGenerator snowflake = new SnowflakeIdGenerator(1L, 0L);
+
     @BeforeEach
     void setUp() {
-        recorder = new JpaExecutionRecorder(executionRepository, failedExecutionRepository, objectMapper);
+        recorder = new JpaExecutionRecorder(executionRepository, failedExecutionRepository, objectMapper, snowflake);
         runInTx(() -> {
             executionRepository.deleteAll();
             failedExecutionRepository.deleteAll();
@@ -64,6 +67,9 @@ class JpaExecutionRecorderTest {
         runInTx(() -> recorder.recordSuccess(newContext(), "SUCCESS", Duration.ofMillis(5), true, 0.0));
         assertThat(executionRepository.count()).isEqualTo(1);
         ExecutionPo po = executionRepository.findAll().get(0);
+        assertThat(po.id).isPositive(); // snowflake-allocated BIGINT id (ADR-0003)
+        assertThat(po.pipelineId).isEqualTo(2001L);
+        assertThat(po.subscriptionId).isEqualTo(3001L);
         assertThat(po.status).isEqualTo("SUCCESS");
         assertThat(po.triggerType).isEqualTo("CDC");
         assertThat(po.triggerEvent).contains("orders");
@@ -78,6 +84,10 @@ class JpaExecutionRecorderTest {
         assertThat(executionRepository.count()).isZero();
         assertThat(failedExecutionRepository.count()).isEqualTo(1);
         var fe = failedExecutionRepository.findAll().get(0);
+        assertThat(fe.id).isPositive(); // snowflake-allocated BIGINT id (ADR-0003)
+        assertThat(fe.executionId).isEqualTo(1001L);
+        assertThat(fe.pipelineId).isEqualTo(2001L);
+        assertThat(fe.subscriptionId).isEqualTo(3001L);
         assertThat(fe.errorType).isEqualTo("NODE_EXECUTION");
         assertThat(fe.nodeName).isEqualTo("boom-node");
         assertThat(fe.status).isEqualTo("PENDING");
@@ -88,8 +98,8 @@ class JpaExecutionRecorderTest {
         Event.EventMeta meta = new Event.EventMeta(SourceType.CDC, "t", "db", "orders", Map.of());
         Event event = new Event(meta, Map.of(), Map.of("amount", 2000L), Op.INSERT, Instant.now());
         ExecutionMeta execMeta = new ExecutionMeta(
-                "exec-1",
-                "demo-pipeline",
+                "1001",
+                "2001",
                 1,
                 "team",
                 "app",
@@ -99,7 +109,7 @@ class JpaExecutionRecorderTest {
                 SourceType.CDC,
                 event,
                 Instant.now(),
-                "sub-1");
+                "3001");
         return new DefaultExecutionContext(execMeta, new ExecutionData(event));
     }
 

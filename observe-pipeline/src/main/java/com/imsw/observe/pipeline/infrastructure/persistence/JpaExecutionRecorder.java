@@ -4,7 +4,6 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
 import org.slf4j.Logger;
@@ -16,6 +15,7 @@ import com.imsw.observe.kernel.event.model.ExecutionContext;
 import com.imsw.observe.kernel.event.model.ExecutionMeta;
 import com.imsw.observe.kernel.execution.model.ErrorType;
 import com.imsw.observe.kernel.execution.spi.ExecutionRecorder;
+import com.imsw.observe.kernel.util.SnowflakeIdGenerator;
 
 public final class JpaExecutionRecorder implements ExecutionRecorder {
 
@@ -29,13 +29,17 @@ public final class JpaExecutionRecorder implements ExecutionRecorder {
 
     private final ObjectMapper objectMapper;
 
+    private final SnowflakeIdGenerator snowflake;
+
     public JpaExecutionRecorder(
             final ExecutionRepository executionRepository,
             final FailedExecutionRepository failedExecutionRepository,
-            final ObjectMapper objectMapper) {
+            final ObjectMapper objectMapper,
+            final SnowflakeIdGenerator snowflake) {
         this.executionRepository = executionRepository;
         this.failedExecutionRepository = failedExecutionRepository;
         this.objectMapper = objectMapper;
+        this.snowflake = snowflake;
     }
 
     @Override
@@ -50,15 +54,15 @@ public final class JpaExecutionRecorder implements ExecutionRecorder {
         }
         ExecutionMeta meta = ctx.meta();
         ExecutionPo po = new ExecutionPo();
-        po.id = UUID.randomUUID().toString();
-        po.pipelineId = meta.pipelineId();
+        po.id = snowflake.next();
+        po.pipelineId = toLong(meta.pipelineId());
         po.pipelineVersion = meta.pipelineVersion();
         po.team = meta.team();
         po.application = meta.application();
         po.triggerType =
                 meta.triggerType() == null ? "UNKNOWN" : meta.triggerType().name();
         po.triggerEvent = serializeEvent(meta.triggerEvent());
-        po.subscriptionId = meta.subscriptionId();
+        po.subscriptionId = toLong(meta.subscriptionId());
         po.status = outcome;
         po.startedAt = meta.triggeredAt();
         po.endedAt = Instant.now();
@@ -81,16 +85,16 @@ public final class JpaExecutionRecorder implements ExecutionRecorder {
             final ErrorType errorType) {
         ExecutionMeta meta = ctx.meta();
         FailedExecutionPo po = new FailedExecutionPo();
-        po.id = UUID.randomUUID().toString();
-        po.pipelineId = meta.pipelineId();
+        po.id = snowflake.next();
+        po.pipelineId = toLong(meta.pipelineId());
         po.pipelineVersion = meta.pipelineVersion();
-        po.executionId = meta.executionId();
+        po.executionId = toLong(meta.executionId());
         po.team = meta.team();
         po.application = meta.application();
         po.triggerType =
                 meta.triggerType() == null ? "UNKNOWN" : meta.triggerType().name();
         po.triggerEvent = serializeEvent(meta.triggerEvent());
-        po.subscriptionId = meta.subscriptionId();
+        po.subscriptionId = toLong(meta.subscriptionId());
         po.nodeName = nodeName;
         po.errorType = errorType.name();
         po.errorMessage = truncate(error == null ? null : error.getMessage(), MAX_ERROR_MESSAGE);
@@ -124,6 +128,22 @@ public final class JpaExecutionRecorder implements ExecutionRecorder {
             return true;
         }
         return ThreadLocalRandom.current().nextDouble() < sampleRatio;
+    }
+
+    /**
+     * 运行态 id 已迁 BIGINT（ADR-0003），而 {@link ExecutionMeta}（kernel）仍以 String 透传 snowflake id
+     * 的字符串形式（"trace 关联用 BIGINT id 的字符串形式"）。PO 落库前在此做 String→Long 边界转换；
+     * null 或非数字字符串视为 null（宽松，避免单条记录写入失败影响主流程）。
+     */
+    private static Long toLong(final String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return Long.parseLong(value.trim());
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     private static String truncate(final String value, final int max) {
