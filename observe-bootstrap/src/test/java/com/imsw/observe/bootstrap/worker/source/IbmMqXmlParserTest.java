@@ -11,8 +11,8 @@ import javax.jms.TextMessage;
 import org.junit.jupiter.api.Test;
 
 import com.imsw.observe.kernel.error.MessageParseException;
-import com.imsw.observe.kernel.event.model.Op;
-import com.imsw.observe.kernel.event.model.SourceType;
+import com.imsw.observe.kernel.event.model.CdcEvent;
+import com.imsw.observe.kernel.event.model.CdcOp;
 
 class IbmMqXmlParserTest {
 
@@ -41,11 +41,11 @@ class IbmMqXmlParserTest {
 
         var event = parser.parse(msg);
 
-        assertEquals(SourceType.CDC, event.meta().sourceType());
+        // CdcEvent: sourceType 由子类型隐式 = CDC（ADR-0006），不再有 sourceType() 访问器
         assertEquals("order-service", event.meta().source());
         assertEquals("orders", event.meta().table());
-        // 示例映射: "CREATE" 归一化为 Op.INSERT (Op 无 CREATE)
-        assertEquals(Op.INSERT, event.op());
+        // 示例映射: "CREATE" 归一化为 CdcOp.INSERT (CdcOp 无 CREATE)
+        assertEquals(CdcOp.INSERT, event.op());
         assertEquals("123", event.after().get("id"));
         assertEquals("PAID", event.after().get("status"));
         assertNotNull(event.sourceTs());
@@ -65,7 +65,7 @@ class IbmMqXmlParserTest {
 
         var event = parser.parse(msg);
 
-        assertEquals(Op.UPDATE, event.op());
+        assertEquals(CdcOp.UPDATE, event.op());
         assertEquals("1", event.before().get("id"));
         assertEquals("OK", event.after().get("status"));
     }
@@ -106,7 +106,7 @@ class IbmMqXmlParserTest {
 
         var event = parser.parse(msg);
 
-        assertEquals(SourceType.CDC, event.meta().sourceType());
+        // CdcEvent: sourceType 由子类型隐式 = CDC（ADR-0006），不再有 sourceType() 访问器
         org.junit.jupiter.api.Assertions.assertTrue(event.after().isEmpty());
     }
 }

@@ -17,9 +17,9 @@ import org.w3c.dom.NodeList;
 import org.xml.sax.InputSource;
 
 import com.imsw.observe.kernel.error.MessageParseException;
-import com.imsw.observe.kernel.event.model.Event;
-import com.imsw.observe.kernel.event.model.Op;
-import com.imsw.observe.kernel.event.model.SourceType;
+import com.imsw.observe.kernel.event.model.CdcEvent;
+import com.imsw.observe.kernel.event.model.CdcMeta;
+import com.imsw.observe.kernel.event.model.CdcOp;
 import com.imsw.observe.pipeline.infrastructure.source.MessageParser;
 
 /**
@@ -58,7 +58,7 @@ public final class IbmMqXmlParser implements MessageParser<TextMessage> {
     }
 
     @Override
-    public Event parse(final TextMessage raw) throws MessageParseException {
+    public CdcEvent parse(final TextMessage raw) throws MessageParseException {
         String xml;
         try {
             xml = raw.getText();
@@ -81,24 +81,25 @@ public final class IbmMqXmlParser implements MessageParser<TextMessage> {
             throw new MessageParseException("missing <source>");
         }
         String table = childText(root, "table");
-        Op op = parseOp(childText(root, "op"));
+        CdcOp op = parseOp(childText(root, "op"));
         Map<String, Object> before = childMap(root, "before");
         Map<String, Object> after = childMap(root, "after");
 
-        Event.EventMeta meta = new Event.EventMeta(SourceType.CDC, source, null, table, Map.of());
-        return new Event(meta, before, after, op, Instant.now());
+        // CdcMeta.sourceType 由子类型隐式 = CDC，故不再单独字段（ADR-0006）；db 留空，CDC XML 暂不承载 schema 名。
+        CdcMeta meta = new CdcMeta(source, null, table, Map.of());
+        return new CdcEvent(meta, before, after, op, Instant.now());
     }
 
-    private static Op parseOp(final String raw) throws MessageParseException {
+    private static CdcOp parseOp(final String raw) throws MessageParseException {
         if (raw == null || raw.isBlank()) {
-            return Op.INSERT;
+            return CdcOp.INSERT;
         }
         String upper = raw.trim().toUpperCase();
         if ("CREATE".equals(upper)) {
-            return Op.INSERT;
+            return CdcOp.INSERT;
         }
         try {
-            return Op.valueOf(upper);
+            return CdcOp.valueOf(upper);
         } catch (IllegalArgumentException e) {
             throw new MessageParseException("unknown <op>: " + raw.trim(), e);
         }

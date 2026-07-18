@@ -11,8 +11,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.imsw.observe.kernel.event.model.Event;
-import com.imsw.observe.kernel.event.model.Op;
 import com.imsw.observe.kernel.event.model.SourceType;
+import com.imsw.observe.kernel.event.model.TickEvent;
+import com.imsw.observe.kernel.event.model.TickMeta;
 import com.imsw.observe.pipeline.application.EventListener;
 import com.imsw.observe.pipeline.application.Source;
 
@@ -60,8 +61,10 @@ public final class CronSource implements Source {
         if (listener == null) {
             return;
         }
-        Event.EventMeta meta = new Event.EventMeta(SourceType.CRON, "cron:" + name, null, null, Map.of());
-        Event event = new Event(meta, null, null, Op.TICK, Instant.now());
+        // B3 占位：保持固定周期调度；TickMeta 为 B4 CronScheduler + cronExpression 预留
+        // （此处 cronExpression 传 null，待 B4 用真实表达式填充）。
+        TickMeta meta = new TickMeta("cron:" + name, name, null, Map.of());
+        Event event = new TickEvent(meta, Instant.now());
         try {
             listener.onBatch(List.of(event));
         } catch (RuntimeException e) {

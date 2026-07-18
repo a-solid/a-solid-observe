@@ -7,10 +7,10 @@ import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.imsw.observe.kernel.event.model.DelayedEvent;
+import com.imsw.observe.kernel.event.model.DelayedMeta;
 import com.imsw.observe.kernel.event.model.Event;
 import com.imsw.observe.kernel.event.model.EventPaths;
-import com.imsw.observe.kernel.event.model.Op;
-import com.imsw.observe.kernel.event.model.SourceType;
 import com.imsw.observe.pipeline.domain.Pipeline;
 import com.imsw.observe.pipeline.domain.subscription.Action;
 import com.imsw.observe.pipeline.domain.subscription.Subscription;
@@ -66,25 +66,22 @@ public final class DelayedActionHandler {
         }
     }
 
-    private static Event wrapAsDelayed(
+    private static DelayedEvent wrapAsDelayed(
             final Event original,
             final Subscription subscription,
             final String correlationKey,
             final Instant scheduledAt) {
-        Event.EventMeta originalMeta = original.meta();
-        Event.EventMeta meta = new Event.EventMeta(
-                SourceType.CDC,
+        // T1 review：DelayedEvent.originalEvent 作为一等字段取代旧 attributes.original_event key，
+        // 故此处不再把 original 塞进 attributes（其余延时语义 key 全部保留）。
+        DelayedMeta meta = new DelayedMeta(
                 "delayed:" + subscription.id(),
-                originalMeta == null ? null : originalMeta.db(),
-                originalMeta == null ? null : originalMeta.table(),
                 Map.of(
                         "schedule_id", UUID.randomUUID().toString(),
                         "subscription_id", subscription.id(),
-                        "original_event", original,
                         "scheduled_at", scheduledAt.toString(),
                         "fired_at", Instant.now().toString(),
                         "correlation_key", correlationKey));
-        return new Event(meta, null, null, Op.DELAYED, Instant.now());
+        return new DelayedEvent(meta, original, Instant.now());
     }
 
     private static String extractKey(final Event event, final String path) {

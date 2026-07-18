@@ -5,7 +5,7 @@ import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.imsw.observe.kernel.event.model.Event;
+import com.imsw.observe.kernel.event.model.ApiEvent;
 import com.imsw.observe.kernel.event.model.SourceType;
 import com.imsw.observe.pipeline.application.EventListener;
 import com.imsw.observe.pipeline.application.Source;
@@ -33,7 +33,7 @@ public final class ApiSource implements Source {
         LOG.info("ApiSource stopped");
     }
 
-    public void submit(final Event event) {
+    public void submit(final ApiEvent event) {
         if (listener == null) {
             throw new IllegalStateException("ApiSource not started");
         }
