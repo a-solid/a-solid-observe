@@ -21,8 +21,14 @@ import com.imsw.observe.kernel.event.model.Op;
 import com.imsw.observe.kernel.event.model.SourceType;
 import com.imsw.observe.pipeline.domain.subscription.Condition;
 
+/**
+ * Subscription 资源以业务键 {@code (namespace, name)} 寻址（ADR-0002 软隔离铁律）。
+ *
+ * <p>路径形态：{@code /api/v1/namespaces/{namespace}/subscriptions/...}。创建时 namespace 取自路径，
+ * 透传到 {@link SubscriptionFields} 以便 {@code toDomain()} 构造完整的领域对象。BIGINT id 不对外暴露。
+ */
 @RestController
-@RequestMapping("/api/v1/subscriptions")
+@RequestMapping("/api/v1")
 public class SubscriptionController {
 
     private final SubscriptionCrudService service;
@@ -31,30 +37,34 @@ public class SubscriptionController {
         this.service = service;
     }
 
-    @PostMapping
-    public SubscriptionDto create(@RequestBody final CreateSubscriptionRequest req) {
-        return SubscriptionDto.from(service.create(req.toDomain()));
+    @PostMapping("/namespaces/{namespace}/subscriptions")
+    public SubscriptionDto create(
+            @PathVariable final String namespace, @RequestBody final CreateSubscriptionRequest req) {
+        return SubscriptionDto.from(service.create(req.toDomain(namespace)));
     }
 
-    @GetMapping
-    public List<SubscriptionDto> list() {
-        return service.findAll().stream().map(SubscriptionDto::from).toList();
+    @GetMapping("/namespaces/{namespace}/subscriptions")
+    public List<SubscriptionDto> list(@PathVariable final String namespace) {
+        return service.findAll(namespace).stream().map(SubscriptionDto::from).toList();
     }
 
-    @GetMapping("/{id}")
-    public ResponseEntity<SubscriptionDto> get(@PathVariable final Long id) {
-        var found = service.find(id);
+    @GetMapping("/namespaces/{namespace}/subscriptions/{name}")
+    public ResponseEntity<SubscriptionDto> get(@PathVariable final String namespace, @PathVariable final String name) {
+        var found = service.find(namespace, name);
         return found == null ? ResponseEntity.notFound().build() : ResponseEntity.ok(SubscriptionDto.from(found));
     }
 
-    @PutMapping("/{id}")
-    public SubscriptionDto update(@PathVariable final Long id, @RequestBody final UpdateSubscriptionRequest req) {
-        return SubscriptionDto.from(service.update(id, req.toDomain()));
+    @PutMapping("/namespaces/{namespace}/subscriptions/{name}")
+    public SubscriptionDto update(
+            @PathVariable final String namespace,
+            @PathVariable final String name,
+            @RequestBody final UpdateSubscriptionRequest req) {
+        return SubscriptionDto.from(service.update(namespace, name, req.toDomain(namespace)));
     }
 
-    @DeleteMapping("/{id}")
-    public void delete(@PathVariable final Long id) {
-        service.delete(id);
+    @DeleteMapping("/namespaces/{namespace}/subscriptions/{name}")
+    public void delete(@PathVariable final String namespace, @PathVariable final String name) {
+        service.delete(namespace, name);
     }
 
     /** 可编辑的订阅字段（create/update 共用）。 */
@@ -71,9 +81,11 @@ public class SubscriptionController {
             String actionType,
             Long scheduleDelayMs,
             String scheduleCorrelationKeyPath,
+            String name,
+            String description,
             String status) {
 
-        Subscription toDomain() {
+        Subscription toDomain(final String namespace) {
             Duration delay = scheduleDelayMs == null ? null : Duration.ofMillis(scheduleDelayMs);
             Subscription.ActionType action =
                     actionType == null ? Subscription.ActionType.RUN : Subscription.ActionType.valueOf(actionType);
@@ -81,6 +93,7 @@ public class SubscriptionController {
                     status == null ? Subscription.Status.ACTIVE : Subscription.Status.valueOf(status);
             return new Subscription(
                     null,
+                    namespace,
                     pipelineId,
                     pipelineVersion,
                     mq,
@@ -93,8 +106,8 @@ public class SubscriptionController {
                     action,
                     delay,
                     scheduleCorrelationKeyPath,
-                    null,
-                    null,
+                    name,
+                    description,
                     stat,
                     null,
                     null,
@@ -104,15 +117,15 @@ public class SubscriptionController {
 
     public record CreateSubscriptionRequest(SubscriptionFields subscription) {
 
-        Subscription toDomain() {
-            return subscription.toDomain();
+        Subscription toDomain(final String namespace) {
+            return subscription.toDomain(namespace);
         }
     }
 
     public record UpdateSubscriptionRequest(SubscriptionFields subscription) {
 
-        Subscription toDomain() {
-            return subscription.toDomain();
+        Subscription toDomain(final String namespace) {
+            return subscription.toDomain(namespace);
         }
     }
 }

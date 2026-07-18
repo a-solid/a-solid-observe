@@ -76,6 +76,7 @@ class DefaultAlertSinkIntegrationTest {
         AlertPo alert = all.get(0);
         assertThat(alert.status).isEqualTo("FIRING");
         assertThat(alert.fingerprint).isEqualTo("fp-1");
+        assertThat(alert.namespace).isEqualTo("trade"); // 告警继承执行上下文的 namespace (ADR-0002)
         assertThat(alert.dedupCount).isEqualTo(2);
         assertThat(evidenceRepository.findAll()).hasSize(1);
     }
@@ -109,6 +110,7 @@ class DefaultAlertSinkIntegrationTest {
         Event event = new Event(meta, Map.of(), Map.of("amount", 2000L), Op.INSERT, Instant.now());
         ExecutionMeta execMeta = new ExecutionMeta(
                 1001L,
+                "trade",
                 2001L,
                 1,
                 "team",

@@ -35,6 +35,7 @@ class DefaultSubscriptionMatcherTest {
         Pipeline pipeline = pipeline(1L, 1);
         Subscription sub = new Subscription(
                 10L,
+                "smoke",
                 1L,
                 1,
                 new Subscription.SourceRef("mq", "topic", "trade_db", "orders", Set.of(Op.INSERT), SourceType.CDC),
@@ -61,6 +62,7 @@ class DefaultSubscriptionMatcherTest {
         Pipeline pipeline = pipeline(1L, 2);
         Subscription sub = new Subscription(
                 10L,
+                "smoke",
                 1L,
                 1,
                 new Subscription.SourceRef(null, null, "trade_db", "orders", Set.of(), SourceType.CDC),
@@ -77,6 +79,7 @@ class DefaultSubscriptionMatcherTest {
     private Pipeline pipeline(final Long id, final int version) {
         return new Pipeline(
                 id,
+                "smoke",
                 version,
                 "team",
                 "app",

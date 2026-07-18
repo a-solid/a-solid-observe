@@ -19,6 +19,9 @@ public class EvidencePo {
     @Column(name = "alert_id", nullable = false)
     public Long alertId;
 
+    @Column(name = "namespace", nullable = false)
+    public String namespace;
+
     @Column(name = "pipeline_id", nullable = false)
     public Long pipelineId;
 

@@ -20,8 +20,13 @@ import com.imsw.observe.controlplane.interfaces.dto.VersionDto;
 import com.imsw.observe.kernel.util.JsonUtil;
 import com.imsw.observe.pipeline.domain.Pipeline;
 
+/**
+ * Pipeline 资源以业务键 {@code (namespace, name)} 寻址（ADR-0002 软隔离铁律）。
+ *
+ * <p>路径形态：{@code /api/v1/namespaces/{namespace}/pipelines/...}。BIGINT id 不对外暴露。
+ */
 @RestController
-@RequestMapping("/api/v1/pipelines")
+@RequestMapping("/api/v1")
 public class PipelineController {
 
     private final PipelineCrudService crud;
@@ -33,55 +38,65 @@ public class PipelineController {
         this.versions = versions;
     }
 
-    @PostMapping
-    public PipelineDto create(@RequestBody final CreatePipelineRequest req) {
+    @PostMapping("/namespaces/{namespace}/pipelines")
+    public PipelineDto create(@PathVariable final String namespace, @RequestBody final CreatePipelineRequest req) {
         PipelineDefinition def = crud.create(
-                req.team(), req.application(), req.labels(), req.name(), req.description(), req.createdBy());
+                namespace, req.name(), req.team(), req.application(), req.labels(), req.description(), req.createdBy());
         return PipelineDto.from(def);
     }
 
-    @GetMapping
-    public List<PipelineDto> list() {
-        return crud.findAll().stream().map(PipelineDto::from).toList();
+    @GetMapping("/namespaces/{namespace}/pipelines")
+    public List<PipelineDto> list(@PathVariable final String namespace) {
+        return crud.findAll(namespace).stream().map(PipelineDto::from).toList();
     }
 
-    @GetMapping("/{id}")
-    public ResponseEntity<PipelineDto> get(@PathVariable final Long id) {
-        PipelineDefinition def = crud.find(id);
+    @GetMapping("/namespaces/{namespace}/pipelines/{name}")
+    public ResponseEntity<PipelineDto> get(@PathVariable final String namespace, @PathVariable final String name) {
+        PipelineDefinition def = crud.find(namespace, name);
         return def == null ? ResponseEntity.notFound().build() : ResponseEntity.ok(PipelineDto.from(def));
     }
 
-    @PutMapping("/{id}")
-    public PipelineDto update(@PathVariable final Long id, @RequestBody final CreatePipelineRequest req) {
+    @PutMapping("/namespaces/{namespace}/pipelines/{name}")
+    public PipelineDto update(
+            @PathVariable final String namespace,
+            @PathVariable final String name,
+            @RequestBody final CreatePipelineRequest req) {
         return PipelineDto.from(
-                crud.update(id, req.team(), req.application(), req.labels(), req.name(), req.description()));
+                crud.update(namespace, name, req.team(), req.application(), req.labels(), req.description()));
     }
 
-    @PostMapping("/{id}/archive")
-    public void archive(@PathVariable final Long id) {
-        crud.archive(id);
+    @PostMapping("/namespaces/{namespace}/pipelines/{name}/archive")
+    public void archive(@PathVariable final String namespace, @PathVariable final String name) {
+        crud.archive(namespace, name);
     }
 
-    @PostMapping("/{id}/versions")
-    public VersionDto saveVersion(@PathVariable final Long id, @RequestBody final SaveVersionRequest req) {
+    @PostMapping("/namespaces/{namespace}/pipelines/{name}/versions")
+    public VersionDto saveVersion(
+            @PathVariable final String namespace,
+            @PathVariable final String name,
+            @RequestBody final SaveVersionRequest req) {
         Pipeline pipeline = JsonUtil.fromJson(req.pipelineJson(), Pipeline.class);
-        return VersionDto.from(versions.saveDraft(pipeline, req.publishedBy()));
+        return VersionDto.from(versions.saveDraft(namespace, name, pipeline, req.publishedBy()));
     }
 
-    @GetMapping("/{id}/versions")
-    public List<VersionDto> versions(@PathVariable final Long id) {
-        return versions.versions(id).stream().map(VersionDto::from).toList();
+    @GetMapping("/namespaces/{namespace}/pipelines/{name}/versions")
+    public List<VersionDto> versions(@PathVariable final String namespace, @PathVariable final String name) {
+        return versions.versions(namespace, name).stream().map(VersionDto::from).toList();
     }
 
-    @PostMapping("/{id}/versions/{v}/publish")
+    @PostMapping("/namespaces/{namespace}/pipelines/{name}/versions/{v}/publish")
     public VersionDto publish(
-            @PathVariable final Long id, @PathVariable final int v, @RequestBody final PublishRequest req) {
-        return VersionDto.from(versions.publish(id, v, req.publishedBy()));
+            @PathVariable final String namespace,
+            @PathVariable final String name,
+            @PathVariable final int v,
+            @RequestBody final PublishRequest req) {
+        return VersionDto.from(versions.publish(namespace, name, v, req.publishedBy()));
     }
 
-    @PostMapping("/{id}/versions/{v}/archive")
-    public VersionDto archiveVersion(@PathVariable final Long id, @PathVariable final int v) {
-        return VersionDto.from(versions.archive(id, v));
+    @PostMapping("/namespaces/{namespace}/pipelines/{name}/versions/{v}/archive")
+    public VersionDto archiveVersion(
+            @PathVariable final String namespace, @PathVariable final String name, @PathVariable final int v) {
+        return VersionDto.from(versions.archive(namespace, name, v));
     }
 
     public record CreatePipelineRequest(

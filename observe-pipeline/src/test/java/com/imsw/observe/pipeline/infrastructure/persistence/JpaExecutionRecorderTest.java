@@ -68,6 +68,7 @@ class JpaExecutionRecorderTest {
         assertThat(executionRepository.count()).isEqualTo(1);
         ExecutionPo po = executionRepository.findAll().get(0);
         assertThat(po.id).isPositive(); // snowflake-allocated BIGINT id (ADR-0003)
+        assertThat(po.namespace).isEqualTo("trade"); // namespace 软隔离维度透传 (ADR-0002)
         assertThat(po.pipelineId).isEqualTo(2001L);
         assertThat(po.subscriptionId).isEqualTo(3001L);
         assertThat(po.status).isEqualTo("SUCCESS");
@@ -85,6 +86,7 @@ class JpaExecutionRecorderTest {
         assertThat(failedExecutionRepository.count()).isEqualTo(1);
         var fe = failedExecutionRepository.findAll().get(0);
         assertThat(fe.id).isPositive(); // snowflake-allocated BIGINT id (ADR-0003)
+        assertThat(fe.namespace).isEqualTo("trade"); // namespace 软隔离维度透传 (ADR-0002)
         assertThat(fe.executionId).isEqualTo(1001L);
         assertThat(fe.pipelineId).isEqualTo(2001L);
         assertThat(fe.subscriptionId).isEqualTo(3001L);
@@ -99,6 +101,7 @@ class JpaExecutionRecorderTest {
         Event event = new Event(meta, Map.of(), Map.of("amount", 2000L), Op.INSERT, Instant.now());
         ExecutionMeta execMeta = new ExecutionMeta(
                 1001L,
+                "trade",
                 2001L,
                 1,
                 "team",

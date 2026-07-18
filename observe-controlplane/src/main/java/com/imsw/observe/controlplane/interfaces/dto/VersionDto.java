@@ -5,6 +5,7 @@ import java.time.Instant;
 import com.imsw.observe.config.domain.PipelineVersion;
 
 public record VersionDto(
+        String namespace,
         Long pipelineId,
         int version,
         String definitionHash,
@@ -15,6 +16,7 @@ public record VersionDto(
 
     public static VersionDto from(final PipelineVersion v) {
         return new VersionDto(
+                v.namespace(),
                 v.pipelineId(),
                 v.version(),
                 v.definitionHash(),

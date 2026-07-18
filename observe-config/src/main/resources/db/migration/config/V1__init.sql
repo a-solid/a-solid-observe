@@ -1,5 +1,16 @@
+CREATE TABLE namespaces (
+    id BIGINT PRIMARY KEY,
+    name VARCHAR NOT NULL,
+    display_name VARCHAR,
+    created_at TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP NOT NULL
+);
+
+CREATE UNIQUE INDEX idx_namespaces_name ON namespaces(name);
+
 CREATE TABLE pipelines (
     id BIGINT PRIMARY KEY,
+    namespace VARCHAR NOT NULL,
     team VARCHAR NOT NULL,
     application VARCHAR NOT NULL,
     labels VARCHAR(16384),
@@ -13,12 +24,14 @@ CREATE TABLE pipelines (
     CONSTRAINT ck_pipelines_status CHECK (status IN ('DRAFT','PUBLISHED','ARCHIVED'))
 );
 
+CREATE UNIQUE INDEX idx_pipelines_ns_name ON pipelines(namespace, name);
 CREATE INDEX idx_pipelines_team_app ON pipelines(team, application);
 CREATE INDEX idx_pipelines_status_updated ON pipelines(status, updated_at);
 
 CREATE TABLE pipeline_versions (
     pipeline_id BIGINT NOT NULL,
     version INT NOT NULL,
+    namespace VARCHAR NOT NULL,
     definition_json LONG VARCHAR NOT NULL,
     definition_hash VARCHAR(64) NOT NULL,
     status VARCHAR NOT NULL,
@@ -33,6 +46,7 @@ CREATE INDEX idx_pv_status_published ON pipeline_versions(status, published_at D
 
 CREATE TABLE subscriptions (
     id BIGINT PRIMARY KEY,
+    namespace VARCHAR NOT NULL,
     pipeline_id BIGINT NOT NULL,
     pipeline_version INT NOT NULL,
 
@@ -49,7 +63,7 @@ CREATE TABLE subscriptions (
     schedule_delay_ms BIGINT,
     schedule_correlation_key_path VARCHAR,
 
-    name VARCHAR,
+    name VARCHAR NOT NULL,
     description VARCHAR,
     status VARCHAR NOT NULL DEFAULT 'ACTIVE',
     created_by VARCHAR,
@@ -67,5 +81,6 @@ CREATE TABLE subscriptions (
     CONSTRAINT ck_sub_status CHECK (status IN ('ACTIVE','INACTIVE'))
 );
 
+CREATE UNIQUE INDEX idx_sub_ns_name ON subscriptions(namespace, name);
 CREATE INDEX idx_sub_source ON subscriptions(db, table_name, status);
 

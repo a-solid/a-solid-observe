@@ -12,6 +12,7 @@ public final class PipelineDefinitionMapper {
         }
         return new PipelineDefinition(
                 po.id,
+                po.namespace,
                 po.team,
                 po.application,
                 po.labels,
@@ -30,6 +31,7 @@ public final class PipelineDefinitionMapper {
         }
         PipelineDefinitionPo po = new PipelineDefinitionPo();
         po.id = entity.id();
+        po.namespace = entity.namespace();
         po.team = entity.team();
         po.application = entity.application();
         po.labels = entity.labels();

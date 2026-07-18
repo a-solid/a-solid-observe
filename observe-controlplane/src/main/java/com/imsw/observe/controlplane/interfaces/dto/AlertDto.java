@@ -8,6 +8,7 @@ import com.imsw.observe.kernel.alert.model.Severity;
 
 public record AlertDto(
         Long id,
+        String namespace,
         String team,
         String application,
         Map<String, String> pipelineLabels,
@@ -29,6 +30,7 @@ public record AlertDto(
     public static AlertDto from(final AlertEntity e) {
         return new AlertDto(
                 e.id(),
+                e.namespace(),
                 e.team(),
                 e.application(),
                 e.pipelineLabels(),

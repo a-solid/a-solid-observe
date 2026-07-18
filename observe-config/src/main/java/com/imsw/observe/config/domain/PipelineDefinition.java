@@ -5,6 +5,7 @@ import java.util.Map;
 
 public record PipelineDefinition(
         Long id,
+        String namespace,
         String team,
         String application,
         Map<String, String> labels,

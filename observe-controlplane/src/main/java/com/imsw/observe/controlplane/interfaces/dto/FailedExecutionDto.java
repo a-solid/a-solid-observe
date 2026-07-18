@@ -4,6 +4,7 @@ import com.imsw.observe.pipeline.domain.FailedExecution;
 
 public record FailedExecutionDto(
         Long id,
+        String namespace,
         Long pipelineId,
         int pipelineVersion,
         Long executionId,
@@ -26,6 +27,7 @@ public record FailedExecutionDto(
         }
         return new FailedExecutionDto(
                 e.id(),
+                e.namespace(),
                 e.pipelineId(),
                 e.pipelineVersion(),
                 e.executionId(),

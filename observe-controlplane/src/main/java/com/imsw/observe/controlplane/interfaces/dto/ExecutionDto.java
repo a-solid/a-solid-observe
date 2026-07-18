@@ -4,6 +4,7 @@ import com.imsw.observe.pipeline.domain.Execution;
 
 public record ExecutionDto(
         Long id,
+        String namespace,
         Long pipelineId,
         int pipelineVersion,
         String team,
@@ -24,6 +25,7 @@ public record ExecutionDto(
         }
         return new ExecutionDto(
                 e.id(),
+                e.namespace(),
                 e.pipelineId(),
                 e.pipelineVersion(),
                 e.team(),
