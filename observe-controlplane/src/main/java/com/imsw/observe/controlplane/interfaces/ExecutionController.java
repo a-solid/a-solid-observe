@@ -34,11 +34,14 @@ public class ExecutionController {
     public PageResponse<ExecutionDto> executions(
             @RequestParam final String namespace,
             @RequestParam(name = "pipeline_id", required = false) final Long pipelineId,
+            @RequestParam(name = "status", required = false) final String status,
+            @RequestParam(name = "from", required = false) final java.time.Instant from,
+            @RequestParam(name = "to", required = false) final java.time.Instant to,
             @RequestParam(name = "page", required = false, defaultValue = "1") final int page,
             @RequestParam(name = "size", required = false) final Integer size,
             @RequestParam(name = "limit", required = false) final Integer limit) {
         return Pages.toResponse(
-                service.findExecutions(namespace, pipelineId, Pages.pageable(page, size, limit)),
+                service.findExecutions(namespace, pipelineId, status, from, to, Pages.pageable(page, size, limit)),
                 ExecutionDto::from,
                 page,
                 size,
@@ -58,11 +61,16 @@ public class ExecutionController {
     public PageResponse<FailedExecutionDto> failedExecutions(
             @RequestParam final String namespace,
             @RequestParam(name = "pipeline_id", required = false) final Long pipelineId,
+            @RequestParam(name = "status", required = false) final String status,
+            @RequestParam(name = "error_type", required = false) final String errorType,
+            @RequestParam(name = "from", required = false) final java.time.Instant from,
+            @RequestParam(name = "to", required = false) final java.time.Instant to,
             @RequestParam(name = "page", required = false, defaultValue = "1") final int page,
             @RequestParam(name = "size", required = false) final Integer size,
             @RequestParam(name = "limit", required = false) final Integer limit) {
         return Pages.toResponse(
-                service.findFailedExecutions(namespace, pipelineId, Pages.pageable(page, size, limit)),
+                service.findFailedExecutions(
+                        namespace, pipelineId, status, errorType, from, to, Pages.pageable(page, size, limit)),
                 FailedExecutionDto::from,
                 page,
                 size,

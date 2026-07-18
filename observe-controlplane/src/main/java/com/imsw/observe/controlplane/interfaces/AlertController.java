@@ -37,11 +37,15 @@ public class AlertController {
             @RequestParam(name = "status", required = false) final String status,
             @RequestParam(name = "team", required = false) final String team,
             @RequestParam(name = "pipeline_id", required = false) final Long pipelineId,
+            @RequestParam(name = "severity", required = false) final String severity,
+            @RequestParam(name = "from", required = false) final java.time.Instant from,
+            @RequestParam(name = "to", required = false) final java.time.Instant to,
             @RequestParam(name = "page", required = false, defaultValue = "1") final int page,
             @RequestParam(name = "size", required = false) final Integer size,
             @RequestParam(name = "limit", required = false) final Integer limit) {
         return Pages.toResponse(
-                alertQueryService.findAlerts(namespace, status, team, pipelineId, Pages.pageable(page, size, limit)),
+                alertQueryService.findAlerts(
+                        namespace, status, team, pipelineId, severity, from, to, Pages.pageable(page, size, limit)),
                 AlertDto::from,
                 page,
                 size,

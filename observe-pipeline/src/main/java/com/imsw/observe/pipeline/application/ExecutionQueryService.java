@@ -1,6 +1,9 @@
 package com.imsw.observe.pipeline.application;
 
+import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import org.springframework.data.domain.Page;
@@ -39,9 +42,24 @@ public class ExecutionQueryService {
      * B6 会为 stats 场景补 JPQL where 下推。
      */
     public Page<Execution> findExecutions(final String namespace, final Long pipelineId, final Pageable pageable) {
+        return findExecutions(namespace, pipelineId, null, null, null, pageable);
+    }
+
+    /** B6 扩展：补 status（SUCCESS/SHORT_CIRCUITED）与 from/to（按 {@code started_at}）过滤。 */
+    public Page<Execution> findExecutions(
+            final String namespace,
+            final Long pipelineId,
+            final String status,
+            final Instant from,
+            final Instant to,
+            final Pageable pageable) {
+        String normStatus = status == null || status.isBlank() ? null : status.toUpperCase();
         List<Execution> filtered = executionRepository.findAll(PageRequest.of(0, FETCH_SIZE)).stream()
                 .filter(e -> namespace.equals(e.namespace))
                 .filter(e -> pipelineId == null || pipelineId.equals(e.pipelineId))
+                .filter(e -> normStatus == null || normStatus.equals(e.status))
+                .filter(e -> from == null || !e.startedAt.isBefore(from))
+                .filter(e -> to == null || e.startedAt.isBefore(to))
                 .map(ExecutionQueryService::toExecution)
                 .toList();
         return paginate(filtered, pageable);
@@ -57,9 +75,27 @@ public class ExecutionQueryService {
 
     public Page<FailedExecution> findFailedExecutions(
             final String namespace, final Long pipelineId, final Pageable pageable) {
+        return findFailedExecutions(namespace, pipelineId, null, null, null, null, pageable);
+    }
+
+    /** B6 扩展：补 status（PENDING/RESOLVED/IGNORED）、error_type 与 from/to（按 {@code created_at}）过滤。 */
+    public Page<FailedExecution> findFailedExecutions(
+            final String namespace,
+            final Long pipelineId,
+            final String status,
+            final String errorType,
+            final Instant from,
+            final Instant to,
+            final Pageable pageable) {
+        String normStatus = status == null || status.isBlank() ? null : status.toUpperCase();
+        String normError = errorType == null || errorType.isBlank() ? null : errorType.toUpperCase();
         List<FailedExecution> filtered = failedExecutionRepository.findAll(PageRequest.of(0, FETCH_SIZE)).stream()
                 .filter(e -> namespace.equals(e.namespace))
                 .filter(e -> pipelineId == null || pipelineId.equals(e.pipelineId))
+                .filter(e -> normStatus == null || normStatus.equals(e.status))
+                .filter(e -> normError == null || normError.equals(e.errorType))
+                .filter(e -> from == null || !e.createdAt.isBefore(from))
+                .filter(e -> to == null || e.createdAt.isBefore(to))
                 .map(ExecutionQueryService::toFailedExecution)
                 .toList();
         return paginate(filtered, pageable);
@@ -70,6 +106,35 @@ public class ExecutionQueryService {
                 .findById(id)
                 .map(ExecutionQueryService::toFailedExecution)
                 .filter(e -> namespace.equals(e.namespace()));
+    }
+
+    // ---------- B6 聚合统计 ----------
+
+    /**
+     * 执行统计 + 成功率：byStatus/total 来自 executions（{@code started_at}），failedCount 来自
+     * failed_executions（{@code created_at}），分查相除（两表无关联）。
+     */
+    public ExecutionStats executionStats(
+            final String namespace,
+            final Instant from,
+            final Instant to,
+            final Long pipelineId,
+            final String triggerType) {
+        String normTrigger = triggerType == null || triggerType.isBlank() ? null : triggerType.toUpperCase();
+        Map<String, Long> byStatus =
+                toMap(executionRepository.countByStatus(namespace, from, to, pipelineId, normTrigger));
+        long total = byStatus.values().stream().mapToLong(Long::longValue).sum();
+        long failedCount = failedExecutionRepository.countInWindow(namespace, from, to, pipelineId, normTrigger);
+        double successRate = total + failedCount == 0 ? 1.0 : (double) total / (total + failedCount);
+        return new ExecutionStats(namespace, from, to, byStatus, total, failedCount, successRate);
+    }
+
+    private static Map<String, Long> toMap(final List<DimensionCount> rows) {
+        Map<String, Long> map = new LinkedHashMap<>();
+        for (DimensionCount dc : rows) {
+            map.put(dc.dimension(), dc.count());
+        }
+        return map;
     }
 
     private static <T> Page<T> paginate(final List<T> filtered, final Pageable pageable) {

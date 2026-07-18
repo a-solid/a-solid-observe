@@ -10,6 +10,9 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import com.imsw.observe.alerting.application.DimensionCount;
+import com.imsw.observe.alerting.application.TimeseriesBucket;
+
 public interface AlertRepository extends JpaRepository<AlertPo, Long> {
 
     Optional<AlertPo> findFirstByFingerprintAndStatusOrderByIdAsc(String fingerprint, String status);
@@ -28,4 +31,66 @@ public interface AlertRepository extends JpaRepository<AlertPo, Long> {
     @Query("update AlertPo a set a.status = 'RESOLVED', a.resolvedAt = a.endsAt, a.updatedAt = :now "
             + "where a.id in :ids and a.status = 'FIRING'")
     int resolveBatch(@Param("ids") List<Long> ids, @Param("now") Instant now);
+
+    // ---------- B6 聚合统计（namespace 下推 where，可选过滤 :x is null or ...） ----------
+
+    @Query("select new com.imsw.observe.alerting.application.DimensionCount(a.severity, count(a)) "
+            + "from AlertPo a where a.namespace = :namespace and a.startsAt >= :from and a.startsAt < :to "
+            + "and (:status is null or a.status = :status) "
+            + "and (:severity is null or a.severity = :severity) "
+            + "and (:team is null or a.team = :team) "
+            + "and (:pipelineId is null or a.pipelineId = :pipelineId) "
+            + "group by a.severity")
+    List<DimensionCount> countBySeverity(
+            @Param("namespace") String namespace,
+            @Param("from") Instant from,
+            @Param("to") Instant to,
+            @Param("status") String status,
+            @Param("severity") String severity,
+            @Param("team") String team,
+            @Param("pipelineId") Long pipelineId);
+
+    @Query("select new com.imsw.observe.alerting.application.DimensionCount(a.status, count(a)) "
+            + "from AlertPo a where a.namespace = :namespace and a.startsAt >= :from and a.startsAt < :to "
+            + "and (:severity is null or a.severity = :severity) "
+            + "and (:team is null or a.team = :team) "
+            + "and (:pipelineId is null or a.pipelineId = :pipelineId) "
+            + "group by a.status")
+    List<DimensionCount> countByStatus(
+            @Param("namespace") String namespace,
+            @Param("from") Instant from,
+            @Param("to") Instant to,
+            @Param("severity") String severity,
+            @Param("team") String team,
+            @Param("pipelineId") Long pipelineId);
+
+    @Query("select new com.imsw.observe.alerting.application.TimeseriesBucket("
+            + "extract(year from a.startsAt), extract(month from a.startsAt), "
+            + "extract(day from a.startsAt), extract(hour from a.startsAt), count(a)) "
+            + "from AlertPo a where a.namespace = :namespace and a.startsAt >= :from and a.startsAt < :to "
+            + "and (:severity is null or a.severity = :severity) "
+            + "group by extract(year from a.startsAt), extract(month from a.startsAt), "
+            + "extract(day from a.startsAt), extract(hour from a.startsAt) "
+            + "order by extract(year from a.startsAt), extract(month from a.startsAt), "
+            + "extract(day from a.startsAt), extract(hour from a.startsAt)")
+    List<TimeseriesBucket> timeseriesHourly(
+            @Param("namespace") String namespace,
+            @Param("from") Instant from,
+            @Param("to") Instant to,
+            @Param("severity") String severity);
+
+    @Query("select new com.imsw.observe.alerting.application.TimeseriesBucket("
+            + "extract(year from a.startsAt), extract(month from a.startsAt), "
+            + "extract(day from a.startsAt), 0, count(a)) "
+            + "from AlertPo a where a.namespace = :namespace and a.startsAt >= :from and a.startsAt < :to "
+            + "and (:severity is null or a.severity = :severity) "
+            + "group by extract(year from a.startsAt), extract(month from a.startsAt), "
+            + "extract(day from a.startsAt) "
+            + "order by extract(year from a.startsAt), extract(month from a.startsAt), "
+            + "extract(day from a.startsAt)")
+    List<TimeseriesBucket> timeseriesDaily(
+            @Param("namespace") String namespace,
+            @Param("from") Instant from,
+            @Param("to") Instant to,
+            @Param("severity") String severity);
 }

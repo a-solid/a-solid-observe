@@ -1,6 +1,12 @@
 package com.imsw.observe.alerting.application;
 
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import org.springframework.data.domain.Page;
@@ -43,7 +49,20 @@ public class AlertQueryService {
             final String team,
             final Long pipelineId,
             final Pageable pageable) {
-        List<AlertEntity> filtered = filteredAlerts(namespace, status, team, pipelineId);
+        return findAlerts(namespace, status, team, pipelineId, null, null, null, pageable);
+    }
+
+    /** B6 扩展：列表查询补 from/to 时间范围（按 {@code starts_at}）与 severity 过滤。 */
+    public Page<AlertEntity> findAlerts(
+            final String namespace,
+            final String status,
+            final String team,
+            final Long pipelineId,
+            final String severity,
+            final Instant from,
+            final Instant to,
+            final Pageable pageable) {
+        List<AlertEntity> filtered = filteredAlerts(namespace, status, team, pipelineId, severity, from, to);
         return paginate(filtered, pageable);
     }
 
@@ -66,8 +85,87 @@ public class AlertQueryService {
                 .filter(e -> namespace.equals(e.namespace()));
     }
 
+    // ---------- B6 聚合统计 ----------
+
+    /** 告警统计：bySeverity / byStatus / total（namespace 下推 where）。 */
+    public AlertStats alertStats(
+            final String namespace,
+            final Instant from,
+            final Instant to,
+            final String status,
+            final String severity,
+            final String team,
+            final Long pipelineId) {
+        String normStatus = normalize(status);
+        String normSeverity = normalize(severity);
+        Map<String, Long> bySeverity =
+                toMap(alertRepository.countBySeverity(namespace, from, to, normStatus, normSeverity, team, pipelineId));
+        Map<String, Long> byStatus =
+                toMap(alertRepository.countByStatus(namespace, from, to, normSeverity, team, pipelineId));
+        long total = bySeverity.values().stream().mapToLong(Long::longValue).sum();
+        return new AlertStats(namespace, from, to, bySeverity, byStatus, total);
+    }
+
+    /**
+     * 告警时间序列：按桶（1h/1d）返回 {@code [{bucketStart, count}]}，缺桶补零（图表连续性）。
+     *
+     * @param bucket {@code "1h"} 或 {@code "1d"}，其它按 {@code 1h} 处理。
+     */
+    public List<TimeseriesPoint> alertTimeseries(
+            final String namespace, final Instant from, final Instant to, final String bucket, final String severity) {
+        String normSeverity = normalize(severity);
+        boolean daily = "1d".equalsIgnoreCase(bucket);
+        List<TimeseriesBucket> rows = daily
+                ? alertRepository.timeseriesDaily(namespace, from, to, normSeverity)
+                : alertRepository.timeseriesHourly(namespace, from, to, normSeverity);
+        Map<Instant, Long> byStart = new LinkedHashMap<>();
+        for (TimeseriesBucket b : rows) {
+            byStart.put(bucketStart(b, daily), b.count());
+        }
+        // 按 from→to 步进补零
+        List<TimeseriesPoint> result = new ArrayList<>();
+        long stepSeconds = daily ? 86_400L : 3_600L;
+        long fromEpoch = from.getEpochSecond();
+        long toEpoch = to.getEpochSecond();
+        // 对齐到桶边界
+        long cursor = alignToBucket(fromEpoch, stepSeconds);
+        while (cursor < toEpoch) {
+            Instant start = Instant.ofEpochSecond(cursor);
+            result.add(new TimeseriesPoint(start, byStart.getOrDefault(start, 0L)));
+            cursor += stepSeconds;
+        }
+        return result;
+    }
+
+    private static long alignToBucket(final long epochSecond, final long stepSeconds) {
+        return (epochSecond / stepSeconds) * stepSeconds;
+    }
+
+    private static Instant bucketStart(final TimeseriesBucket b, final boolean daily) {
+        ZonedDateTime z = ZonedDateTime.of(b.year(), b.month(), b.day(), daily ? 0 : b.hour(), 0, 0, 0, ZoneOffset.UTC);
+        return z.toInstant();
+    }
+
+    private static Map<String, Long> toMap(final List<DimensionCount> rows) {
+        Map<String, Long> map = new LinkedHashMap<>();
+        for (DimensionCount dc : rows) {
+            map.put(dc.dimension(), dc.count());
+        }
+        return map;
+    }
+
+    private static String normalize(final String v) {
+        return v == null || v.isBlank() ? null : v.toUpperCase();
+    }
+
     private List<AlertEntity> filteredAlerts(
-            final String namespace, final String status, final String team, final Long pipelineId) {
+            final String namespace,
+            final String status,
+            final String team,
+            final Long pipelineId,
+            final String severity,
+            final Instant from,
+            final Instant to) {
         int fetchSize = MAX_LIMIT;
         List<AlertEntity> candidates;
         if (status != null && !status.isBlank()) {
@@ -82,10 +180,15 @@ public class AlertQueryService {
                     .map(AlertMapper::toEntity)
                     .toList();
         }
+        String normSeverity = normalize(severity);
         return candidates.stream()
                 .filter(a -> namespace.equals(a.namespace()))
                 .filter(a -> team == null || team.isBlank() || team.equals(a.team()))
                 .filter(a -> pipelineId == null || pipelineId.equals(a.pipelineId()))
+                .filter(a ->
+                        normSeverity == null || normSeverity.equals(a.severity().name()))
+                .filter(a -> from == null || !a.startsAt().isBefore(from))
+                .filter(a -> to == null || a.startsAt().isBefore(to))
                 .toList();
     }
 
