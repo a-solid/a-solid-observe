@@ -10,8 +10,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
+import com.imsw.observe.pipeline.application.DelayedEventStore;
 import com.imsw.observe.pipeline.application.Source;
-import com.imsw.observe.pipeline.infrastructure.delayed.InMemoryDelayedEventStore;
 
 @Component
 @ConditionalOnProperty(prefix = "observe.worker", name = "enabled", havingValue = "true", matchIfMissing = true)
@@ -25,12 +25,12 @@ public class WorkerShutdown {
 
     private final java.util.List<Source> sources;
 
-    private final InMemoryDelayedEventStore delayedStore;
+    private final DelayedEventStore delayedStore;
 
     public WorkerShutdown(
             final ThreadPoolExecutor runnerPool,
             final java.util.List<Source> sources,
-            final InMemoryDelayedEventStore delayedStore) {
+            final DelayedEventStore delayedStore) {
         this.runnerPool = runnerPool;
         this.sources = sources;
         this.delayedStore = delayedStore;
