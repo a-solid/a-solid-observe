@@ -15,6 +15,7 @@ import com.imsw.observe.config.infrastructure.ConditionCodec;
 import com.imsw.observe.kernel.script.spi.DbApi;
 import com.imsw.observe.kernel.transaction.spi.TransactionOperator;
 import com.imsw.observe.kernel.util.JsonUtil;
+import com.imsw.observe.kernel.util.SnowflakeIdGenerator;
 import com.imsw.observe.pipeline.infrastructure.transaction.SpringTransactionOperator;
 
 @Configuration
@@ -42,6 +43,12 @@ public class CoreConfig {
     @Bean
     public ConditionCodec conditionCodec() {
         return new ConditionCodec();
+    }
+
+    @Bean
+    public SnowflakeIdGenerator snowflakeIdGenerator() {
+        // 一期单 worker，workerId 硬编码 1；多 worker 时由协调分配（二期）
+        return new SnowflakeIdGenerator(1L, 0L);
     }
 
     @Bean
