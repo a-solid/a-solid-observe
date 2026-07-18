@@ -43,9 +43,10 @@ import com.imsw.observe.pipeline.domain.subscription.Subscription.SourceRef.Conc
  * 失败即跳过本次（串行不堆积）；ALLOW 时跳过 CAS 直接投递。{@code concurrent == null} 视为 SKIP
  * （Task 1 推迟默认）。
  *
- * <p>到点产出 {@link TickEvent}（{@link TickMeta#source()} = {@code "cron:" + cronName}，含
- * {@code cronName}/{@code cronExpression}）投给 {@link EventListener#onBatch(List)}（运行时 =
- * {@code SourceDispatcher::onBatch}），由 matcher 按 cron name 路由到订阅了该 cron 的 pipeline。
+ * <p>到点产出 {@link TickEvent}（{@link TickMeta#source()} = 订阅的 cron name，等于
+ * {@code Snapshot.subscriptionsBySource} 的索引键，含 {@code cronName}/{@code cronExpression}）
+ * 投给 {@link EventListener#onBatch(List)}（运行时 = {@code SourceDispatcher::onBatch}），
+ * 由 matcher 按 cron name 路由到订阅了该 cron 的 pipeline。
  *
  * <p>本类属 application 层：只依赖 application 端口 {@link EventListener} + kernel Event。
  * 无 infrastructure 具体导入（{@link ScheduledExecutorService} /
@@ -79,7 +80,7 @@ public final class CronScheduler {
     /**
      * 与快照对齐 CRON 订阅调度。幂等：相同快照重复调用为 no-op。
      *
-     * <p>遍历快照的 {@link Snapshot#subscriptionsBySource()}（按 source name 索引，含 CRON + API），
+     * <p>遍历快照的 {@code Snapshot.subscriptionsBySource}（按 source name 索引，含 CRON + API），
      * 过滤出 {@code sourceType == CRON} 的订阅。对每条 CRON 订阅：新（id 未跟踪）或变更
      * （{@code cronExpression}/{@code cronName}/{@code concurrent}/{@code source} 与跟踪值不同）→
      * cancel 旧句柄 + schedule 新。对已跟踪但快照中不再出现的（删除或转非 CRON）→ cancel + 清理。
@@ -227,11 +228,12 @@ public final class CronScheduler {
     }
 
     private void dispatch(final Long id, final CronSub sub) {
-        TickMeta meta = new TickMeta(
-                "cron:" + (sub.cronName != null ? sub.cronName : sub.source),
-                sub.cronName,
-                sub.cronExpression,
-                Map.of());
+        // TickMeta.source 必须等于订阅在 Snapshot.subscriptionsBySource 的索引键（= sub.source().mq()，
+        // 见 PipelineRegistry.Snapshot.loaded）——否则 DefaultSubscriptionMatcher.matchesNamed 会查不到。
+        // 历史 bug：曾用 "cron:" 前缀，导致 TickEvent 永不路由。B4-T3 修正：source 取裸值（cronName 优先，
+        // 退回 source/mq），与索引键严格一致。
+        String tickSource = sub.cronName != null && !sub.cronName.isBlank() ? sub.cronName : sub.source;
+        TickMeta meta = new TickMeta(tickSource, sub.cronName, sub.cronExpression, Map.of());
         Event event = new TickEvent(meta, Instant.now());
         try {
             listener.onBatch(List.of(event));

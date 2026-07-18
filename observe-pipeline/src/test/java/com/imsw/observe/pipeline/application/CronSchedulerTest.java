@@ -137,7 +137,9 @@ class CronSchedulerTest {
                 ? listener.received.get(listener.received.size() - 1)
                 : null;
         assertThat(tick).isNotNull();
-        assertThat(tick.meta().source()).isEqualTo("cron:nightly-9pm");
+        // source 必须等于订阅在 subscriptionsBySource 索引的键（= mq = cronName），不加 "cron:" 前缀——
+        // 否则 DefaultSubscriptionMatcher.matchesNamed 查不到。P3 路由 bug 修正点。
+        assertThat(tick.meta().source()).isEqualTo("nightly-9pm");
         assertThat(tick.meta().cronName()).isEqualTo("nightly-9pm");
         assertThat(tick.meta().cronExpression()).isEqualTo("* * * * * ?");
         assertThat(tick.sourceTs()).isNotNull();
@@ -208,6 +210,51 @@ class CronSchedulerTest {
         // 等待短窗（远短于到下一年的间隔），断言未触发——证明只调度未来，无 catch-up。
         Thread.sleep(500L);
         assertThat(listener.tickCount.get()).isZero();
+    }
+
+    /**
+     * P3 路由契约：CronScheduler 产出的 TickEvent.meta().source() 必须等于该订阅在
+     * Snapshot.subscriptionsBySource 索引里的键（= sub.source().mq()）——否则
+     * DefaultSubscriptionMatcher.matchesNamed 查不到对应订阅，TickEvent 永远不路由。
+     *
+     * <p>此测试不依赖真实 fire 时序（用包可见 fire 同步驱动），断言 source 与索引键相等。
+     */
+    @Test
+    void tickSourceMatchesIndexKeyForRouting() {
+        // mq（索引键来源）与 cronName 故意取不同值——验证 source 走 cronName（与 toEntity→loader
+        // 把 cronName 灌入 mq 的常规路径一致；即便不一致也按"裸值，不加前缀"契约）。
+        Subscription sub = new Subscription(
+                5L,
+                "ns",
+                100L,
+                1,
+                new Subscription.SourceRef(
+                        "idx-key",
+                        null,
+                        null,
+                        null,
+                        Set.of(),
+                        SourceType.CRON,
+                        "* * * * * ?",
+                        "idx-key",
+                        Concurrent.SKIP),
+                null,
+                null);
+        Snapshot snap = snapshot(sub);
+        scheduler.sync(snap);
+
+        // 同步触发一次 fire（避开 SES 时序，确定性断言）。
+        CronScheduler.CronSub cronSub = CronScheduler.CronSub.from(sub);
+        scheduler.fire(5L, cronSub);
+
+        assertThat(listener.received).hasSize(1);
+        TickEvent tick = listener.received.get(0);
+        // 索引键 = 该订阅在 subscriptionsBySource 的 key（loader 用 sub.source().mq()，本测试同包可直接读字段）。
+        String indexKey = snap.subscriptionsBySource.keySet().iterator().next();
+        assertThat(tick.meta().source()).isEqualTo(indexKey);
+        // 同时保证不再是带 "cron:" 前缀的旧错误形态。
+        assertThat(tick.meta().source()).doesNotStartWith("cron:");
+        listener.release();
     }
 
     private static Snapshot snapshot(final Subscription sub) {

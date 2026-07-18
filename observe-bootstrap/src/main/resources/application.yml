@@ -20,8 +20,7 @@ observe:
     runner-core: 4
     runner-max: 16
     runner-queue: 1000
-    cron-pool-size: 2
-    cron-period-millis: 60000
+    cron-scheduler-pool-size: 4
     ibm-mq:
       enabled: false
       host: localhost

@@ -10,6 +10,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
+import com.imsw.observe.pipeline.application.CronScheduler;
 import com.imsw.observe.pipeline.application.DelayedEventStore;
 import com.imsw.observe.pipeline.application.Source;
 
@@ -27,13 +28,17 @@ public class WorkerShutdown {
 
     private final DelayedEventStore delayedStore;
 
+    private final CronScheduler cronScheduler;
+
     public WorkerShutdown(
             final ThreadPoolExecutor runnerPool,
             final java.util.List<Source> sources,
-            final DelayedEventStore delayedStore) {
+            final DelayedEventStore delayedStore,
+            final CronScheduler cronScheduler) {
         this.runnerPool = runnerPool;
         this.sources = sources;
         this.delayedStore = delayedStore;
+        this.cronScheduler = cronScheduler;
     }
 
     @PreDestroy
@@ -45,6 +50,12 @@ public class WorkerShutdown {
             } catch (RuntimeException e) {
                 LOG.warn("source {} stop failed", source.getClass().getSimpleName(), e);
             }
+        }
+        // 先停 CronScheduler（取消全部 cron 句柄 + shutdown 其 SES），避免关闭期间仍触发新 pipeline 执行。
+        try {
+            cronScheduler.shutdown();
+        } catch (RuntimeException e) {
+            LOG.warn("cron scheduler shutdown failed", e);
         }
         runnerPool.shutdown();
         try {

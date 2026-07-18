@@ -13,9 +13,11 @@ public class WorkerProperties {
 
     private int runnerQueue = 1000;
 
-    private int cronPoolSize = 2;
-
-    private long cronPeriodMillis = 60_000L;
+    /**
+     * CronScheduler 调度线程池大小（ADR-0007 B4）。每条 CRON 订阅一个调度句柄，自递归投递；
+     * 线程主要承载"算下一发 + 投 TickEvent + re-arm"，IO 由 runnerPool 承担，故 4 通常足够。
+     */
+    private int cronSchedulerPoolSize = 4;
 
     private int delayedPoolSize = 4;
 
@@ -43,20 +45,12 @@ public class WorkerProperties {
         this.runnerQueue = runnerQueue;
     }
 
-    public int getCronPoolSize() {
-        return cronPoolSize;
+    public int getCronSchedulerPoolSize() {
+        return cronSchedulerPoolSize;
     }
 
-    public void setCronPoolSize(final int cronPoolSize) {
-        this.cronPoolSize = cronPoolSize;
-    }
-
-    public long getCronPeriodMillis() {
-        return cronPeriodMillis;
-    }
-
-    public void setCronPeriodMillis(final long cronPeriodMillis) {
-        this.cronPeriodMillis = cronPeriodMillis;
+    public void setCronSchedulerPoolSize(final int cronSchedulerPoolSize) {
+        this.cronSchedulerPoolSize = cronSchedulerPoolSize;
     }
 
     public int getDelayedPoolSize() {

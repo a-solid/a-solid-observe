@@ -24,12 +24,12 @@ import com.imsw.observe.bootstrap.worker.source.InMemoryCdcSource;
 import com.imsw.observe.config.application.ConfigLoader;
 import com.imsw.observe.config.application.PipelineHotReloader;
 import com.imsw.observe.config.application.PipelineRegistryLoader;
+import com.imsw.observe.pipeline.application.CronScheduler;
 import com.imsw.observe.pipeline.application.PipelineRegistry;
 import com.imsw.observe.pipeline.application.PipelineRunner;
 import com.imsw.observe.pipeline.application.SourceDispatcher;
 import com.imsw.observe.pipeline.application.SubscriptionMatcher;
 import com.imsw.observe.pipeline.infrastructure.source.ApiSource;
-import com.imsw.observe.pipeline.infrastructure.source.CronSource;
 
 @Configuration
 @ConditionalOnProperty(prefix = "observe.worker", name = "enabled", havingValue = "true", matchIfMissing = true)
@@ -131,35 +131,69 @@ public class WorkerConfig {
         return source;
     }
 
+    /**
+     * CronScheduler 专用调度线程池（ADR-0007 B4）。每条 CRON 订阅一个 schedule 句柄自递归投递；
+     * destroyMethod=shutdown 在容器关闭时终止线程池（{@link CronScheduler#shutdown()} 也会调用，
+     * 双重 shutdown 幂等）。
+     */
+    @Bean(destroyMethod = "shutdown")
+    public ScheduledExecutorService cronSchedulerPool(final WorkerProperties props) {
+        return Executors.newScheduledThreadPool(props.getCronSchedulerPoolSize(), r -> {
+            Thread t = new Thread(r, "cron-scheduler");
+            t.setDaemon(true);
+            return t;
+        });
+    }
+
+    /**
+     * 每订阅 cron 调度器（ADR-0007）。监听 {@link PipelineRegistry} 快照变化：{@link CronScheduler#sync} diff
+     * 出新增/变更/删除的 CRON 订阅并起停调度句柄。运行时 listener = {@code SourceDispatcher::onBatch}，
+     * 到点产出 {@link com.imsw.observe.kernel.event.model.TickEvent} 由 matcher 按 cron name 路由。
+     */
     @Bean
-    public CronSource cronSource(final SourceDispatcher dispatcher, final WorkerProperties props) {
-        ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(props.getCronPoolSize());
-        CronSource source = new CronSource(scheduler, "default", props.getCronPeriodMillis());
-        source.start(dispatcher::onBatch);
-        return source;
+    public CronScheduler cronScheduler(
+            final ScheduledExecutorService cronSchedulerPool, final SourceDispatcher dispatcher) {
+        return new CronScheduler(cronSchedulerPool, dispatcher::onBatch);
     }
 
     @Bean
-    public ApplicationRunner workerColdStart(final ConfigLoader configLoader) {
-        return args -> configLoader.load();
+    public ApplicationRunner workerColdStart(
+            final ConfigLoader configLoader, final PipelineRegistry registry, final CronScheduler cronScheduler) {
+        // 冷启动：先 load 落库快照，再 sync 让 CronScheduler 起订阅级调度句柄。
+        return args -> {
+            configLoader.load();
+            cronScheduler.sync(registry.snapshot());
+        };
     }
 
     @Bean
-    public HotReloaderScheduler hotReloaderScheduler(final PipelineHotReloader reloader) {
-        return new HotReloaderScheduler(reloader);
+    public HotReloaderScheduler hotReloaderScheduler(
+            final PipelineHotReloader reloader, final PipelineRegistry registry, final CronScheduler cronScheduler) {
+        return new HotReloaderScheduler(reloader, registry, cronScheduler);
     }
 
     public static class HotReloaderScheduler {
 
         private final PipelineHotReloader reloader;
 
-        HotReloaderScheduler(final PipelineHotReloader reloader) {
+        private final PipelineRegistry registry;
+
+        private final CronScheduler cronScheduler;
+
+        HotReloaderScheduler(
+                final PipelineHotReloader reloader,
+                final PipelineRegistry registry,
+                final CronScheduler cronScheduler) {
             this.reloader = reloader;
+            this.registry = registry;
+            this.cronScheduler = cronScheduler;
         }
 
         @Scheduled(fixedDelay = 30_000L)
         public void refresh() {
             reloader.refresh();
+            // 热加载后将最新快照同步给 CronScheduler——它按订阅 diff 起停 cron 调度（ADR-0007）。
+            cronScheduler.sync(registry.snapshot());
         }
     }
 }
