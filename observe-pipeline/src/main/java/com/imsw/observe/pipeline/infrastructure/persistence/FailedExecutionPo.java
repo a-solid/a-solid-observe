@@ -27,12 +27,6 @@ public class FailedExecutionPo {
     @Column(name = "execution_id")
     public Long executionId;
 
-    @Column(name = "team", nullable = false)
-    public String team;
-
-    @Column(name = "application", nullable = false)
-    public String application;
-
     @Column(name = "trigger_type", nullable = false)
     public String triggerType;
 

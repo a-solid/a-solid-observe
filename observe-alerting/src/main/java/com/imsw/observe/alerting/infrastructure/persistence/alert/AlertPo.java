@@ -22,16 +22,6 @@ public class AlertPo {
     @Column(name = "namespace", nullable = false)
     public String namespace;
 
-    @Column(name = "team", nullable = false)
-    public String team;
-
-    @Column(name = "application", nullable = false)
-    public String application;
-
-    @Column(name = "pipeline_labels", length = 16384)
-    @Convert(converter = MapStringStringToJsonConverter.class)
-    public Map<String, String> pipelineLabels;
-
     @Column(name = "pipeline_id", nullable = false)
     public Long pipelineId;
 
@@ -85,6 +75,16 @@ public class AlertPo {
 
     @Column(name = "trace_id")
     public String traceId;
+
+    // ADR-0004 label 投影列（从 labels.get(team/app/line) 投影，应用层 emit 时同步填充，缺失为 null）
+    @Column(name = "label_team")
+    public String labelTeam;
+
+    @Column(name = "label_app")
+    public String labelApp;
+
+    @Column(name = "label_line")
+    public String labelLine;
 
     @Column(name = "created_at", nullable = false)
     public Instant createdAt;

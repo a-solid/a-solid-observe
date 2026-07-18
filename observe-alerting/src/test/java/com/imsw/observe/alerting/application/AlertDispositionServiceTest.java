@@ -93,8 +93,7 @@ class AlertDispositionServiceTest {
         AlertPo po = new AlertPo();
         po.id = System.nanoTime();
         po.namespace = namespace;
-        po.team = "team-a";
-        po.application = "app";
+        po.labelTeam = "team-a"; // B9 / ADR-0004：team 改为 label_team 投影列
         po.pipelineId = 1L;
         po.pipelineVersion = 1;
         po.executionId = 1L;

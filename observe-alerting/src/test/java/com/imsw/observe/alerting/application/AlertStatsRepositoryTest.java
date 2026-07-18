@@ -43,6 +43,7 @@ class AlertStatsRepositoryTest {
     void setUp() {
         alertRepository.deleteAll();
         // 灌入测试数据：窗口内 3 条（2 CRITICAL FIRING, 1 WARNING RESOLVED）+ 窗口外 1 条
+        // B9 / ADR-0004：team 维度从一等列下线为 label_team 投影；测试数据在 labelTeam 上携带 team 值。
         Instant base = Instant.parse("2026-07-19T10:00:00Z");
         alertRepository.save(alert("ns", "team-a", Severity.CRITICAL, AlertStatus.FIRING, base, 1L));
         alertRepository.save(alert("ns", "team-a", Severity.CRITICAL, AlertStatus.FIRING, base.plusSeconds(900), 1L));
@@ -145,8 +146,7 @@ class AlertStatsRepositoryTest {
         AlertPo po = new AlertPo();
         po.id = System.nanoTime();
         po.namespace = namespace;
-        po.team = team;
-        po.application = "app";
+        po.labelTeam = team; // B9 / ADR-0004：team 改为 label_team 投影列
         po.pipelineId = pipelineId;
         po.pipelineVersion = 1;
         po.executionId = 1L;

@@ -24,12 +24,6 @@ public class ExecutionPo {
     @Column(name = "pipeline_version", nullable = false)
     public Integer pipelineVersion;
 
-    @Column(name = "team", nullable = false)
-    public String team;
-
-    @Column(name = "application", nullable = false)
-    public String application;
-
     @Column(name = "trigger_type", nullable = false)
     public String triggerType;
 

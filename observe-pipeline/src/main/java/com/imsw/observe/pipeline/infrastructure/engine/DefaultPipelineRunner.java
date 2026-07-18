@@ -120,14 +120,13 @@ public final class DefaultPipelineRunner implements PipelineRunner {
 
     private ExecutionMeta buildMeta(final Pipeline pipeline, final Event triggerEvent, final Long subscriptionId) {
         // 全链路 snowflake BIGINT id（ADR-0003）：execution/pipeline/subscription id 均为 Long，直接透传 kernel。
+        // B9 / ADR-0004：team/application/pipelineLabels 一等字段移除，维度统一进 labels（pipeline 打底）。
         Long executionId = snowflake.next();
         return new ExecutionMeta(
                 executionId,
                 pipeline.namespace(),
                 pipeline.id(),
                 pipeline.version(),
-                pipeline.team(),
-                pipeline.application(),
                 pipeline.labels() == null ? Map.of() : pipeline.labels(),
                 null,
                 null,

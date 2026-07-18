@@ -77,16 +77,19 @@ public final class DefaultAlertSink implements com.imsw.observe.kernel.alert.spi
 
     private void persist(final AlertSignal signal, final ExecutionContext ctx) {
         ExecutionMeta meta = ctx.meta();
-        Map<String, String> labels = signal.labels() == null ? Map.of() : signal.labels();
+        // ADR-0004 / spec §5.3：mergedLabels = merge(meta.labels /*pipeline 打底*/, signal.labels /*脚本覆盖*/)。
+        // 脚本 key 优先（脚本可显式覆盖 pipeline 的 team/app/line 等）。signal.labels 可能为 null
+        // （AlertsApi 简化 API：critical/warning/info 不传 labels）→ 视为空覆盖。
+        Map<String, String> mergedLabels = mergeLabels(meta.labels(), signal.labels());
         String fingerprint = signal.fingerprint() != null
                 ? signal.fingerprint()
-                : AlertFingerprintCalculator.compute(meta.pipelineId(), labels);
+                : AlertFingerprintCalculator.compute(meta.pipelineId(), mergedLabels);
         Duration ttl = signal.ttl() != null ? signal.ttl() : defaultTtl(signal.severity());
         Instant now = Instant.now();
         Instant endsAt = now.plus(ttl);
 
         // ADR-0005 §3：emit 前查 silence，命中则静默（不建告警、不写证据）
-        if (silenceMatcher.silenced(meta.namespace(), fingerprint, labels, meta.pipelineId())) {
+        if (silenceMatcher.silenced(meta.namespace(), fingerprint, mergedLabels, meta.pipelineId())) {
             return;
         }
 
@@ -104,7 +107,7 @@ public final class DefaultAlertSink implements com.imsw.observe.kernel.alert.spi
             return;
         }
         Map<String, String> annotations = annotationRenderer.render(signal.annotations(), ctx);
-        AlertEntity entity = buildAlertEntity(signal, meta, labels, annotations, fingerprint, now, endsAt);
+        AlertEntity entity = buildAlertEntity(signal, meta, mergedLabels, annotations, fingerprint, now, endsAt);
         AlertPo alertPo = AlertMapper.toPo(entity);
         alertRepository.save(alertPo);
         writeEvidence(alertPo.id, evidence, now);
@@ -113,6 +116,20 @@ public final class DefaultAlertSink implements com.imsw.observe.kernel.alert.spi
                 meta.pipelineId(),
                 fingerprint,
                 signal.severity());
+    }
+
+    /** ADR-0004 / spec §5.3：pipeline labels 打底 + 脚本 labels 覆盖（脚本 key 胜）。 */
+    private static Map<String, String> mergeLabels(
+            final Map<String, String> pipelineLabels, final Map<String, String> scriptLabels) {
+        Map<String, String> base =
+                pipelineLabels == null || pipelineLabels.isEmpty() ? Map.of() : new java.util.HashMap<>(pipelineLabels);
+        if (scriptLabels == null || scriptLabels.isEmpty()) {
+            return base;
+        }
+        // base 可能为不可变 Map.of()；脚本要覆盖就必须改成可变副本
+        Map<String, String> merged = base.isEmpty() ? new java.util.HashMap<>() : new java.util.HashMap<>(base);
+        merged.putAll(scriptLabels);
+        return merged;
     }
 
     private void writeEvidence(
@@ -145,12 +162,10 @@ public final class DefaultAlertSink implements com.imsw.observe.kernel.alert.spi
             final String fingerprint,
             final Instant now,
             final Instant endsAt) {
+        // ADR-0004 §2 / spec §5.3：label_* 投影列从 mergedLabels 同步投影，缺失为 null。
         return new AlertEntity(
                 snowflake.next(),
                 meta.namespace(),
-                meta.team(),
-                meta.application(),
-                meta.pipelineLabels(),
                 meta.pipelineId(),
                 meta.pipelineVersion(),
                 meta.executionId(),
@@ -167,7 +182,10 @@ public final class DefaultAlertSink implements com.imsw.observe.kernel.alert.spi
                 null,
                 null,
                 null,
-                meta.traceId());
+                meta.traceId(),
+                labels == null ? null : labels.get("team"),
+                labels == null ? null : labels.get("app"),
+                labels == null ? null : labels.get("line"));
     }
 
     /** ADR-0005 §1：默认 wave TTL C30/W10/I5（覆盖旧 C60/W30/I15）。 */

@@ -99,6 +99,7 @@ class JpaExecutionRecorderTest {
 
     private DefaultExecutionContext newContext() {
         // ADR-0006：触发事件为 CdcEvent（triggerType 仍用 SourceType.CDC 表达执行链路来源）。
+        // B9 / ADR-0004：ExecutionMeta 只携带 pipeline.labels（team/application 一等字段已移除）。
         CdcMeta meta = new CdcMeta("t", "db", "orders", Map.of());
         CdcEvent event = new CdcEvent(meta, Map.of(), Map.of("amount", 2000L), CdcOp.INSERT, Instant.now());
         ExecutionMeta execMeta = new ExecutionMeta(
@@ -106,8 +107,6 @@ class JpaExecutionRecorderTest {
                 "trade",
                 2001L,
                 1,
-                "team",
-                "app",
                 Map.of("domain", "trade"),
                 null,
                 null,

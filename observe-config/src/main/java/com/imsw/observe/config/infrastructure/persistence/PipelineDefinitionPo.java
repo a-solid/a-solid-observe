@@ -22,12 +22,6 @@ public class PipelineDefinitionPo {
     @Column(name = "namespace", nullable = false)
     public String namespace;
 
-    @Column(name = "team", nullable = false)
-    public String team;
-
-    @Column(name = "application", nullable = false)
-    public String application;
-
     @Column(name = "labels", length = 16384)
     @Convert(converter = MapStringStringToJsonConverter.class)
     public Map<String, String> labels;

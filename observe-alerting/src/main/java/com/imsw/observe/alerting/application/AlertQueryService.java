@@ -40,8 +40,11 @@ public class AlertQueryService {
      * 列表查询，软隔离铁律（ADR-0002）：namespace 必填，行内存过滤（与既有 team/pipelineId 过滤同款；
      * alert/evidence 资源表不对外暴露 BIGINT 物理主键，namespace 仅作软过滤维度）。
      *
-     * <p>分页：先按 status 取候选行并完成 namespace/team/pipelineId 内存过滤，再对过滤结果分页，
+     * <p>分页：先按 status 取候选行并完成 namespace/labelTeam/pipelineId 内存过滤，再对过滤结果分页，
      * {@link PageImpl} 携带真实 total。B6 会为 stats 场景补 JPQL where 下推；本方法保持现有过滤语义。
+     *
+     * <p>B9 / ADR-0004：原 {@code team} 一等列已下线为 {@code labelTeam} 投影列。为前端 API 稳定，
+     * {@code team} 参数保留但语义改为「按 {@code label_team} 列过滤」（{@code labelTeam == team}）。
      */
     public Page<AlertEntity> findAlerts(
             final String namespace,
@@ -194,7 +197,7 @@ public class AlertQueryService {
         String normSeverity = normalize(severity);
         return candidates.stream()
                 .filter(a -> namespace.equals(a.namespace()))
-                .filter(a -> team == null || team.isBlank() || team.equals(a.team()))
+                .filter(a -> team == null || team.isBlank() || team.equals(a.labelTeam()))
                 .filter(a -> pipelineId == null || pipelineId.equals(a.pipelineId()))
                 .filter(a ->
                         normSeverity == null || normSeverity.equals(a.severity().name()))

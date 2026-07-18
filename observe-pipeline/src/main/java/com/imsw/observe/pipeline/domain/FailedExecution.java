@@ -8,8 +8,6 @@ public record FailedExecution(
         Long pipelineId,
         int pipelineVersion,
         Long executionId,
-        String team,
-        String application,
         String triggerType,
         String triggerEvent,
         Long subscriptionId,

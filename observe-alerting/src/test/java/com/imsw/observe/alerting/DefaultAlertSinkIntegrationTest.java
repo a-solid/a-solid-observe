@@ -93,6 +93,50 @@ class DefaultAlertSinkIntegrationTest {
         assertThat(evidenceRepository.findAll()).hasSize(2);
     }
 
+    /**
+     * ADR-0004 / spec §5.3：label 合并 + 投影。pipeline.labels（打底）+ 脚本 signal.labels（覆盖）
+     * → alert.labels；label_team/app/line 从合并后的 labels.get(team/app/line) 投影，缺失为 null。
+     */
+    @Test
+    void mergesPipelineAndScriptLabelsAndProjectsLabelDimensions() {
+        DefaultAlertSink sink = newSink();
+
+        runInTx(() -> sink.drainAndPersist(newContext(alertSignal("fp-merge", null))));
+
+        AlertPo alert = alertRepository.findAll().get(0);
+        // merge：pipeline.labels={domain:trade} + signal.labels={entity:order, team:demo} → 三键合并
+        assertThat(alert.labels)
+                .containsEntry("domain", "trade")
+                .containsEntry("entity", "order")
+                .containsEntry("team", "demo");
+        // 投影：team 命中、app/line 缺失 → null
+        assertThat(alert.labelTeam).isEqualTo("demo");
+        assertThat(alert.labelApp).isNull();
+        assertThat(alert.labelLine).isNull();
+    }
+
+    /** 脚本 key 覆盖 pipeline 同名 key（spec §5.3：脚本胜）。 */
+    @Test
+    void scriptLabelsOverridePipelineLabelsOnConflict() {
+        DefaultAlertSink sink = newSink();
+        // pipeline.labels 含 team=base；signal.labels 含 team=overridden → 合并后 team=overridden
+        AlertSignal signal = new AlertSignal(
+                "fp-override",
+                Severity.CRITICAL,
+                Map.of("team", "overridden"),
+                Map.of("summary", "fraud"),
+                new AlertSignal.EvidenceSpec(List.of(), true, true),
+                false,
+                null);
+        // context 用 team=base 的 pipeline.labels
+        AlertSignal finalSignal = signal;
+        runInTx(() -> sink.drainAndPersist(newContextWithPipelineLabels(finalSignal, Map.of("team", "base"))));
+
+        AlertPo alert = alertRepository.findAll().get(0);
+        assertThat(alert.labelTeam).isEqualTo("overridden");
+        assertThat(alert.labels).containsEntry("team", "overridden");
+    }
+
     @Test
     void resolveJobFlipsExpiredFiringToResolved() {
         DefaultAlertSink sink = newSink();
@@ -113,23 +157,17 @@ class DefaultAlertSinkIntegrationTest {
     }
 
     private TestExecutionContext newContext(final AlertSignal signal) {
+        return newContextWithPipelineLabels(signal, Map.of("domain", "trade"));
+    }
+
+    private TestExecutionContext newContextWithPipelineLabels(
+            final AlertSignal signal, final Map<String, String> pipelineLabels) {
         // ADR-0006：触发事件为 CdcEvent（triggerType 仍用 SourceType.CDC）。
+        // B9 / ADR-0004：ExecutionMeta 只携带 pipeline.labels（team/application/pipelineLabels 一等字段已移除）。
         CdcMeta meta = new CdcMeta("t", "db", "tbl", Map.of());
         CdcEvent event = new CdcEvent(meta, Map.of(), Map.of("amount", 2000L), CdcOp.INSERT, Instant.now());
         ExecutionMeta execMeta = new ExecutionMeta(
-                1001L,
-                "trade",
-                2001L,
-                1,
-                "team",
-                "app",
-                Map.of("domain", "trade"),
-                null,
-                null,
-                SourceType.CDC,
-                event,
-                Instant.now(),
-                3001L);
+                1001L, "trade", 2001L, 1, pipelineLabels, null, null, SourceType.CDC, event, Instant.now(), 3001L);
         ExecutionData data = new ExecutionData(event);
         TestExecutionContext ctx = new TestExecutionContext(execMeta, data);
         ctx.putNodeOutput("check", "amt", new java.math.BigDecimal("2000"));

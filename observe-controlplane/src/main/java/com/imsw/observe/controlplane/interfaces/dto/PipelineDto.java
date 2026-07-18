@@ -8,8 +8,6 @@ import com.imsw.observe.config.domain.PipelineDefinition;
 public record PipelineDto(
         Long id,
         String namespace,
-        String team,
-        String application,
         Map<String, String> labels,
         String name,
         String description,
@@ -23,8 +21,6 @@ public record PipelineDto(
         return new PipelineDto(
                 d.id(),
                 d.namespace(),
-                d.team(),
-                d.application(),
                 d.labels(),
                 d.name(),
                 d.description(),

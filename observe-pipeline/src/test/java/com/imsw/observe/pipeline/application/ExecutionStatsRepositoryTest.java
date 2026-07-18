@@ -105,8 +105,6 @@ class ExecutionStatsRepositoryTest {
         po.namespace = ns;
         po.pipelineId = pid;
         po.pipelineVersion = 1;
-        po.team = "team-a";
-        po.application = "app";
         po.triggerType = "CDC";
         po.status = status;
         po.startedAt = startedAt;
@@ -122,8 +120,6 @@ class ExecutionStatsRepositoryTest {
         po.namespace = ns;
         po.pipelineId = pid;
         po.pipelineVersion = 1;
-        po.team = "team-a";
-        po.application = "app";
         po.triggerType = "CDC";
         po.errorType = "NODE_EXECUTION";
         po.status = "PENDING";

@@ -17,9 +17,6 @@ public final class AlertMapper {
         return new AlertEntity(
                 po.id,
                 po.namespace,
-                po.team,
-                po.application,
-                po.pipelineLabels,
                 po.pipelineId,
                 po.pipelineVersion == null ? 0 : po.pipelineVersion,
                 po.executionId,
@@ -36,7 +33,10 @@ public final class AlertMapper {
                 po.ackNote,
                 po.ackBy,
                 po.ackAt,
-                po.traceId);
+                po.traceId,
+                po.labelTeam,
+                po.labelApp,
+                po.labelLine);
     }
 
     public static AlertPo toPo(final AlertEntity entity) {
@@ -46,9 +46,6 @@ public final class AlertMapper {
         AlertPo po = new AlertPo();
         po.id = entity.id();
         po.namespace = entity.namespace();
-        po.team = entity.team();
-        po.application = entity.application();
-        po.pipelineLabels = entity.pipelineLabels();
         po.pipelineId = entity.pipelineId();
         po.pipelineVersion = entity.pipelineVersion();
         po.executionId = entity.executionId();
@@ -66,6 +63,9 @@ public final class AlertMapper {
         po.ackBy = entity.ackBy();
         po.ackAt = entity.ackAt();
         po.traceId = entity.traceId();
+        po.labelTeam = entity.labelTeam();
+        po.labelApp = entity.labelApp();
+        po.labelLine = entity.labelLine();
         Instant now = Instant.now();
         po.createdAt = now;
         po.updatedAt = now;

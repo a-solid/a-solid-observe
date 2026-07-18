@@ -35,7 +35,7 @@ class PipelineCrudServiceTest {
         SnowflakeIdGenerator generator = new SnowflakeIdGenerator(1L, 0L);
         PipelineCrudService service = new PipelineCrudService(repository, generator, namespaceCrudService);
 
-        var def = service.create("payments", "checkout", "team-a", "Order Pipeline", Map.of(), "desc", "alice");
+        var def = service.create("payments", "checkout", Map.of(), "desc", "alice");
 
         // id is allocated by the generator (positive snowflake), not caller-supplied.
         assertThat(def.id()).isNotNull();
@@ -55,17 +55,11 @@ class PipelineCrudServiceTest {
     @Test
     void createDoesNotAcceptCallerSuppliedId() throws NoSuchMethodException {
         // Behavioral contract: create has no id parameter; id is internally allocated.
-        // Signature: (namespace, name, team, application, labels, description, createdBy) — 7 params.
+        // B9 / ADR-0004：team/application 一等字段已下线（维度进 labels）；签名现在是 5 参数。
+        // Signature: (namespace, name, labels, description, createdBy) — 5 params.
         var create = PipelineCrudService.class.getMethod(
-                "create",
-                String.class,
-                String.class,
-                String.class,
-                String.class,
-                Map.class,
-                String.class,
-                String.class);
-        assertThat(create.getParameters()).hasSize(7);
+                "create", String.class, String.class, Map.class, String.class, String.class);
+        assertThat(create.getParameters()).hasSize(5);
     }
 
     @Test
@@ -79,8 +73,7 @@ class PipelineCrudServiceTest {
         SnowflakeIdGenerator generator = new SnowflakeIdGenerator(1L, 0L);
         PipelineCrudService service = new PipelineCrudService(repository, generator, namespaceCrudService);
 
-        assertThatThrownBy(() ->
-                        service.create("ghost", "checkout", "team-a", "Order Pipeline", Map.of(), "desc", "alice"))
+        assertThatThrownBy(() -> service.create("ghost", "checkout", Map.of(), "desc", "alice"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("namespace not found")
                 .hasMessageContaining("ghost");

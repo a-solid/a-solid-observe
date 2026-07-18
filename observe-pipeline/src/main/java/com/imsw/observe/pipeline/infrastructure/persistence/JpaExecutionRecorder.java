@@ -58,8 +58,6 @@ public final class JpaExecutionRecorder implements ExecutionRecorder {
         po.namespace = meta.namespace();
         po.pipelineId = meta.pipelineId();
         po.pipelineVersion = meta.pipelineVersion();
-        po.team = meta.team();
-        po.application = meta.application();
         po.triggerType = (meta.triggerType() == null
                         ? com.imsw.observe.kernel.event.model.SourceType.UNKNOWN
                         : meta.triggerType())
@@ -93,8 +91,6 @@ public final class JpaExecutionRecorder implements ExecutionRecorder {
         po.pipelineId = meta.pipelineId();
         po.pipelineVersion = meta.pipelineVersion();
         po.executionId = meta.executionId();
-        po.team = meta.team();
-        po.application = meta.application();
         po.triggerType = (meta.triggerType() == null
                         ? com.imsw.observe.kernel.event.model.SourceType.UNKNOWN
                         : meta.triggerType())

@@ -84,7 +84,7 @@ class EndToEndFlowTest {
         }
 
         Long pipelineId = pipelines
-                .create(NAMESPACE, PIPELINE_NAME, "team", "app", Map.of(), "", "tester")
+                .create(NAMESPACE, PIPELINE_NAME, Map.of("team", "team", "app", "app"), "", "tester")
                 .id();
         Pipeline pipeline = buildPipeline(pipelineId, 1);
         versions.saveDraft(NAMESPACE, PIPELINE_NAME, pipeline, "tester");
@@ -161,7 +161,7 @@ class EndToEndFlowTest {
 
         // 一条无 payload 触发型 pipeline：TickEvent 无 after/before，脚本里无条件 emit（用于验证 cron 路由）。
         Long pipelineId = pipelines
-                .create(NAMESPACE, CRON_PIPELINE_NAME, "team", "app", Map.of(), "", "tester")
+                .create(NAMESPACE, CRON_PIPELINE_NAME, Map.of("team", "team", "app", "app"), "", "tester")
                 .id();
         Pipeline pipeline = buildCronPipeline(pipelineId, 1);
         versions.saveDraft(NAMESPACE, CRON_PIPELINE_NAME, pipeline, "tester");

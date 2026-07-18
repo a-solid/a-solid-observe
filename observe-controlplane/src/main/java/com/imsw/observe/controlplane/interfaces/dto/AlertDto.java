@@ -6,13 +6,10 @@ import java.util.Map;
 import com.imsw.observe.alerting.domain.AlertEntity;
 import com.imsw.observe.kernel.alert.model.Severity;
 
-/** 告警 DTO（含 ADR-0005 disposition 字段 ackNote/ackBy/ackAt）。 */
+/** 告警 DTO（含 ADR-0005 disposition 字段 ackNote/ackBy/ackAt；ADR-0004 label 投影字段）。 */
 public record AlertDto(
         Long id,
         String namespace,
-        String team,
-        String application,
-        Map<String, String> pipelineLabels,
         Long pipelineId,
         int pipelineVersion,
         Long executionId,
@@ -29,15 +26,15 @@ public record AlertDto(
         String ackNote,
         String ackBy,
         Instant ackAt,
-        String traceId) {
+        String traceId,
+        String labelTeam,
+        String labelApp,
+        String labelLine) {
 
     public static AlertDto from(final AlertEntity e) {
         return new AlertDto(
                 e.id(),
                 e.namespace(),
-                e.team(),
-                e.application(),
-                e.pipelineLabels(),
                 e.pipelineId(),
                 e.pipelineVersion(),
                 e.executionId(),
@@ -54,6 +51,9 @@ public record AlertDto(
                 e.ackNote(),
                 e.ackBy(),
                 e.ackAt(),
-                e.traceId());
+                e.traceId(),
+                e.labelTeam(),
+                e.labelApp(),
+                e.labelLine());
     }
 }

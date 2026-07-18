@@ -51,12 +51,13 @@ public interface AlertRepository extends JpaRepository<AlertPo, Long> {
             @Param("resolvedAt") Instant resolvedAt);
 
     // ---------- B6 聚合统计（namespace 下推 where，可选过滤 :x is null or ...） ----------
+    // B9 / ADR-0004：原 a.team 一等列下线为 a.labelTeam 投影列；JPQL where 同步重指向 a.labelTeam。
 
     @Query("select new com.imsw.observe.alerting.application.DimensionCount(a.severity, count(a)) "
             + "from AlertPo a where a.namespace = :namespace and a.startsAt >= :from and a.startsAt < :to "
             + "and (:status is null or a.status = :status) "
             + "and (:severity is null or a.severity = :severity) "
-            + "and (:team is null or a.team = :team) "
+            + "and (:team is null or a.labelTeam = :team) "
             + "and (:pipelineId is null or a.pipelineId = :pipelineId) "
             + "group by a.severity")
     List<DimensionCount> countBySeverity(
@@ -71,7 +72,7 @@ public interface AlertRepository extends JpaRepository<AlertPo, Long> {
     @Query("select new com.imsw.observe.alerting.application.DimensionCount(a.status, count(a)) "
             + "from AlertPo a where a.namespace = :namespace and a.startsAt >= :from and a.startsAt < :to "
             + "and (:severity is null or a.severity = :severity) "
-            + "and (:team is null or a.team = :team) "
+            + "and (:team is null or a.labelTeam = :team) "
             + "and (:pipelineId is null or a.pipelineId = :pipelineId) "
             + "group by a.status")
     List<DimensionCount> countByStatus(

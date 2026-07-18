@@ -45,8 +45,7 @@ public class PipelineController {
     @PostMapping("/namespaces/{namespace}/pipelines")
     public ApiResponse<PipelineDto> create(
             @PathVariable final String namespace, @Valid @RequestBody final CreatePipelineRequest req) {
-        PipelineDefinition def = crud.create(
-                namespace, req.name(), req.team(), req.application(), req.labels(), req.description(), req.createdBy());
+        PipelineDefinition def = crud.create(namespace, req.name(), req.labels(), req.description(), req.createdBy());
         return ApiResponse.ok(PipelineDto.from(def));
     }
 
@@ -70,8 +69,7 @@ public class PipelineController {
             @PathVariable final String namespace,
             @PathVariable final String name,
             @Valid @RequestBody final CreatePipelineRequest req) {
-        return ApiResponse.ok(PipelineDto.from(
-                crud.update(namespace, name, req.team(), req.application(), req.labels(), req.description())));
+        return ApiResponse.ok(PipelineDto.from(crud.update(namespace, name, req.labels(), req.description())));
     }
 
     @PostMapping("/namespaces/{namespace}/pipelines/{name}/archive")
@@ -113,12 +111,7 @@ public class PipelineController {
     }
 
     public record CreatePipelineRequest(
-            @NotBlank String team,
-            @NotBlank String application,
-            Map<String, String> labels,
-            @NotBlank String name,
-            String description,
-            String createdBy) {}
+            Map<String, String> labels, @NotBlank String name, String description, String createdBy) {}
 
     public record SaveVersionRequest(@NotBlank String pipelineJson, String publishedBy) {}
 

@@ -35,8 +35,6 @@ public class PipelineCrudService {
     public PipelineDefinition create(
             final String namespace,
             final String name,
-            final String team,
-            final String application,
             final Map<String, String> labels,
             final String description,
             final String createdBy) {
@@ -51,8 +49,6 @@ public class PipelineCrudService {
         PipelineDefinitionPo po = new PipelineDefinitionPo();
         po.id = id;
         po.namespace = namespace;
-        po.team = team;
-        po.application = application;
         po.labels = labels;
         po.name = name;
         po.description = description;
@@ -66,17 +62,10 @@ public class PipelineCrudService {
 
     @Transactional
     public PipelineDefinition update(
-            final String namespace,
-            final String name,
-            final String team,
-            final String application,
-            final Map<String, String> labels,
-            final String description) {
+            final String namespace, final String name, final Map<String, String> labels, final String description) {
         PipelineDefinitionPo po = repository
                 .findByNamespaceAndName(namespace, name)
                 .orElseThrow(() -> new IllegalArgumentException("pipeline not found: " + namespace + "/" + name));
-        po.team = team;
-        po.application = application;
         po.labels = labels;
         po.description = description;
         po.updatedAt = Instant.now();

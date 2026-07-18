@@ -7,8 +7,6 @@ public record Execution(
         String namespace,
         Long pipelineId,
         int pipelineVersion,
-        String team,
-        String application,
         String triggerType,
         String triggerEvent,
         Long subscriptionId,
