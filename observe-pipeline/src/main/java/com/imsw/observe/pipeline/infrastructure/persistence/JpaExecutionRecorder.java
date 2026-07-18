@@ -55,14 +55,14 @@ public final class JpaExecutionRecorder implements ExecutionRecorder {
         ExecutionMeta meta = ctx.meta();
         ExecutionPo po = new ExecutionPo();
         po.id = snowflake.next();
-        po.pipelineId = toLong(meta.pipelineId());
+        po.pipelineId = meta.pipelineId();
         po.pipelineVersion = meta.pipelineVersion();
         po.team = meta.team();
         po.application = meta.application();
         po.triggerType =
                 meta.triggerType() == null ? "UNKNOWN" : meta.triggerType().name();
         po.triggerEvent = serializeEvent(meta.triggerEvent());
-        po.subscriptionId = toLong(meta.subscriptionId());
+        po.subscriptionId = meta.subscriptionId();
         po.status = outcome;
         po.startedAt = meta.triggeredAt();
         po.endedAt = Instant.now();
@@ -86,15 +86,15 @@ public final class JpaExecutionRecorder implements ExecutionRecorder {
         ExecutionMeta meta = ctx.meta();
         FailedExecutionPo po = new FailedExecutionPo();
         po.id = snowflake.next();
-        po.pipelineId = toLong(meta.pipelineId());
+        po.pipelineId = meta.pipelineId();
         po.pipelineVersion = meta.pipelineVersion();
-        po.executionId = toLong(meta.executionId());
+        po.executionId = meta.executionId();
         po.team = meta.team();
         po.application = meta.application();
         po.triggerType =
                 meta.triggerType() == null ? "UNKNOWN" : meta.triggerType().name();
         po.triggerEvent = serializeEvent(meta.triggerEvent());
-        po.subscriptionId = toLong(meta.subscriptionId());
+        po.subscriptionId = meta.subscriptionId();
         po.nodeName = nodeName;
         po.errorType = errorType.name();
         po.errorMessage = truncate(error == null ? null : error.getMessage(), MAX_ERROR_MESSAGE);
@@ -128,22 +128,6 @@ public final class JpaExecutionRecorder implements ExecutionRecorder {
             return true;
         }
         return ThreadLocalRandom.current().nextDouble() < sampleRatio;
-    }
-
-    /**
-     * 运行态 id 已迁 BIGINT（ADR-0003），而 {@link ExecutionMeta}（kernel）仍以 String 透传 snowflake id
-     * 的字符串形式（"trace 关联用 BIGINT id 的字符串形式"）。PO 落库前在此做 String→Long 边界转换；
-     * null 或非数字字符串视为 null（宽松，避免单条记录写入失败影响主流程）。
-     */
-    private static Long toLong(final String value) {
-        if (value == null || value.isBlank()) {
-            return null;
-        }
-        try {
-            return Long.parseLong(value.trim());
-        } catch (NumberFormatException e) {
-            return null;
-        }
     }
 
     private static String truncate(final String value, final int max) {

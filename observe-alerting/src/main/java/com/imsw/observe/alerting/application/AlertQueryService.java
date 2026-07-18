@@ -32,6 +32,7 @@ public class AlertQueryService {
     public List<AlertEntity> findAlerts(
             final String status, final String team, final String pipelineId, final int limit) {
         int safeLimit = sanitizeLimit(limit);
+        Long pipelineIdFilter = parseLong(pipelineId).orElse(null);
         List<AlertEntity> alerts;
         if (status != null && !status.isBlank()) {
             alerts =
@@ -47,16 +48,18 @@ public class AlertQueryService {
         }
         return alerts.stream()
                 .filter(a -> team == null || team.isBlank() || team.equals(a.team()))
-                .filter(a -> pipelineId == null || pipelineId.isBlank() || pipelineId.equals(a.pipelineId()))
+                .filter(a -> pipelineIdFilter == null || pipelineIdFilter.equals(a.pipelineId()))
                 .toList();
     }
 
     public Optional<AlertEntity> findById(final String id) {
-        return alertRepository.findById(id).map(AlertMapper::toEntity);
+        return parseLong(id)
+                .flatMap(alertId -> alertRepository.findById(alertId).map(AlertMapper::toEntity));
     }
 
     public Optional<EvidenceEntity> findEvidenceByAlertId(final String alertId) {
-        return evidenceRepository.findByAlertId(alertId).map(EvidenceMapper::toEntity);
+        return parseLong(alertId)
+                .flatMap(id -> evidenceRepository.findByAlertId(id).map(EvidenceMapper::toEntity));
     }
 
     private static int sanitizeLimit(final int limit) {
@@ -64,5 +67,20 @@ public class AlertQueryService {
             return DEFAULT_LIMIT;
         }
         return Math.min(limit, MAX_LIMIT);
+    }
+
+    /**
+     * HTTP 接口层（controlplane）仍以 String 透传 BIGINT id；这里在 application 边界做 String→Long 解析，
+     * 非法/空值视为 null（查询不命中）。controlplane 迁移完成后可改为直接接收 Long（Task 6）。
+     */
+    private static java.util.Optional<Long> parseLong(final String value) {
+        if (value == null || value.isBlank()) {
+            return java.util.Optional.empty();
+        }
+        try {
+            return java.util.Optional.of(Long.parseLong(value.trim()));
+        } catch (NumberFormatException e) {
+            return java.util.Optional.empty();
+        }
     }
 }

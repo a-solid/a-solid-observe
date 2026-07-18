@@ -6,13 +6,13 @@ import java.util.Map;
 import com.imsw.observe.kernel.alert.model.Severity;
 
 public record AlertEntity(
-        String id,
+        Long id,
         String team,
         String application,
         Map<String, String> pipelineLabels,
-        String pipelineId,
+        Long pipelineId,
         int pipelineVersion,
-        String executionId,
+        Long executionId,
         String fingerprint,
         Severity severity,
         Map<String, String> labels,

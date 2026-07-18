@@ -16,8 +16,8 @@ import com.imsw.observe.kernel.util.MapStringStringToJsonConverter;
 public class AlertPo {
 
     @Id
-    @Column(name = "id", length = 36, nullable = false)
-    public String id;
+    @Column(name = "id", nullable = false)
+    public Long id;
 
     @Column(name = "team", nullable = false)
     public String team;
@@ -29,14 +29,14 @@ public class AlertPo {
     @Convert(converter = MapStringStringToJsonConverter.class)
     public Map<String, String> pipelineLabels;
 
-    @Column(name = "pipeline_id", length = 64, nullable = false)
-    public String pipelineId;
+    @Column(name = "pipeline_id", nullable = false)
+    public Long pipelineId;
 
     @Column(name = "pipeline_version", nullable = false)
     public Integer pipelineVersion;
 
     @Column(name = "execution_id", nullable = false)
-    public String executionId;
+    public Long executionId;
 
     @Column(name = "fingerprint", length = 256, nullable = false)
     public String fingerprint;

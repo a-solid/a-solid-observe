@@ -98,8 +98,8 @@ class JpaExecutionRecorderTest {
         Event.EventMeta meta = new Event.EventMeta(SourceType.CDC, "t", "db", "orders", Map.of());
         Event event = new Event(meta, Map.of(), Map.of("amount", 2000L), Op.INSERT, Instant.now());
         ExecutionMeta execMeta = new ExecutionMeta(
-                "1001",
-                "2001",
+                1001L,
+                2001L,
                 1,
                 "team",
                 "app",
@@ -109,7 +109,7 @@ class JpaExecutionRecorderTest {
                 SourceType.CDC,
                 event,
                 Instant.now(),
-                "3001");
+                3001L);
         return new DefaultExecutionContext(execMeta, new ExecutionData(event));
     }
 

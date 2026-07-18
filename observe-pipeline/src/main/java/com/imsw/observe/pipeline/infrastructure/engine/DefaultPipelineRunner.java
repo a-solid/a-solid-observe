@@ -114,12 +114,11 @@ public final class DefaultPipelineRunner implements PipelineRunner {
     }
 
     private ExecutionMeta buildMeta(final Pipeline pipeline, final Event triggerEvent, final Long subscriptionId) {
-        // per-run execution trace id：snowflake BIGINT（ADR-0003），以字符串形式透传给 kernel ExecutionMeta
-        // （kernel 字段保持 String：trace 关联用 BIGINT id 的字符串形式）。
-        String executionTraceId = String.valueOf(snowflake.next());
+        // 全链路 snowflake BIGINT id（ADR-0003）：execution/pipeline/subscription id 均为 Long，直接透传 kernel。
+        Long executionId = snowflake.next();
         return new ExecutionMeta(
-                executionTraceId,
-                String.valueOf(pipeline.id()),
+                executionId,
+                pipeline.id(),
                 pipeline.version(),
                 pipeline.team(),
                 pipeline.application(),
@@ -129,7 +128,7 @@ public final class DefaultPipelineRunner implements PipelineRunner {
                 triggerEvent == null ? null : triggerEvent.meta().sourceType(),
                 triggerEvent,
                 Instant.now(),
-                subscriptionId == null ? null : String.valueOf(subscriptionId));
+                subscriptionId);
     }
 
     private static void count(final LongCounter counter, final Long pipelineId, final String tagKey, final String tag) {

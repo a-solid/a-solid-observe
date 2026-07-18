@@ -43,8 +43,10 @@ public class AlertingPipelineConfig {
             final AlertRepository alertRepository,
             final EvidenceRepository evidenceRepository,
             final EvidenceCollector evidenceCollector,
-            final AnnotationRenderer annotationRenderer) {
-        return new DefaultAlertSink(alertRepository, evidenceRepository, evidenceCollector, annotationRenderer);
+            final AnnotationRenderer annotationRenderer,
+            final com.imsw.observe.kernel.util.SnowflakeIdGenerator snowflakeIdGenerator) {
+        return new DefaultAlertSink(
+                alertRepository, evidenceRepository, evidenceCollector, annotationRenderer, snowflakeIdGenerator);
     }
 
     @Bean

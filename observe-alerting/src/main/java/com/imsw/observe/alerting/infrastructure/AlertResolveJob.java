@@ -25,7 +25,7 @@ public class AlertResolveJob {
         Instant now = Instant.now();
         int total = 0;
         while (true) {
-            List<String> ids = alertRepository.findExpiredFiringIds(now, PageRequest.of(0, BATCH_SIZE));
+            List<Long> ids = alertRepository.findExpiredFiringIds(now, PageRequest.of(0, BATCH_SIZE));
             if (ids.isEmpty()) {
                 break;
             }
