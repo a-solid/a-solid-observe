@@ -37,7 +37,7 @@ public class ExecutionQueryService {
     public List<Execution> findExecutions(final String namespace, final Long pipelineId, final int limit) {
         int safeLimit = sanitize(limit);
         return executionRepository.findAll(PageRequest.of(0, safeLimit)).stream()
-                .filter(e -> namespace == null || namespace.equals(e.namespace))
+                .filter(e -> namespace.equals(e.namespace))
                 .filter(e -> pipelineId == null || pipelineId.equals(e.pipelineId))
                 .map(ExecutionQueryService::toExecution)
                 .toList();
@@ -48,13 +48,13 @@ public class ExecutionQueryService {
         return executionRepository
                 .findById(id)
                 .map(ExecutionQueryService::toExecution)
-                .filter(e -> namespace == null || namespace.equals(e.namespace()));
+                .filter(e -> namespace.equals(e.namespace()));
     }
 
     public List<FailedExecution> findFailedExecutions(final String namespace, final Long pipelineId, final int limit) {
         int safeLimit = sanitize(limit);
         return failedExecutionRepository.findAll(PageRequest.of(0, safeLimit)).stream()
-                .filter(e -> namespace == null || namespace.equals(e.namespace))
+                .filter(e -> namespace.equals(e.namespace))
                 .filter(e -> pipelineId == null || pipelineId.equals(e.pipelineId))
                 .map(ExecutionQueryService::toFailedExecution)
                 .toList();
@@ -64,7 +64,7 @@ public class ExecutionQueryService {
         return failedExecutionRepository
                 .findById(id)
                 .map(ExecutionQueryService::toFailedExecution)
-                .filter(e -> namespace == null || namespace.equals(e.namespace()));
+                .filter(e -> namespace.equals(e.namespace()));
     }
 
     private static Execution toExecution(final ExecutionPo po) {

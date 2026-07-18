@@ -23,6 +23,8 @@ public record SubscriptionDto(
         String actionType,
         Long scheduleDelayMs,
         String scheduleCorrelationKeyPath,
+        String name,
+        String description,
         String status) {
 
     public static SubscriptionDto from(final Subscription s) {
@@ -42,6 +44,8 @@ public record SubscriptionDto(
                 s.actionType() == null ? null : s.actionType().name(),
                 delay == null ? null : delay.toMillis(),
                 s.scheduleCorrelationKeyPath(),
+                s.name(),
+                s.description(),
                 s.status() == null ? null : s.status().name());
     }
 }

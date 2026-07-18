@@ -50,7 +50,7 @@ public class AlertQueryService {
                     .toList();
         }
         return alerts.stream()
-                .filter(a -> namespace == null || namespace.equals(a.namespace()))
+                .filter(a -> namespace.equals(a.namespace()))
                 .filter(a -> team == null || team.isBlank() || team.equals(a.team()))
                 .filter(a -> pipelineId == null || pipelineId.equals(a.pipelineId()))
                 .toList();
@@ -61,10 +61,7 @@ public class AlertQueryService {
         if (id == null) {
             return Optional.empty();
         }
-        return alertRepository
-                .findById(id)
-                .map(AlertMapper::toEntity)
-                .filter(a -> namespace == null || namespace.equals(a.namespace()));
+        return alertRepository.findById(id).map(AlertMapper::toEntity).filter(a -> namespace.equals(a.namespace()));
     }
 
     /** 单条按 (namespace, alertId) 软校验：namespace 不匹配返回 empty。 */
@@ -75,7 +72,7 @@ public class AlertQueryService {
         return evidenceRepository
                 .findByAlertId(alertId)
                 .map(EvidenceMapper::toEntity)
-                .filter(e -> namespace == null || namespace.equals(e.namespace()));
+                .filter(e -> namespace.equals(e.namespace()));
     }
 
     private static int sanitizeLimit(final int limit) {
