@@ -34,6 +34,17 @@ public class VersionPublishService {
     public PipelineVersion saveDraft(
             final String namespace, final String pipelineName, final Pipeline pipeline, final String publishedBy) {
         PipelineDefinitionPo def = requireDefinition(namespace, pipelineName);
+        // 软隔离铁律（ADR-0002）：definitionJson 内嵌的 pipeline.namespace 必须与路径 namespace 一致。
+        // PipelineRegistryLoader.deserialize 优先采信 body 的 namespace 而非版本 PO 的 namespace，
+        // 否则 ns-A 写权限的调用方能保存 body namespace="B" 的草稿，发布后 execution/alert 落到 ns-B。
+        // body namespace null/blank 视为「不声明」，loader 会用版本 PO 的 namespace 兜底，可接受。
+        if (pipeline != null
+                && pipeline.namespace() != null
+                && !pipeline.namespace().isBlank()
+                && !pipeline.namespace().equals(def.namespace)) {
+            throw new IllegalArgumentException("pipeline body namespace '" + pipeline.namespace()
+                    + "' must match path namespace '" + def.namespace + "'");
+        }
         String json = JsonUtil.toJson(pipeline);
         int nextVersion = nextVersion(def.id);
         PipelineVersionPo po = new PipelineVersionPo();

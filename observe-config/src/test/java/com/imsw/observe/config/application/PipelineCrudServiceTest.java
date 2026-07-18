@@ -1,6 +1,7 @@
 package com.imsw.observe.config.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.times;
@@ -65,5 +66,27 @@ class PipelineCrudServiceTest {
                 String.class,
                 String.class);
         assertThat(create.getParameters()).hasSize(7);
+    }
+
+    @Test
+    void createRejectsUnknownNamespace() {
+        // 软隔离铁律（ADR-0002）：namespace 必须存在；NamespaceCrudService.findByName 返回 null 时，
+        // create 必须在写库前被拒（a-solid-observe 不使用 FK 约束，靠应用层校验）。
+        PipelineDefinitionRepository repository = Mockito.mock(PipelineDefinitionRepository.class);
+        NamespaceCrudService namespaceCrudService = Mockito.mock(NamespaceCrudService.class);
+        when(namespaceCrudService.findByName(eq("ghost"))).thenReturn(null);
+
+        SnowflakeIdGenerator generator = new SnowflakeIdGenerator(1L, 0L);
+        PipelineCrudService service = new PipelineCrudService(repository, generator, namespaceCrudService);
+
+        assertThatThrownBy(() ->
+                        service.create("ghost", "checkout", "team-a", "Order Pipeline", Map.of(), "desc", "alice"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("namespace not found")
+                .hasMessageContaining("ghost");
+
+        // 写库绝不能被触达。
+        verify(repository, times(0)).save(any(PipelineDefinitionPo.class));
+        verify(repository, times(0)).existsByNamespaceAndName(any(), any());
     }
 }

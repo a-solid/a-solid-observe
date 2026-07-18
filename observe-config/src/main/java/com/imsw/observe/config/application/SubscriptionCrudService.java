@@ -54,6 +54,11 @@ public class SubscriptionCrudService {
         if (namespaceCrudService.findByName(subscription.namespace()) == null) {
             throw new IllegalArgumentException("namespace not found: " + subscription.namespace());
         }
+        // 业务键非空校验：subscriptions.name 为 NOT NULL（参考 V1__init.sql），与 pipelines.name 对称。
+        // (namespace, name) 唯一索引在 NULL-name 上不生效，需在应用层挡住空 name，避免产生不可寻址/不可删除的行。
+        if (subscription.name() == null || subscription.name().isBlank()) {
+            throw new IllegalArgumentException("subscription name must not be blank");
+        }
         validatePipeline(subscription);
         SubscriptionPo po = SubscriptionMapper.toPo(subscription, conditionCodec);
         po.id = snowflakeIdGenerator.next();

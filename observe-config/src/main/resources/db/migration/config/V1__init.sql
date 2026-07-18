@@ -63,7 +63,7 @@ CREATE TABLE subscriptions (
     schedule_delay_ms BIGINT,
     schedule_correlation_key_path VARCHAR,
 
-    name VARCHAR,
+    name VARCHAR NOT NULL,
     description VARCHAR,
     status VARCHAR NOT NULL DEFAULT 'ACTIVE',
     created_by VARCHAR,
