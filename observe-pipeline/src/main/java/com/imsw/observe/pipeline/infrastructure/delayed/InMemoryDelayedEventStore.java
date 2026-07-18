@@ -1,9 +1,6 @@
 package com.imsw.observe.pipeline.infrastructure.delayed;
 
 import java.time.Duration;
-import java.time.Instant;
-import java.util.Map;
-import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ScheduledExecutorService;
@@ -13,111 +10,68 @@ import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.imsw.observe.kernel.event.model.Event;
-import com.imsw.observe.kernel.event.model.Op;
-import com.imsw.observe.kernel.event.model.SourceType;
-import com.imsw.observe.pipeline.application.PipelineRunner;
-import com.imsw.observe.pipeline.domain.Pipeline;
-import com.imsw.observe.pipeline.domain.subscription.Subscription;
-import com.imsw.observe.pipeline.infrastructure.source.EventPaths;
+import com.imsw.observe.pipeline.application.DelayedEventStore;
 
-public final class InMemoryDelayedEventStore {
+/**
+ * 延时事件调度实现（infrastructure 层）：纯调度原语（SES + map）。
+ *
+ * <p>不感知 domain 概念（Subscription/Event/Pipeline）——fire 逻辑（DELAYED 包装 + runner.run）
+ * 由 {@link com.imsw.observe.pipeline.application.DelayedActionHandler} 提供。本类只负责：
+ * 到点跑 task、Replace 语义（同 key 老 task cancel(false)）、cancel(false) 不中断在跑、
+ * fire 后清 map（在 schedule 时包装 fireTask 加 finally 实现——handler 不感知 map）。
+ */
+public final class InMemoryDelayedEventStore implements DelayedEventStore {
 
     private static final Logger LOG = LoggerFactory.getLogger(InMemoryDelayedEventStore.class);
 
     private final ScheduledExecutorService scheduler;
 
-    private final PipelineRunner runner;
-
     private final ConcurrentMap<String, ScheduledFuture<?>> byCorrelationKey = new ConcurrentHashMap<>();
 
-    public InMemoryDelayedEventStore(final ScheduledExecutorService scheduler, final PipelineRunner runner) {
+    public InMemoryDelayedEventStore(final ScheduledExecutorService scheduler) {
         this.scheduler = scheduler;
-        this.runner = runner;
     }
 
-    public void schedule(
-            final Subscription subscription,
-            final Event originalEvent,
-            final Pipeline pipeline,
-            final Duration delay,
-            final String correlationKeyPath) {
-        String key = extractKey(originalEvent, correlationKeyPath);
-        if (key == null) {
-            LOG.warn("delayed schedule correlation key null for subscription {}", subscription.id());
+    @Override
+    public void schedule(final String correlationKey, final Runnable fireTask, final Duration delay) {
+        if (correlationKey == null) {
+            LOG.warn("delayed schedule correlation key null");
             return;
         }
-        Instant scheduledAt = Instant.now();
-        ScheduledFuture<?> sf = scheduler.schedule(
-                () -> fire(subscription, originalEvent, pipeline, key, scheduledAt),
-                delay.toMillis(),
-                TimeUnit.MILLISECONDS);
-        ScheduledFuture<?> prev = byCorrelationKey.put(key, sf);
+        Runnable wrapped = () -> {
+            try {
+                fireTask.run();
+            } finally {
+                byCorrelationKey.remove(correlationKey);
+            }
+        };
+        ScheduledFuture<?> sf = scheduler.schedule(wrapped, delay.toMillis(), TimeUnit.MILLISECONDS);
+        ScheduledFuture<?> prev = byCorrelationKey.put(correlationKey, sf);
         if (prev != null) {
             prev.cancel(false);
         }
-        LOG.info("delayed scheduled subscription={} key={} delay_ms={}", subscription.id(), key, delay.toMillis());
+        LOG.info("delayed scheduled key={} delay_ms={}", correlationKey, delay.toMillis());
     }
 
-    public void cancel(final Subscription subscription, final Event triggerEvent, final String correlationKeyPath) {
-        String key = extractKey(triggerEvent, correlationKeyPath);
-        if (key == null) {
-            LOG.warn("delayed cancel correlation key null for subscription {}", subscription.id());
+    @Override
+    public void cancel(final String correlationKey) {
+        if (correlationKey == null) {
+            LOG.warn("delayed cancel correlation key null");
             return;
         }
-        ScheduledFuture<?> prev = byCorrelationKey.remove(key);
+        ScheduledFuture<?> prev = byCorrelationKey.remove(correlationKey);
         if (prev != null) {
             prev.cancel(false);
-            LOG.info("delayed cancelled subscription={} key={}", subscription.id(), key);
+            LOG.info("delayed cancelled key={}", correlationKey);
         }
     }
 
+    @Override
     public int pendingCount() {
         return byCorrelationKey.size();
     }
 
-    private void fire(
-            final Subscription subscription,
-            final Event original,
-            final Pipeline pipeline,
-            final String correlationKey,
-            final Instant scheduledAt) {
-        try {
-            Event delayed = wrapAsDelayed(original, subscription, correlationKey, scheduledAt);
-            runner.run(pipeline, delayed, null);
-        } catch (RuntimeException e) {
-            LOG.warn("delayed fire failed subscription={} key={}", subscription.id(), correlationKey, e);
-        } finally {
-            byCorrelationKey.remove(correlationKey);
-        }
-    }
-
-    private static Event wrapAsDelayed(
-            final Event original,
-            final Subscription subscription,
-            final String correlationKey,
-            final Instant scheduledAt) {
-        Event.EventMeta originalMeta = original.meta();
-        Event.EventMeta meta = new Event.EventMeta(
-                SourceType.CDC,
-                "delayed:" + subscription.id(),
-                originalMeta == null ? null : originalMeta.db(),
-                originalMeta == null ? null : originalMeta.table(),
-                Map.of(
-                        "schedule_id", UUID.randomUUID().toString(),
-                        "subscription_id", subscription.id(),
-                        "original_event", original,
-                        "scheduled_at", scheduledAt.toString(),
-                        "fired_at", Instant.now().toString(),
-                        "correlation_key", correlationKey));
-        return new Event(meta, null, null, Op.DELAYED, Instant.now());
-    }
-
-    private static String extractKey(final Event event, final String path) {
-        Object value = EventPaths.get(event, path);
-        return value == null ? null : value.toString();
-    }
-
+    @Override
     public void shutdown() {
         scheduler.shutdown();
         byCorrelationKey.clear();

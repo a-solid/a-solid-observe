@@ -76,17 +76,16 @@ public class WorkerConfig {
     }
 
     @Bean(destroyMethod = "shutdown")
-    public com.imsw.observe.pipeline.infrastructure.delayed.InMemoryDelayedEventStore delayedEventStore(
-            final PipelineRunner runner, final WorkerProperties props) {
+    public com.imsw.observe.pipeline.application.DelayedEventStore delayedEventStore(final WorkerProperties props) {
         java.util.concurrent.ScheduledExecutorService ses =
                 java.util.concurrent.Executors.newScheduledThreadPool(props.getDelayedPoolSize());
-        return new com.imsw.observe.pipeline.infrastructure.delayed.InMemoryDelayedEventStore(ses, runner);
+        return new com.imsw.observe.pipeline.infrastructure.delayed.InMemoryDelayedEventStore(ses);
     }
 
     @Bean
     public com.imsw.observe.pipeline.application.DelayedActionHandler delayedActionHandler(
-            final com.imsw.observe.pipeline.infrastructure.delayed.InMemoryDelayedEventStore store) {
-        return new com.imsw.observe.pipeline.application.DelayedActionHandler(store);
+            final com.imsw.observe.pipeline.application.DelayedEventStore store, final PipelineRunner runner) {
+        return new com.imsw.observe.pipeline.application.DelayedActionHandler(store, runner);
     }
 
     @Bean

@@ -38,9 +38,8 @@ class SourceDispatcherTest {
 
         RecordingRunner runner = new RecordingRunner();
         ThreadPoolExecutor pool = new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>());
-        com.imsw.observe.pipeline.infrastructure.delayed.InMemoryDelayedEventStore delayedStore =
-                new com.imsw.observe.pipeline.infrastructure.delayed.InMemoryDelayedEventStore(null, runner);
-        DelayedActionHandler delayedHandler = new DelayedActionHandler(delayedStore);
+        com.imsw.observe.pipeline.application.DelayedEventStore delayedStore = new NoopDelayedEventStore();
+        DelayedActionHandler delayedHandler = new DelayedActionHandler(delayedStore, runner);
         SourceDispatcher dispatcher =
                 new SourceDispatcher(new DefaultSubscriptionMatcher(registry), runner, pool, delayedHandler);
 
@@ -92,6 +91,30 @@ class SourceDispatcherTest {
                             null,
                             new Action.Run()),
                     pipeline));
+        }
+    }
+
+    /** No-op 端口实现：SourceDispatcherTest 只走 Run action，不会触发 schedule/cancel。 */
+    static final class NoopDelayedEventStore implements DelayedEventStore {
+
+        @Override
+        public void schedule(final String correlationKey, final Runnable fireTask, final java.time.Duration delay) {
+            // no-op
+        }
+
+        @Override
+        public void cancel(final String correlationKey) {
+            // no-op
+        }
+
+        @Override
+        public int pendingCount() {
+            return 0;
+        }
+
+        @Override
+        public void shutdown() {
+            // no-op
         }
     }
 }
