@@ -27,6 +27,7 @@ class SourceDispatcherTest {
         Pipeline pipeline = pipeline(1L, 1);
         Subscription sub = new Subscription(
                 10L,
+                "smoke",
                 1L,
                 1,
                 new Subscription.SourceRef("mq", "topic", "trade_db", "orders", Set.of(Op.INSERT), SourceType.CDC),
@@ -56,6 +57,7 @@ class SourceDispatcherTest {
     private static Pipeline pipeline(final Long id, final int version) {
         return new Pipeline(
                 id,
+                "smoke",
                 version,
                 "team",
                 "app",
@@ -81,7 +83,14 @@ class SourceDispatcherTest {
         @Override
         public void run(final Pipeline pipeline, final Event triggerEvent, final Long subscriptionId) {
             received.add(new SubscriptionMatcher.MatchedSubscription(
-                    new Subscription(subscriptionId, pipeline.id(), pipeline.version(), null, null, new Action.Run()),
+                    new Subscription(
+                            subscriptionId,
+                            pipeline.namespace(),
+                            pipeline.id(),
+                            pipeline.version(),
+                            null,
+                            null,
+                            new Action.Run()),
                     pipeline));
         }
     }

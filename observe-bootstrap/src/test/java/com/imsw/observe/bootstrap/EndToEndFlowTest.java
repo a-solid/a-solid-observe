@@ -15,6 +15,7 @@ import com.imsw.observe.alerting.infrastructure.persistence.alert.AlertPo;
 import com.imsw.observe.alerting.infrastructure.persistence.alert.AlertRepository;
 import com.imsw.observe.alerting.infrastructure.persistence.evidence.EvidenceRepository;
 import com.imsw.observe.bootstrap.worker.source.InMemoryCdcSource;
+import com.imsw.observe.config.application.NamespaceCrudService;
 import com.imsw.observe.config.application.PipelineCrudService;
 import com.imsw.observe.config.application.PipelineHotReloader;
 import com.imsw.observe.config.application.SubscriptionCrudService;
@@ -30,6 +31,13 @@ import com.imsw.observe.pipeline.domain.Pipeline;
 
 @SpringBootTest(classes = ObserveApplication.class)
 class EndToEndFlowTest {
+
+    private static final String NAMESPACE = "e2e";
+
+    private static final String PIPELINE_NAME = "E2E";
+
+    @Autowired
+    private NamespaceCrudService namespaces;
 
     @Autowired
     private PipelineCrudService pipelines;
@@ -60,14 +68,21 @@ class EndToEndFlowTest {
         evidenceRepository.deleteAll();
         alertRepository.deleteAll();
 
-        Long pipelineId =
-                pipelines.create("team", "app", Map.of(), "E2E", "", "tester").id();
+        // 软隔离铁律 (ADR-0002)：必须先建 namespace，否则 pipeline/subscription create 被拒。
+        if (namespaces.findByName(NAMESPACE) == null) {
+            namespaces.create(NAMESPACE, "End-to-End smoke");
+        }
+
+        Long pipelineId = pipelines
+                .create(NAMESPACE, PIPELINE_NAME, "team", "app", Map.of(), "", "tester")
+                .id();
         Pipeline pipeline = buildPipeline(pipelineId, 1);
-        versions.saveDraft(pipeline, "tester");
-        versions.publish(pipelineId, 1, "tester");
+        versions.saveDraft(NAMESPACE, PIPELINE_NAME, pipeline, "tester");
+        versions.publish(NAMESPACE, PIPELINE_NAME, 1, "tester");
 
         Subscription sub = new Subscription(
                 null,
+                NAMESPACE,
                 pipelineId,
                 1,
                 "mq",
@@ -98,6 +113,8 @@ class EndToEndFlowTest {
         AlertPo alert = waitForFirstAlert();
         assertThat(alert.status).isEqualTo("FIRING");
         assertThat(alert.severity).isEqualTo("CRITICAL");
+        // namespace 软隔离端到端证明：落库告警的 namespace 必须等于触发链路的 namespace。
+        assertThat(alert.namespace).isEqualTo(NAMESPACE);
         assertThat(evidenceRepository.findAll()).hasSize(1);
     }
 
@@ -130,13 +147,15 @@ class EndToEndFlowTest {
                 ErrorPolicy.FAIL,
                 Set.of(),
                 Set.of());
+        // 运行期 Pipeline 的 namespace 必须与持久化 PO 一致（loader 用 PO.namespace 覆盖）。
         return new Pipeline(
                 id,
+                NAMESPACE,
                 version,
                 "team",
                 "app",
                 Map.of(),
-                "E2E",
+                PIPELINE_NAME,
                 Pipeline.Status.PUBLISHED,
                 List.of(node),
                 Instant.now(),

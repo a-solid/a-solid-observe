@@ -73,6 +73,7 @@ class InMemoryDelayedEventStoreTest {
     private static Subscription sub(final Long id, final Action action) {
         return new Subscription(
                 id,
+                "smoke",
                 1L,
                 1,
                 new Subscription.SourceRef(null, null, "db", "tbl", java.util.Set.of(), SourceType.CDC),
@@ -88,6 +89,7 @@ class InMemoryDelayedEventStoreTest {
     private static Pipeline pipeline() {
         return new Pipeline(
                 1L,
+                "smoke",
                 1,
                 "team",
                 "app",

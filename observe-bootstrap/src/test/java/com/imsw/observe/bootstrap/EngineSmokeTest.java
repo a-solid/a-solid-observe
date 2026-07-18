@@ -121,6 +121,7 @@ class EngineSmokeTest {
                 Set.of("amt"));
         return new Pipeline(
                 1L,
+                "smoke",
                 1,
                 "smoke-team",
                 "smoke-app",
