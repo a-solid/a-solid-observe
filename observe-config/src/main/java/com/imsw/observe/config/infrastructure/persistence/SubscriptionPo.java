@@ -17,6 +17,9 @@ public class SubscriptionPo {
     @Column(name = "id", nullable = false)
     public Long id;
 
+    @Column(name = "namespace", nullable = false)
+    public String namespace;
+
     @Column(name = "pipeline_id", nullable = false)
     public Long pipelineId;
 

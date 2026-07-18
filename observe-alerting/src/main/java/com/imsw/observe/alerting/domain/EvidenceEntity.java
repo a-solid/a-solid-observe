@@ -5,6 +5,7 @@ import java.util.Map;
 
 public record EvidenceEntity(
         Long alertId,
+        String namespace,
         Long pipelineId,
         int pipelineVersion,
         Long executionId,

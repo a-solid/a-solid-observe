@@ -9,6 +9,7 @@ import com.imsw.observe.pipeline.domain.subscription.Condition;
 
 public record Subscription(
         Long id,
+        String namespace,
         Long pipelineId,
         int pipelineVersion,
         String mq,

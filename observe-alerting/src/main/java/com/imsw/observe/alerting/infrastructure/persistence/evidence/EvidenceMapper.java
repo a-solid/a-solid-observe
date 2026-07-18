@@ -12,6 +12,7 @@ public final class EvidenceMapper {
         }
         return new EvidenceEntity(
                 po.alertId,
+                po.namespace,
                 po.pipelineId,
                 po.pipelineVersion == null ? 0 : po.pipelineVersion,
                 po.executionId,
@@ -29,6 +30,7 @@ public final class EvidenceMapper {
         }
         EvidencePo po = new EvidencePo();
         po.alertId = entity.alertId();
+        po.namespace = entity.namespace();
         po.pipelineId = entity.pipelineId();
         po.pipelineVersion = entity.pipelineVersion();
         po.executionId = entity.executionId();

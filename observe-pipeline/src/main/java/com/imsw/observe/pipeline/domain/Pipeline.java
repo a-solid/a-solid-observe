@@ -6,6 +6,7 @@ import java.util.Map;
 
 public record Pipeline(
         Long id,
+        String namespace,
         int version,
         String team,
         String application,

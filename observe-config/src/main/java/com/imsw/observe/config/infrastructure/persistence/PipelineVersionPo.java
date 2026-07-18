@@ -13,6 +13,9 @@ import jakarta.persistence.Table;
 @IdClass(PipelineVersionPk.class)
 public class PipelineVersionPo {
 
+    @Column(name = "namespace", nullable = false)
+    public String namespace;
+
     @Id
     @Column(name = "pipeline_id", nullable = false)
     public Long pipelineId;

@@ -4,6 +4,7 @@ import java.time.Instant;
 
 public record Execution(
         Long id,
+        String namespace,
         Long pipelineId,
         int pipelineVersion,
         String team,

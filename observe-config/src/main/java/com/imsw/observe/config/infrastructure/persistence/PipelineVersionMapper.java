@@ -11,6 +11,7 @@ public final class PipelineVersionMapper {
             return null;
         }
         return new PipelineVersion(
+                po.namespace,
                 po.pipelineId,
                 po.version == null ? 0 : po.version,
                 po.definitionJson,
@@ -26,6 +27,7 @@ public final class PipelineVersionMapper {
             return null;
         }
         PipelineVersionPo po = new PipelineVersionPo();
+        po.namespace = entity.namespace();
         po.pipelineId = entity.pipelineId();
         po.version = entity.version();
         po.definitionJson = entity.definitionJson();

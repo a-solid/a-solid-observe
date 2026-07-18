@@ -20,6 +20,7 @@ public final class SubscriptionMapper {
         }
         return new Subscription(
                 po.id,
+                po.namespace,
                 po.pipelineId,
                 nullSafeInt(po.pipelineVersion),
                 po.mq,
@@ -46,6 +47,7 @@ public final class SubscriptionMapper {
         }
         SubscriptionPo po = new SubscriptionPo();
         po.id = entity.id();
+        po.namespace = entity.namespace();
         po.pipelineId = entity.pipelineId();
         po.pipelineVersion = entity.pipelineVersion();
         po.mq = entity.mq();

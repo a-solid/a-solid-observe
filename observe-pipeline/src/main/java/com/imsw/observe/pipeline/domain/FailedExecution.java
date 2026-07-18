@@ -4,6 +4,7 @@ import java.time.Instant;
 
 public record FailedExecution(
         Long id,
+        String namespace,
         Long pipelineId,
         int pipelineVersion,
         Long executionId,

@@ -7,6 +7,7 @@ import com.imsw.observe.kernel.alert.model.Severity;
 
 public record AlertEntity(
         Long id,
+        String namespace,
         String team,
         String application,
         Map<String, String> pipelineLabels,

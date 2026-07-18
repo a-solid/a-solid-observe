@@ -16,6 +16,7 @@ public final class AlertMapper {
         }
         return new AlertEntity(
                 po.id,
+                po.namespace,
                 po.team,
                 po.application,
                 po.pipelineLabels,
@@ -42,6 +43,7 @@ public final class AlertMapper {
         }
         AlertPo po = new AlertPo();
         po.id = entity.id();
+        po.namespace = entity.namespace();
         po.team = entity.team();
         po.application = entity.application();
         po.pipelineLabels = entity.pipelineLabels();

@@ -5,6 +5,7 @@ import java.util.Map;
 
 public record ExecutionMeta(
         Long executionId,
+        String namespace,
         Long pipelineId,
         int pipelineVersion,
         String team,

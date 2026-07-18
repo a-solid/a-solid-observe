@@ -19,6 +19,9 @@ public class AlertPo {
     @Column(name = "id", nullable = false)
     public Long id;
 
+    @Column(name = "namespace", nullable = false)
+    public String namespace;
+
     @Column(name = "team", nullable = false)
     public String team;
 
