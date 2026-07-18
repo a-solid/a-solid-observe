@@ -6,10 +6,10 @@ import java.util.Map;
 import com.imsw.observe.alerting.domain.EvidenceEntity;
 
 public record EvidenceDto(
-        String alertId,
-        String pipelineId,
+        Long alertId,
+        Long pipelineId,
         int pipelineVersion,
-        String executionId,
+        Long executionId,
         String nodeName,
         Map<String, Object> outputs,
         String traceId,

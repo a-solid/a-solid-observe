@@ -6,7 +6,7 @@ import java.util.Map;
 import com.imsw.observe.config.domain.PipelineDefinition;
 
 public record PipelineDto(
-        String id,
+        Long id,
         String team,
         String application,
         Map<String, String> labels,

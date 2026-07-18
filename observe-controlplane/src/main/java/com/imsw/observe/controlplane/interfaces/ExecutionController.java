@@ -25,7 +25,7 @@ public class ExecutionController {
 
     @GetMapping("/executions")
     public List<ExecutionDto> executions(
-            @RequestParam(name = "pipeline_id", required = false) final String pipelineId,
+            @RequestParam(name = "pipeline_id", required = false) final Long pipelineId,
             @RequestParam(name = "limit", required = false, defaultValue = "100") final int limit) {
         return service.findExecutions(pipelineId, limit).stream()
                 .map(ExecutionDto::from)
@@ -33,7 +33,7 @@ public class ExecutionController {
     }
 
     @GetMapping("/executions/{id}")
-    public ResponseEntity<ExecutionDto> execution(@PathVariable final String id) {
+    public ResponseEntity<ExecutionDto> execution(@PathVariable final Long id) {
         return service.findExecution(id)
                 .map(ExecutionDto::from)
                 .map(ResponseEntity::ok)
@@ -42,7 +42,7 @@ public class ExecutionController {
 
     @GetMapping("/failed-executions")
     public List<FailedExecutionDto> failedExecutions(
-            @RequestParam(name = "pipeline_id", required = false) final String pipelineId,
+            @RequestParam(name = "pipeline_id", required = false) final Long pipelineId,
             @RequestParam(name = "limit", required = false, defaultValue = "100") final int limit) {
         return service.findFailedExecutions(pipelineId, limit).stream()
                 .map(FailedExecutionDto::from)
@@ -50,7 +50,7 @@ public class ExecutionController {
     }
 
     @GetMapping("/failed-executions/{id}")
-    public ResponseEntity<FailedExecutionDto> failedExecution(@PathVariable final String id) {
+    public ResponseEntity<FailedExecutionDto> failedExecution(@PathVariable final Long id) {
         return service.findFailedExecution(id)
                 .map(FailedExecutionDto::from)
                 .map(ResponseEntity::ok)
