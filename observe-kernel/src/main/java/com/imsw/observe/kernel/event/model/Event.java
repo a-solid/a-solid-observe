@@ -1,10 +1,38 @@
 package com.imsw.observe.kernel.event.model;
 
 import java.time.Instant;
-import java.util.Map;
 
-public record Event(EventMeta meta, Map<String, Object> before, Map<String, Object> after, Op op, Instant sourceTs) {
+import com.fasterxml.jackson.annotation.JsonSubTypes;
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
 
-    public record EventMeta(
-            SourceType sourceType, String source, String db, String table, Map<String, Object> attributes) {}
+/**
+ * 事件契约（sealed interface + per-source 子类型）。参见 ADR-0006。
+ *
+ * <p>各 source 的事件形态差异巨大（CDC 有 before/after/op；Cron 仅触发无 payload；Api 有 HTTP body；
+ * Delayed 嵌套原事件），用单一 record + 可空字段表达不清，故改为 sealed interface，每 source 一个子类型，
+ * 类型安全 + 编译期区分 + 新 source 数据有正经载体。
+ *
+ * <p>各子类型的 {@code Meta} 是独立的 top-level record（{@link CdcMeta}/{@link TickMeta}/
+ * {@link ApiMeta}/{@link DelayedMeta}），不再共用旧 {@code Event.EventMeta}。sourceType 不再
+ * 冗余挂在 meta 上——子类型本身即隐含 sourceType。
+ *
+ * <h2>Jackson 多态序列化</h2>
+ *
+ * trigger_event / evidence 等字段会把 {@code Event} 序列化为 JSON
+ * （见 {@link ExecutionMeta#triggerEvent()}）。
+ * 通过 {@code @JsonTypeInfo(Id.NAME, property="@type")} + {@code @JsonSubTypes} 列出全部 4 个子类型，
+ * Jackson 在序列化时写出 {@code "@type": "CdcEvent"|...} 标识，反序列化时按标识还原子类型；
+ * {@link DelayedEvent#originalEvent()} 递归嵌套 {@code Event} 也按相同机制 round-trip。
+ */
+@JsonTypeInfo(use = JsonTypeInfo.Id.NAME, property = "@type")
+@JsonSubTypes({
+    @JsonSubTypes.Type(value = CdcEvent.class, name = "CdcEvent"),
+    @JsonSubTypes.Type(value = TickEvent.class, name = "TickEvent"),
+    @JsonSubTypes.Type(value = ApiEvent.class, name = "ApiEvent"),
+    @JsonSubTypes.Type(value = DelayedEvent.class, name = "DelayedEvent"),
+})
+public sealed interface Event permits CdcEvent, TickEvent, ApiEvent, DelayedEvent {
+
+    /** Source 端时间戳（CDC 消息时间 / Cron 触发时间 / Api 接收时间 / Delayed 实际 fire 时间）。 */
+    Instant sourceTs();
 }
