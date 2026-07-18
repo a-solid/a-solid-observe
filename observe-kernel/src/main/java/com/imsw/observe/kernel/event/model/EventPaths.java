@@ -1,8 +1,6 @@
-package com.imsw.observe.pipeline.infrastructure.source;
+package com.imsw.observe.kernel.event.model;
 
 import java.util.Map;
-
-import com.imsw.observe.kernel.event.model.Event;
 
 public final class EventPaths {
 

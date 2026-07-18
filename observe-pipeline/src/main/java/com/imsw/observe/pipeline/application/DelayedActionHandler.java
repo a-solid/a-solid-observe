@@ -8,12 +8,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.imsw.observe.kernel.event.model.Event;
+import com.imsw.observe.kernel.event.model.EventPaths;
 import com.imsw.observe.kernel.event.model.Op;
 import com.imsw.observe.kernel.event.model.SourceType;
 import com.imsw.observe.pipeline.domain.Pipeline;
 import com.imsw.observe.pipeline.domain.subscription.Action;
 import com.imsw.observe.pipeline.domain.subscription.Subscription;
-import com.imsw.observe.pipeline.infrastructure.source.EventPaths;
 
 /**
  * 延时动作处理器（application 层）。承接 domain 逻辑：correlationKey 提取（EventPaths）、
