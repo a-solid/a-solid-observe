@@ -1,12 +1,12 @@
 CREATE TABLE executions (
-    id VARCHAR(36) PRIMARY KEY,
-    pipeline_id VARCHAR(64) NOT NULL,
+    id BIGINT PRIMARY KEY,
+    pipeline_id BIGINT NOT NULL,
     pipeline_version INT NOT NULL,
     team VARCHAR NOT NULL,
     application VARCHAR NOT NULL,
     trigger_type VARCHAR NOT NULL,
     trigger_event LONG VARCHAR,
-    subscription_id VARCHAR,
+    subscription_id BIGINT,
 
     status VARCHAR NOT NULL,
     started_at TIMESTAMP NOT NULL,
@@ -26,15 +26,15 @@ CREATE INDEX idx_exec_sub ON executions(subscription_id, started_at DESC);
 CREATE INDEX idx_exec_trigger ON executions(trigger_type, started_at DESC);
 
 CREATE TABLE failed_executions (
-    id VARCHAR(36) PRIMARY KEY,
-    pipeline_id VARCHAR(64) NOT NULL,
+    id BIGINT PRIMARY KEY,
+    pipeline_id BIGINT NOT NULL,
     pipeline_version INT NOT NULL,
-    execution_id VARCHAR,
+    execution_id BIGINT,
     team VARCHAR NOT NULL,
     application VARCHAR NOT NULL,
     trigger_type VARCHAR NOT NULL,
     trigger_event LONG VARCHAR,
-    subscription_id VARCHAR,
+    subscription_id BIGINT,
 
     node_name VARCHAR,
     error_type VARCHAR,
