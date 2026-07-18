@@ -26,7 +26,7 @@ import com.imsw.observe.kernel.event.model.CdcMeta;
 import com.imsw.observe.kernel.event.model.CdcOp;
 import com.imsw.observe.kernel.event.model.Event;
 import com.imsw.observe.kernel.event.model.SourceType;
-import com.imsw.observe.pipeline.application.CronScheduler;
+import com.imsw.observe.pipeline.application.CronSource;
 import com.imsw.observe.pipeline.application.PipelineRegistry;
 import com.imsw.observe.pipeline.domain.ErrorPolicy;
 import com.imsw.observe.pipeline.domain.NodeSpec;
@@ -62,7 +62,7 @@ class EndToEndFlowTest {
     private PipelineHotReloader hotReloader;
 
     @Autowired
-    private CronScheduler cronScheduler;
+    private CronSource cronScheduler;
 
     @Autowired
     private InMemoryCdcSource cdcSource;
@@ -145,7 +145,7 @@ class EndToEndFlowTest {
 
     /**
      * CRON 订阅端到端路由（ADR-0007 B4 P3 验证）：建 namespace + pipeline + 一条 {@code "* * * * * ?"}
-     * 每秒触发的 CRON 订阅，热加载（触发 {@link CronScheduler#sync}），等待真实 fire 落库告警。
+     * 每秒触发的 CRON 订阅，热加载（触发 {@link CronSource#sync}），等待真实 fire 落库告警。
      *
      * <p>覆盖 P3 路由 bug 修正：TickEvent.meta().source() 必须等于订阅在 subscriptionsBySource 的索引键，
      * 否则 matcher 查不到、TickEvent 永不路由、pipeline 不执行、告警不落库。
@@ -195,7 +195,7 @@ class EndToEndFlowTest {
                 SubscriptionDefinition.Concurrent.SKIP);
         subscriptions.create(sub);
 
-        // 热加载后显式同步 CronScheduler——与生产 HotReloaderScheduler.refresh() 末尾的 sync 调用一致
+        // 热加载后显式同步 CronSource——与生产 HotReloaderScheduler.refresh() 末尾的 sync 调用一致
         // （@Scheduled 30s 周期太慢，测试主动触发以保证确定性）。
         hotReloader.refresh();
         cronScheduler.sync(registry.snapshot());
@@ -206,7 +206,7 @@ class EndToEndFlowTest {
         // namespace 软隔离：cron 触发链路同样落库到触发订阅所在 namespace。
         assertThat(alert.namespace).isEqualTo(NAMESPACE);
 
-        // 清理：删除 CRON 订阅并重新 sync，让 CronScheduler 取消调度句柄——避免后续测试
+        // 清理：删除 CRON 订阅并重新 sync，让 CronSource 取消调度句柄——避免后续测试
         // （cdcEventMatchesAndPersistsAlert 共享同一 Spring 上下文/DB）期间 CRON 仍在每秒 fire
         // 污染 evidence 计数。
         subscriptions.delete(NAMESPACE, "e2e-cron-sub");

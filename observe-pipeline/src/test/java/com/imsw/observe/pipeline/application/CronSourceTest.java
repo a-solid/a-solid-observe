@@ -24,7 +24,7 @@ import com.imsw.observe.pipeline.domain.subscription.Subscription;
 import com.imsw.observe.pipeline.domain.subscription.Subscription.SourceRef.Concurrent;
 
 /**
- * {@link CronScheduler} 单测。timing 尽量确定性化：
+ * {@link CronSource} 单测。timing 尽量确定性化：
  * <ul>
  *   <li>schedule / cancel / diff：用 {@code trackedCount()} 立即断言，不等真实 fire。</li>
  *   <li>TickEvent 投递：{@code "* * * * * ?"} 每秒 + {@link CountDownLatch} await（≤3s）。</li>
@@ -34,13 +34,13 @@ import com.imsw.observe.pipeline.domain.subscription.Subscription.SourceRef.Conc
  *       立即触发（即无 catch-up）。</li>
  * </ul>
  */
-class CronSchedulerTest {
+class CronSourceTest {
 
     private ScheduledExecutorService ses;
 
     private CapturingListener listener;
 
-    private CronScheduler scheduler;
+    private CronSource scheduler;
 
     @BeforeEach
     void setUp() {
@@ -50,12 +50,14 @@ class CronSchedulerTest {
             return t;
         });
         listener = new CapturingListener();
-        scheduler = new CronScheduler(ses, listener);
+        scheduler = new CronSource(ses);
+        // B9 §4：listener 经 start 注入（与其他 Source 一致），不再走构造参数。
+        scheduler.start(listener);
     }
 
     @AfterEach
     void tearDown() {
-        scheduler.shutdown();
+        scheduler.stop();
     }
 
     @Test
@@ -155,7 +157,7 @@ class CronSchedulerTest {
         // 此时第一发的 fire 仍卡在 listener 内（holdOpen=1，未 countDown），running=true。
 
         // 测试线程直接再调一次 fire：应被 SKIP，不调 listener，计数不增。
-        CronScheduler.CronSub cronSub = CronScheduler.CronSub.from(sub);
+        CronSource.CronSub cronSub = CronSource.CronSub.from(sub);
         int before = listener.tickCount.get();
         scheduler.fire(42L, cronSub);
         int after = listener.tickCount.get();
@@ -174,7 +176,7 @@ class CronSchedulerTest {
         // 等第一发触发并 park（running=true 但 ALLOW 不查标志）。
         listener.firstEventLatch.await(3, TimeUnit.SECONDS);
 
-        CronScheduler.CronSub cronSub = CronScheduler.CronSub.from(sub);
+        CronSource.CronSub cronSub = CronSource.CronSub.from(sub);
         int before = listener.tickCount.get();
         // 直接再调 fire——ALLOW 应越过 CAS 再次调用 listener。
         scheduler.fire(43L, cronSub);
@@ -192,7 +194,7 @@ class CronSchedulerTest {
         scheduler.sync(snapshot(sub));
         listener.firstEventLatch.await(3, TimeUnit.SECONDS);
 
-        CronScheduler.CronSub cronSub = CronScheduler.CronSub.from(sub);
+        CronSource.CronSub cronSub = CronSource.CronSub.from(sub);
         int before = listener.tickCount.get();
         scheduler.fire(44L, cronSub);
         int after = listener.tickCount.get();
@@ -213,7 +215,64 @@ class CronSchedulerTest {
     }
 
     /**
-     * P3 路由契约：CronScheduler 产出的 TickEvent.meta().source() 必须等于该订阅在
+     * B9 §4 生命周期：start(listener) 注入 listener——未 start 的 CronSource sync 后 fire 不应投递
+     * （listener 仍 null，dispatch 防御性跳过 + 不 NPE）。
+     */
+    @Test
+    void dispatchSkipsWhenListenerNotStarted() {
+        // 新建一个 CronSource，故意不调 start（listener 为 null）。
+        CronSource unstarted = new CronSource(ses);
+        try {
+            // 用远未来表达式（每年 1 月 1 日），避免真实 fire 干扰；本测试只看同步 fire 行为。
+            Subscription sub = cronSub(7L, "every-second-no-start", "0 0 0 1 1 ?", Concurrent.SKIP);
+            unstarted.sync(snapshot(sub));
+            assertThat(unstarted.trackedCount()).isEqualTo(1);
+
+            // 同步驱动 fire：listener=null，dispatch 应跳过（不投递、不 NPE）。
+            CronSource.CronSub cronSub = CronSource.CronSub.from(sub);
+            unstarted.fire(7L, cronSub);
+
+            // 全局 listener（来自 @BeforeEach 的 started scheduler）不应收到任何事件——证明 unstarted
+            // 的 dispatch 完全没有投递（隔离验证）。
+            assertThat(listener.tickCount.get()).isZero();
+        } finally {
+            unstarted.stop();
+        }
+    }
+
+    /**
+     * B9 §4 生命周期：stop() 等价旧 shutdown()——标记停止、取消句柄、清状态、关 SES。stop 后再 sync
+     * 不再起新句柄（{@code shutdown} 标志守卫）。
+     */
+    @Test
+    void stopClearsStateAndBlocksSubsequentSync() {
+        Subscription sub = cronSub(8L, "every-second-stop", "* * * * * ?", Concurrent.SKIP);
+        scheduler.sync(snapshot(sub));
+        assertThat(scheduler.trackedCount()).isEqualTo(1);
+
+        scheduler.stop();
+
+        // stop 后内部状态应清空。
+        assertThat(scheduler.trackedCount()).isZero();
+
+        // stop 后再 sync 不应起任何句柄（shutdown 标志拦截）。
+        scheduler.sync(snapshot(sub));
+        assertThat(scheduler.trackedCount()).isZero();
+
+        // 标记 scheduler 已停，避免 @AfterEach 再调 stop 抛 SES 已关异常——tearDown 调 stop 仍幂等。
+        // （ScheduledExecutorService.shutdown 后再 shutdown 是 no-op，不抛；此处仅为可读性。）
+    }
+
+    /**
+     * B9 §4 Source 契约：CronSource 实现 Source。编译期断言（instanceof 不是必须，但显式标注让契约清晰）。
+     */
+    @Test
+    void cronSourceImplementsSourceContract() {
+        assertThat(scheduler).isInstanceOf(Source.class);
+    }
+
+    /**
+     * P3 路由契约：CronSource 产出的 TickEvent.meta().source() 必须等于该订阅在
      * Snapshot.subscriptionsBySource 索引里的键（= sub.source().mq()）——否则
      * DefaultSubscriptionMatcher.matchesNamed 查不到对应订阅，TickEvent 永远不路由。
      *
@@ -250,7 +309,7 @@ class CronSchedulerTest {
         scheduler.sync(snap);
 
         // 同步触发一次 fire（避开 SES 时序，确定性断言）。
-        CronScheduler.CronSub cronSub = CronScheduler.CronSub.from(sub);
+        CronSource.CronSub cronSub = CronSource.CronSub.from(sub);
         scheduler.fire(5L, cronSub);
 
         assertThat(listener.received).hasSize(1);

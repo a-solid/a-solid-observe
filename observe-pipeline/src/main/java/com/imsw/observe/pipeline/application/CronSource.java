@@ -27,7 +27,7 @@ import com.imsw.observe.pipeline.domain.subscription.Subscription;
 import com.imsw.observe.pipeline.domain.subscription.Subscription.SourceRef.Concurrent;
 
 /**
- * Cron per-subscription 调度器（B4，ADR-0007）。
+ * Cron per-subscription 调度源（B4 ADR-0007 + B9 §4 对齐 {@link Source} 契约）。
  *
  * <p>有状态组件：作为 {@link PipelineRegistry} 的观察者。每次 {@link #sync(Snapshot)} 与当前跟踪的
  * CRON 订阅做 diff——新增/变更（{@code cronExpression}/{@code cronName}/{@code concurrent} 变化）→
@@ -48,17 +48,27 @@ import com.imsw.observe.pipeline.domain.subscription.Subscription.SourceRef.Conc
  * 投给 {@link EventListener#onEvent(Event)}（运行时 = {@code SourceDispatcher::onEvent}），
  * 由 matcher 按 source（= mq）路由到订阅了该 cron 的 pipeline。
  *
+ * <p><b>生命周期（B9 §4）</b>：本类 {@code implements Source}，与其他 Source（IbmMqCdcSource / ApiSource /
+ * InMemoryCdcSource）统一由 {@code WorkerShutdown} 收集到的 {@code List<Source>} 起停。
+ * {@link #start(EventListener)} 注入 listener（替代旧构造参数），{@link #stop()} 取消全部句柄 + 关 SES。
+ * {@link #sync(Snapshot)} 不进 {@code Source} 接口（cron 专属热加载），仍由 {@code PipelineHotReloader}
+ * 显式调；sync 若在 start 之前被调用（listener 为 null），防御性记 warn 并跳过——不 NPE。
+ *
  * <p>本类属 application 层：只依赖 application 端口 {@link EventListener} + kernel Event。
  * 无 infrastructure 具体导入（{@link ScheduledExecutorService} /
  * {@link CronExpression} 为 JDK/Spring 通用并发与表达式工具，非领域 infrastructure）。
  */
-public final class CronScheduler {
+public final class CronSource implements Source {
 
-    private static final Logger LOG = LoggerFactory.getLogger(CronScheduler.class);
+    private static final Logger LOG = LoggerFactory.getLogger(CronSource.class);
 
     private final ScheduledExecutorService scheduler;
 
-    private final EventListener listener;
+    /**
+     * listener 注入点（B9 §4）：由 {@link #start(EventListener)} 注入。{@code volatile} 保证 fire 线程读到
+     * 最新值。sync 在 start 之前被调用时为 null——{@link #dispatch} 防御性判 null 跳过。
+     */
+    private volatile EventListener listener;
 
     /** key = subscription id；value = 当前投递在 SES 上的调度句柄（每 fire 周期更新）。 */
     private final ConcurrentMap<Long, ScheduledFuture<?>> bySubscriptionId = new ConcurrentHashMap<>();
@@ -69,12 +79,29 @@ public final class CronScheduler {
     /** key = subscription id；value = 已跟踪的 CronSub（diff 增量更新的依据）。 */
     private final ConcurrentMap<Long, CronSub> tracked = new ConcurrentHashMap<>();
 
-    /** 标记 shutdown 已调用，避免 shutdown 后再 sync/schedule。 */
+    /** 标记 stop 已调用，避免 stop 后再 sync/schedule。 */
     private volatile boolean shutdown = false;
 
-    public CronScheduler(final ScheduledExecutorService scheduler, final EventListener listener) {
+    /**
+     * 只注入调度线程池；listener 改由 {@link #start(EventListener)} 注入（B9 §4 与其他 Source 对齐）。
+     *
+     * @param scheduler cron 专用 {@link ScheduledExecutorService}（装配方提供独立线程池）
+     */
+    public CronSource(final ScheduledExecutorService scheduler) {
         this.scheduler = scheduler;
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>注入 listener（运行时 = {@code SourceDispatcher::onEvent}）。SES 由装配方的 bean
+     * {@code destroyMethod=shutdown} 单独管理，不在此启停——start 的语义仅是"绑定 listener 让
+     * {@link #sync} 后续可产出 TickEvent"。
+     */
+    @Override
+    public void start(final EventListener listener) {
         this.listener = listener;
+        LOG.info("CronSource started");
     }
 
     /**
@@ -228,6 +255,14 @@ public final class CronScheduler {
     }
 
     private void dispatch(final Long id, final CronSub sub) {
+        // 防御（B9 §4）：listener 由 start() 注入；若 sync 在 start 之前被调用并已起调度句柄，
+        // 到点 fire 走到这里 listener 仍可能为 null——跳过本次投递（re-arm 仍由 fire 末尾执行，
+        // 等 listener 就位后下一发即恢复），不 NPE。
+        EventListener sink = this.listener;
+        if (sink == null) {
+            LOG.warn("CRON subscription {} fire skipped: CronSource not started (listener null)", id);
+            return;
+        }
         // TickMeta.source 必须等于订阅在 Snapshot.subscriptionsBySource 的索引键——该索引键就是
         // sub.source().mq()（见 PipelineRegistry.Snapshot.loaded），与 CronSub.source 同源（from() 直接取
         // s.mq()）。因此 source 取 sub.source 本身即可，不再优先 cronName：cronName 仅作为 TickMeta 元数据
@@ -239,7 +274,7 @@ public final class CronScheduler {
         Event event = new TickEvent(meta, Instant.now());
         try {
             // B9：单事件契约（onBatch 已下线）。onEvent 阻塞入队——队列满时反压到 cron fire（轻微延后）。
-            listener.onEvent(event);
+            sink.onEvent(event);
         } catch (RuntimeException e) {
             // 下游失败不影响 re-arm（at-least-once 由下游负责；本类保证下一发仍调度）。
             LOG.warn("CRON subscription {} listener.onEvent failed", id, e);
@@ -268,11 +303,15 @@ public final class CronScheduler {
     }
 
     /**
-     * 关闭：取消全部句柄、清空状态、shutdown SES。
+     * {@inheritDoc}
      *
-     * <p>由调用方（Task 3 装配）作为 bean destroyMethod 调用；本类自测中由测试驱动。
+     * <p>关闭：标记 stop、取消全部句柄、清空状态、shutdown SES。SES 的 {@code shutdown()} 与装配方
+     * bean 的 {@code destroyMethod=shutdown} 幂等（重复调用无副作用）。
+     *
+     * <p>由 {@code WorkerShutdown} 经统一 {@code List<Source>} 调用；本类自测中由测试驱动。
      */
-    public void shutdown() {
+    @Override
+    public void stop() {
         shutdown = true;
         for (ScheduledFuture<?> f : bySubscriptionId.values()) {
             f.cancel(false);
@@ -281,7 +320,7 @@ public final class CronScheduler {
         runningFlags.clear();
         tracked.clear();
         scheduler.shutdown();
-        LOG.info("CronScheduler shutdown");
+        LOG.info("CronSource stopped");
     }
 
     /** 跟踪的 CRON 订阅数（自测/可观测）。 */

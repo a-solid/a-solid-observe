@@ -5,7 +5,7 @@ import java.util.Map;
 /**
  * {@link TickEvent} 的元数据（Cron 触发）。sourceType 由子类型隐式 = CRON，故不再单独字段（ADR-0006）。
  *
- * <p>由 {@code CronScheduler}（ADR-0007 B4）产出：{@code cronName}/{@code cronExpression} 为真实值，
+ * <p>由 {@code CronSource}（ADR-0007 B4，B9 §4 对齐 Source 契约）产出：{@code cronName}/{@code cronExpression} 为真实值，
  * {@code source} = 订阅在 {@code Snapshot.subscriptionsBySource} 的索引键（= sub.source().mq()，
  * 通常等于 cronName）——matcher 按此路由（见 {@code DefaultSubscriptionMatcher.matchesNamed}）。
  *

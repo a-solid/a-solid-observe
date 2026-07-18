@@ -24,7 +24,7 @@ import com.imsw.observe.bootstrap.worker.source.InMemoryCdcSource;
 import com.imsw.observe.config.application.ConfigLoader;
 import com.imsw.observe.config.application.PipelineHotReloader;
 import com.imsw.observe.config.application.PipelineRegistryLoader;
-import com.imsw.observe.pipeline.application.CronScheduler;
+import com.imsw.observe.pipeline.application.CronSource;
 import com.imsw.observe.pipeline.application.PipelineRegistry;
 import com.imsw.observe.pipeline.application.PipelineRunner;
 import com.imsw.observe.pipeline.application.SourceDispatcher;
@@ -148,9 +148,9 @@ public class WorkerConfig {
     }
 
     /**
-     * CronScheduler 专用调度线程池（ADR-0007 B4）。每条 CRON 订阅一个 schedule 句柄自递归投递；
-     * destroyMethod=shutdown 在容器关闭时终止线程池（{@link CronScheduler#shutdown()} 也会调用，
-     * 双重 shutdown 幂等）。
+     * CronSource 专用调度线程池（ADR-0007 B4）。每条 CRON 订阅一个 schedule 句柄自递归投递；
+     * {@code destroyMethod=shutdown} 在容器关闭时终止线程池（{@link CronSource#stop()} 内部也会
+     * 调一次 {@code shutdown()}，幂等）。
      */
     @Bean(destroyMethod = "shutdown")
     public ScheduledExecutorService cronSchedulerPool(final WorkerProperties props) {
@@ -162,30 +162,37 @@ public class WorkerConfig {
     }
 
     /**
-     * 每订阅 cron 调度器（ADR-0007）。监听 {@link PipelineRegistry} 快照变化：{@link CronScheduler#sync} diff
-     * 出新增/变更/删除的 CRON 订阅并起停调度句柄。运行时 listener = {@code SourceDispatcher::onEvent}，
-     * 到点产出 {@link com.imsw.observe.kernel.event.model.TickEvent} 由 matcher 按 cron name 路由。
+     * 每订阅 cron 调度源（ADR-0007 + B9 §4 对齐 {@link com.imsw.observe.pipeline.application.Source}）。
+     * 监听 {@link PipelineRegistry} 快照变化：{@link CronSource#sync} diff 出新增/变更/删除的 CRON 订阅
+     * 并起停调度句柄。运行时 listener = {@code SourceDispatcher::onEvent}，到点产出
+     * {@link com.imsw.observe.kernel.event.model.TickEvent} 由 matcher 按 source（= mq）路由。
+     *
+     * <p>{@code start(dispatcher::onEvent)} 注入 listener——与其他 Source（IbmMqCdcSource/ApiSource/
+     * InMemoryCdcSource）一致；Spring 自动把本 bean 收进 {@code List<Source>}，由
+     * {@link WorkerShutdown} 统一 {@code stop()}。
      */
     @Bean
-    public CronScheduler cronScheduler(
-            final ScheduledExecutorService cronSchedulerPool, final SourceDispatcher dispatcher) {
-        return new CronScheduler(cronSchedulerPool, dispatcher::onEvent);
+    public CronSource cronSource(final ScheduledExecutorService cronSchedulerPool, final SourceDispatcher dispatcher) {
+        CronSource source = new CronSource(cronSchedulerPool);
+        source.start(dispatcher::onEvent);
+        return source;
     }
 
     @Bean
     public ApplicationRunner workerColdStart(
-            final ConfigLoader configLoader, final PipelineRegistry registry, final CronScheduler cronScheduler) {
-        // 冷启动：先 load 落库快照，再 sync 让 CronScheduler 起订阅级调度句柄。
+            final ConfigLoader configLoader, final PipelineRegistry registry, final CronSource cronSource) {
+        // 冷启动：先 load 落库快照，再 sync 让 CronSource 起订阅级调度句柄。CronSource 此时已 start
+        // （bean 装配阶段注入 listener），sync 触发的 fire 才能正确投递 TickEvent。
         return args -> {
             configLoader.load();
-            cronScheduler.sync(registry.snapshot());
+            cronSource.sync(registry.snapshot());
         };
     }
 
     @Bean
     public HotReloaderScheduler hotReloaderScheduler(
-            final PipelineHotReloader reloader, final PipelineRegistry registry, final CronScheduler cronScheduler) {
-        return new HotReloaderScheduler(reloader, registry, cronScheduler);
+            final PipelineHotReloader reloader, final PipelineRegistry registry, final CronSource cronSource) {
+        return new HotReloaderScheduler(reloader, registry, cronSource);
     }
 
     public static class HotReloaderScheduler {
@@ -194,22 +201,20 @@ public class WorkerConfig {
 
         private final PipelineRegistry registry;
 
-        private final CronScheduler cronScheduler;
+        private final CronSource cronSource;
 
         HotReloaderScheduler(
-                final PipelineHotReloader reloader,
-                final PipelineRegistry registry,
-                final CronScheduler cronScheduler) {
+                final PipelineHotReloader reloader, final PipelineRegistry registry, final CronSource cronSource) {
             this.reloader = reloader;
             this.registry = registry;
-            this.cronScheduler = cronScheduler;
+            this.cronSource = cronSource;
         }
 
         @Scheduled(fixedDelay = 30_000L)
         public void refresh() {
             reloader.refresh();
-            // 热加载后将最新快照同步给 CronScheduler——它按订阅 diff 起停 cron 调度（ADR-0007）。
-            cronScheduler.sync(registry.snapshot());
+            // 热加载后将最新快照同步给 CronSource——它按订阅 diff 起停 cron 调度（ADR-0007）。
+            cronSource.sync(registry.snapshot());
         }
     }
 }

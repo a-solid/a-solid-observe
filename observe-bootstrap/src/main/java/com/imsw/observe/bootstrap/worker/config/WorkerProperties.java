@@ -14,7 +14,7 @@ public class WorkerProperties {
     private int runnerQueue = 1000;
 
     /**
-     * CronScheduler 调度线程池大小（ADR-0007 B4）。每条 CRON 订阅一个调度句柄，自递归投递；
+     * CronSource 调度线程池大小（ADR-0007 B4）。每条 CRON 订阅一个调度句柄，自递归投递；
      * 线程主要承载"算下一发 + 投 TickEvent + re-arm"，IO 由 runnerPool 承担，故 4 通常足够。
      */
     private int cronSchedulerPoolSize = 4;

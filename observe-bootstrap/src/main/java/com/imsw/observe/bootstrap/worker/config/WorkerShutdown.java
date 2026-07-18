@@ -10,7 +10,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
-import com.imsw.observe.pipeline.application.CronScheduler;
 import com.imsw.observe.pipeline.application.DelayedEventStore;
 import com.imsw.observe.pipeline.application.Source;
 import com.imsw.observe.pipeline.application.SourceDispatcher;
@@ -29,38 +28,34 @@ public class WorkerShutdown {
 
     private final DelayedEventStore delayedStore;
 
-    private final CronScheduler cronScheduler;
-
     private final SourceDispatcher dispatcher;
 
+    /**
+     * 统一 source 生命周期（B9 §4）：CronSource 也实现了 {@link Source}，被 Spring 收进
+     * {@code List<Source>}——无需再单独注入 CronScheduler/cron 句柄。
+     */
     public WorkerShutdown(
             final ThreadPoolExecutor runnerPool,
             final java.util.List<Source> sources,
             final DelayedEventStore delayedStore,
-            final CronScheduler cronScheduler,
             final SourceDispatcher dispatcher) {
         this.runnerPool = runnerPool;
         this.sources = sources;
         this.delayedStore = delayedStore;
-        this.cronScheduler = cronScheduler;
         this.dispatcher = dispatcher;
     }
 
     @PreDestroy
     public void shutdown() {
         LOG.info("graceful shutdown begin");
+        // 停所有 Source（含 CronSource：取消全部 cron 句柄 + shutdown 其 SES），避免关闭期间仍触发新
+        // pipeline 执行。CronSource.stop 等价旧 CronScheduler.shutdown。
         for (Source source : sources) {
             try {
                 source.stop();
             } catch (RuntimeException e) {
                 LOG.warn("source {} stop failed", source.getClass().getSimpleName(), e);
             }
-        }
-        // 先停 CronScheduler（取消全部 cron 句柄 + shutdown 其 SES），避免关闭期间仍触发新 pipeline 执行。
-        try {
-            cronScheduler.shutdown();
-        } catch (RuntimeException e) {
-            LOG.warn("cron scheduler shutdown failed", e);
         }
         // 停 dispatcher：drain 内部队列剩余事件（match+提交到 runnerPool）后中断分发线程。
         // dispatcher 的 destroyMethod=stop 也会再调一次（幂等）；此处主动提前 drain，保证 runnerPool

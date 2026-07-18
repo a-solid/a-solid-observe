@@ -124,8 +124,8 @@ _Avoid_: 与旧 `Op` 枚举混——旧 `Op` 把数据变更语义（INSERT/UPDA
 **Cron 订阅**:
 `sourceType=CRON` 的订阅，带 `cronExpression`（Spring `CronExpression` 6 字段：秒 分 时 日 月 周）+ 可选 `cron name` + `concurrent`（默认 SKIP）。配在 SubscriptionDefinition（与 CDC 订阅配 db/table 对称）。
 
-**CronScheduler**:
-有状态组件，作为 PipelineRegistry 的观察者。热加载（registry.replace）时 diff 新旧快照的 Cron 订阅，为新增/变更的 Cron 订阅起一个调度句柄，删除的取消。每 Cron 订阅一个调度句柄（调度单元 = 订阅，相同表达式也是独立调度）。到点产出 `TickEvent` 投给 SourceDispatcher，由 matcher 按 cron name / subscriptionId 路由到订阅了该 cron 的 pipeline。
+**CronSource**:
+有状态组件（B9 §4 起对齐 `Source` 契约，旧名 `CronScheduler`），作为 PipelineRegistry 的观察者。热加载（registry.replace）时 diff 新旧快照的 Cron 订阅，为新增/变更的 Cron 订阅起一个调度句柄，删除的取消。每 Cron 订阅一个调度句柄（调度单元 = 订阅，相同表达式也是独立调度）。生命周期与其他 Source 一致：`start(listener)` 注入 dispatcher listener、`stop()` 取消句柄 + 关闭调度线程池；`sync(snapshot)` 不进 Source 接口，仍由 HotReloader 显式调。到点产出 `TickEvent` 投给 SourceDispatcher，由 matcher 按 source（= mq）/ subscriptionId 路由到订阅了该 cron 的 pipeline。
 
 **Cron misfire（M1 忽略）**:
 worker 重启错过的 cron 调度不补跑，只看未来调度。与一期延时任务"重启丢失"风格一致。cron 无外部重发源（不像 CDC 有 MQ 重投），漏检靠业务容忍。

@@ -3,7 +3,7 @@ package com.imsw.observe.kernel.event.model;
 import java.time.Instant;
 
 /**
- * Cron 触发的"纯信号"事件。由 {@code CronScheduler}（ADR-0007 B4，每订阅一调度）到点产出。
+ * Cron 触发的"纯信号"事件。由 {@code CronSource}（ADR-0007 B4，每订阅一调度；B9 §4 对齐 Source 契约）到点产出。
  *
  * <p>无 payload：pipeline 脚本通过节点里的 {@code db.queryOne} 主动查询 DB（ADR-0006 §3）。
  *

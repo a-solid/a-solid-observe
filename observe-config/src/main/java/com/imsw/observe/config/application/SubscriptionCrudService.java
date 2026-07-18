@@ -149,7 +149,7 @@ public class SubscriptionCrudService {
      *       （解析失败抛 {@link IllegalArgumentException}，此处转译为清晰错误）。</li>
      *   <li>{@code mq}/{@code cronName} 不变性：CRON 订阅的索引键来源是 {@code mq}（见
      *       {@code PipelineRegistry.Snapshot.subscriptionsBySource} 以 {@code sub.source().mq()} 为 key），
-     *       而 {@code CronScheduler.dispatch} 用 {@code mq} 作为 {@code TickMeta.source} 路由键。若
+     *       而 {@code CronSource.dispatch} 用 {@code mq} 作为 {@code TickMeta.source} 路由键。若
      *       {@code cronName} 非 null 且与 {@code mq} 不一致，会在"索引键 vs 逻辑名"间产生二义性——
      *       此处从源头挡住：{@code cronName == null || cronName.equals(mq)}（即 cronName 缺省时以 mq 为
      *       规范名；给定则必须与 mq 严格一致）。参考 B4-T3 review Finding #2。</li>
