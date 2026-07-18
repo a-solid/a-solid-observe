@@ -3,15 +3,17 @@ package com.imsw.observe.pipeline.domain.subscription;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 import org.junit.jupiter.api.Test;
 
+import com.imsw.observe.kernel.event.model.CdcEvent;
+import com.imsw.observe.kernel.event.model.CdcMeta;
+import com.imsw.observe.kernel.event.model.CdcOp;
 import com.imsw.observe.kernel.event.model.Event;
-import com.imsw.observe.kernel.event.model.Op;
-import com.imsw.observe.kernel.event.model.SourceType;
 
 class ConditionTest {
 
@@ -75,8 +77,19 @@ class ConditionTest {
         assertThat(c.matches(event)).isFalse();
     }
 
+    @Test
+    void cdcMetaPathResolves() {
+        Event event = event(Map.of());
+        Condition onDb = new Condition.Compare("meta.db", Condition.Compare.Op.EQ, "trade_db");
+        Condition onTable = new Condition.Compare("meta.table", Condition.Compare.Op.EQ, "orders");
+        Condition onSource = new Condition.Compare("meta.source", Condition.Compare.Op.EQ, "mq");
+        assertThat(onDb.matches(event)).isTrue();
+        assertThat(onTable.matches(event)).isTrue();
+        assertThat(onSource.matches(event)).isTrue();
+    }
+
     private Event event(final Map<String, Object> after) {
-        Event.EventMeta meta = new Event.EventMeta(SourceType.CDC, "mq", "trade_db", "orders", Map.of());
-        return new Event(meta, Map.of(), after, Op.INSERT, java.time.Instant.now());
+        CdcMeta meta = new CdcMeta("mq", "trade_db", "orders", Map.of());
+        return new CdcEvent(meta, Map.of(), after, CdcOp.INSERT, Instant.now());
     }
 }
