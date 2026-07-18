@@ -1,21 +1,17 @@
 package com.imsw.observe.kernel.event.model;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 import com.imsw.observe.kernel.alert.model.AlertSignal;
 
 public class ExecutionData {
 
     public Event event;
-    public Map<String, Map<String, Object>> workingSpace;
     public List<AlertSignal> alerts;
     public boolean emittedAlert;
 
     public ExecutionData() {
-        this.workingSpace = new HashMap<>();
         this.alerts = new ArrayList<>();
     }
 

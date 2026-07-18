@@ -31,10 +31,6 @@ public final class PipelineRegistry {
         return snapshot.loaded;
     }
 
-    public Pipeline pipeline(final Long id) {
-        return snapshot.pipelinesById.get(id);
-    }
-
     public static final class Snapshot {
 
         final Map<Long, Pipeline> pipelinesById;
@@ -149,16 +145,7 @@ public final class PipelineRegistry {
             return pipelinesById.get(pipelineId);
         }
 
-        public int subscriptionCount() {
-            int count = subscriptionsByDbTable.values().stream()
-                    .mapToInt(List::size)
-                    .sum();
-            count +=
-                    subscriptionsBySource.values().stream().mapToInt(List::size).sum();
-            return count;
-        }
-
-        public static String dbTableKey(final String db, final String table) {
+        static String dbTableKey(final String db, final String table) {
             return (db == null ? "" : db) + "|" + (table == null ? "" : table);
         }
     }
