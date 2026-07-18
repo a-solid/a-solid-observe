@@ -6,7 +6,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.imsw.observe.kernel.event.model.Event;
-import com.imsw.observe.kernel.event.model.SourceType;
 import com.imsw.observe.pipeline.application.EventListener;
 import com.imsw.observe.pipeline.application.Source;
 
@@ -18,11 +17,6 @@ public final class InMemoryCdcSource implements Source {
     private static final Logger LOG = LoggerFactory.getLogger(InMemoryCdcSource.class);
 
     private EventListener listener;
-
-    @Override
-    public SourceType type() {
-        return SourceType.CDC;
-    }
 
     @Override
     public void start(final EventListener listener) {

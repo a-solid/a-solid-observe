@@ -60,8 +60,10 @@ public final class JpaExecutionRecorder implements ExecutionRecorder {
         po.pipelineVersion = meta.pipelineVersion();
         po.team = meta.team();
         po.application = meta.application();
-        po.triggerType =
-                meta.triggerType() == null ? "UNKNOWN" : meta.triggerType().name();
+        po.triggerType = (meta.triggerType() == null
+                        ? com.imsw.observe.kernel.event.model.SourceType.UNKNOWN
+                        : meta.triggerType())
+                .name();
         po.triggerEvent = serializeEvent(meta.triggerEvent());
         po.subscriptionId = meta.subscriptionId();
         po.status = outcome;
@@ -93,8 +95,10 @@ public final class JpaExecutionRecorder implements ExecutionRecorder {
         po.executionId = meta.executionId();
         po.team = meta.team();
         po.application = meta.application();
-        po.triggerType =
-                meta.triggerType() == null ? "UNKNOWN" : meta.triggerType().name();
+        po.triggerType = (meta.triggerType() == null
+                        ? com.imsw.observe.kernel.event.model.SourceType.UNKNOWN
+                        : meta.triggerType())
+                .name();
         po.triggerEvent = serializeEvent(meta.triggerEvent());
         po.subscriptionId = meta.subscriptionId();
         po.nodeName = nodeName;

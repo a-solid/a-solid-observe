@@ -19,7 +19,6 @@ import org.slf4j.LoggerFactory;
 
 import com.imsw.observe.kernel.error.MessageParseException;
 import com.imsw.observe.kernel.event.model.Event;
-import com.imsw.observe.kernel.event.model.SourceType;
 import com.imsw.observe.pipeline.application.EventListener;
 import com.imsw.observe.pipeline.application.Source;
 import com.imsw.observe.pipeline.infrastructure.source.MessageParser;
@@ -63,11 +62,6 @@ public final class IbmMqCdcSource implements Source, MessageListener {
         this.parser = parser;
         this.batchSize = batchSize;
         this.batchTimeoutMillis = batchTimeoutMillis;
-    }
-
-    @Override
-    public SourceType type() {
-        return SourceType.CDC;
     }
 
     @Override

@@ -6,7 +6,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.imsw.observe.kernel.event.model.ApiEvent;
-import com.imsw.observe.kernel.event.model.SourceType;
 import com.imsw.observe.pipeline.application.EventListener;
 import com.imsw.observe.pipeline.application.Source;
 
@@ -15,11 +14,6 @@ public final class ApiSource implements Source {
     private static final Logger LOG = LoggerFactory.getLogger(ApiSource.class);
 
     private EventListener listener;
-
-    @Override
-    public SourceType type() {
-        return SourceType.API;
-    }
 
     @Override
     public void start(final EventListener listener) {
