@@ -7,7 +7,7 @@ import com.imsw.observe.kernel.event.model.Op;
 import com.imsw.observe.kernel.event.model.SourceType;
 import com.imsw.observe.pipeline.domain.subscription.Condition;
 
-public record Subscription(
+public record SubscriptionDefinition(
         Long id,
         String namespace,
         Long pipelineId,

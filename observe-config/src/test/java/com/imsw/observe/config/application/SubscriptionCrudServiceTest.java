@@ -13,7 +13,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
 import com.imsw.observe.config.domain.Namespace;
-import com.imsw.observe.config.domain.Subscription;
+import com.imsw.observe.config.domain.SubscriptionDefinition;
 import com.imsw.observe.config.infrastructure.ConditionCodec;
 import com.imsw.observe.config.infrastructure.persistence.PipelineDefinitionPo;
 import com.imsw.observe.config.infrastructure.persistence.PipelineDefinitionRepository;
@@ -47,7 +47,7 @@ class SubscriptionCrudServiceTest {
         SubscriptionCrudService service = new SubscriptionCrudService(
                 repository, pipelineDefRepo, pipelineVersionRepo, codec, generator, namespaceCrudService);
 
-        Subscription sub = new Subscription(
+        SubscriptionDefinition sub = new SubscriptionDefinition(
                 null,
                 "billing", // subscription namespace
                 100L, // pipeline belongs to "payments"
@@ -59,12 +59,12 @@ class SubscriptionCrudServiceTest {
                 null,
                 null,
                 null,
-                Subscription.ActionType.RUN,
+                SubscriptionDefinition.ActionType.RUN,
                 null,
                 null,
                 "billing-rule",
                 "desc",
-                Subscription.Status.ACTIVE,
+                SubscriptionDefinition.Status.ACTIVE,
                 "alice",
                 null,
                 null);
@@ -95,7 +95,7 @@ class SubscriptionCrudServiceTest {
         SubscriptionCrudService service = new SubscriptionCrudService(
                 repository, pipelineDefRepo, pipelineVersionRepo, codec, generator, namespaceCrudService);
 
-        Subscription blankName = new Subscription(
+        SubscriptionDefinition blankName = new SubscriptionDefinition(
                 null,
                 "billing",
                 100L,
@@ -107,12 +107,12 @@ class SubscriptionCrudServiceTest {
                 null,
                 null,
                 null,
-                Subscription.ActionType.RUN,
+                SubscriptionDefinition.ActionType.RUN,
                 null,
                 null,
                 "   ",
                 "desc",
-                Subscription.Status.ACTIVE,
+                SubscriptionDefinition.Status.ACTIVE,
                 "alice",
                 null,
                 null);
@@ -140,7 +140,7 @@ class SubscriptionCrudServiceTest {
         SubscriptionCrudService service = new SubscriptionCrudService(
                 repository, pipelineDefRepo, pipelineVersionRepo, codec, generator, namespaceCrudService);
 
-        Subscription sub = new Subscription(
+        SubscriptionDefinition sub = new SubscriptionDefinition(
                 null,
                 "ghost",
                 100L,
@@ -152,12 +152,12 @@ class SubscriptionCrudServiceTest {
                 null,
                 null,
                 null,
-                Subscription.ActionType.RUN,
+                SubscriptionDefinition.ActionType.RUN,
                 null,
                 null,
                 "ghost-rule",
                 "desc",
-                Subscription.Status.ACTIVE,
+                SubscriptionDefinition.Status.ACTIVE,
                 "alice",
                 null,
                 null);

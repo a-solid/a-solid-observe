@@ -20,7 +20,7 @@ import com.imsw.observe.config.application.PipelineCrudService;
 import com.imsw.observe.config.application.PipelineHotReloader;
 import com.imsw.observe.config.application.SubscriptionCrudService;
 import com.imsw.observe.config.application.VersionPublishService;
-import com.imsw.observe.config.domain.Subscription;
+import com.imsw.observe.config.domain.SubscriptionDefinition;
 import com.imsw.observe.kernel.event.model.Event;
 import com.imsw.observe.kernel.event.model.Op;
 import com.imsw.observe.kernel.event.model.SourceType;
@@ -80,7 +80,7 @@ class EndToEndFlowTest {
         versions.saveDraft(NAMESPACE, PIPELINE_NAME, pipeline, "tester");
         versions.publish(NAMESPACE, PIPELINE_NAME, 1, "tester");
 
-        Subscription sub = new Subscription(
+        SubscriptionDefinition sub = new SubscriptionDefinition(
                 null,
                 NAMESPACE,
                 pipelineId,
@@ -92,12 +92,12 @@ class EndToEndFlowTest {
                 Set.of(Op.INSERT),
                 SourceType.CDC,
                 null,
-                Subscription.ActionType.RUN,
+                SubscriptionDefinition.ActionType.RUN,
                 null,
                 null,
                 "e2e-sub",
                 null,
-                Subscription.Status.ACTIVE,
+                SubscriptionDefinition.Status.ACTIVE,
                 "tester",
                 null,
                 null);

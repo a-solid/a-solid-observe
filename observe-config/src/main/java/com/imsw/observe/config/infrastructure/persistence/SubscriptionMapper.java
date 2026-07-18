@@ -5,7 +5,7 @@ import java.time.Instant;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import com.imsw.observe.config.domain.Subscription;
+import com.imsw.observe.config.domain.SubscriptionDefinition;
 import com.imsw.observe.config.infrastructure.ConditionCodec;
 import com.imsw.observe.kernel.event.model.Op;
 import com.imsw.observe.kernel.event.model.SourceType;
@@ -14,11 +14,11 @@ public final class SubscriptionMapper {
 
     private SubscriptionMapper() {}
 
-    public static Subscription toEntity(final SubscriptionPo po, final ConditionCodec codec) {
+    public static SubscriptionDefinition toEntity(final SubscriptionPo po, final ConditionCodec codec) {
         if (po == null) {
             return null;
         }
-        return new Subscription(
+        return new SubscriptionDefinition(
                 po.id,
                 po.namespace,
                 po.pipelineId,
@@ -41,7 +41,7 @@ public final class SubscriptionMapper {
                 po.updatedAt);
     }
 
-    public static SubscriptionPo toPo(final Subscription entity, final ConditionCodec codec) {
+    public static SubscriptionPo toPo(final SubscriptionDefinition entity, final ConditionCodec codec) {
         if (entity == null) {
             return null;
         }
@@ -99,19 +99,19 @@ public final class SubscriptionMapper {
         return type == null ? null : type.name();
     }
 
-    private static Subscription.ActionType toActionType(final String raw) {
-        return raw == null ? null : Subscription.ActionType.valueOf(raw);
+    private static SubscriptionDefinition.ActionType toActionType(final String raw) {
+        return raw == null ? null : SubscriptionDefinition.ActionType.valueOf(raw);
     }
 
-    private static String fromActionType(final Subscription.ActionType type) {
+    private static String fromActionType(final SubscriptionDefinition.ActionType type) {
         return type == null ? "RUN" : type.name();
     }
 
-    private static Subscription.Status toStatus(final String raw) {
-        return raw == null ? null : Subscription.Status.valueOf(raw);
+    private static SubscriptionDefinition.Status toStatus(final String raw) {
+        return raw == null ? null : SubscriptionDefinition.Status.valueOf(raw);
     }
 
-    private static String fromStatus(final Subscription.Status status) {
+    private static String fromStatus(final SubscriptionDefinition.Status status) {
         return status == null ? "ACTIVE" : status.name();
     }
 

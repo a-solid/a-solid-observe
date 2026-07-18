@@ -6,7 +6,7 @@ import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.imsw.observe.config.domain.Subscription;
+import com.imsw.observe.config.domain.SubscriptionDefinition;
 import com.imsw.observe.config.infrastructure.ConditionCodec;
 import com.imsw.observe.config.infrastructure.persistence.PipelineDefinitionPo;
 import com.imsw.observe.config.infrastructure.persistence.PipelineDefinitionRepository;
@@ -49,7 +49,7 @@ public class SubscriptionCrudService {
     }
 
     @Transactional
-    public Subscription create(final Subscription subscription) {
+    public SubscriptionDefinition create(final SubscriptionDefinition subscription) {
         // 软隔离铁律：namespace 必须存在；subscription.namespace 决定归属。
         if (namespaceCrudService.findByName(subscription.namespace()) == null) {
             throw new IllegalArgumentException("namespace not found: " + subscription.namespace());
@@ -76,7 +76,8 @@ public class SubscriptionCrudService {
     }
 
     @Transactional
-    public Subscription update(final String namespace, final String name, final Subscription subscription) {
+    public SubscriptionDefinition update(
+            final String namespace, final String name, final SubscriptionDefinition subscription) {
         SubscriptionPo existing = repository
                 .findByNamespaceAndName(namespace, name)
                 .orElseThrow(() -> new IllegalArgumentException("subscription not found: " + namespace + "/" + name));
@@ -91,7 +92,7 @@ public class SubscriptionCrudService {
     }
 
     @Transactional(readOnly = true)
-    public Subscription find(final String namespace, final String name) {
+    public SubscriptionDefinition find(final String namespace, final String name) {
         return repository
                 .findByNamespaceAndName(namespace, name)
                 .map(po -> SubscriptionMapper.toEntity(po, conditionCodec))
@@ -99,7 +100,7 @@ public class SubscriptionCrudService {
     }
 
     @Transactional(readOnly = true)
-    public List<Subscription> findAll(final String namespace) {
+    public List<SubscriptionDefinition> findAll(final String namespace) {
         return repository.findAllByNamespace(namespace).stream()
                 .map(po -> SubscriptionMapper.toEntity(po, conditionCodec))
                 .toList();
@@ -113,7 +114,7 @@ public class SubscriptionCrudService {
         repository.delete(po);
     }
 
-    private void validatePipeline(final Subscription subscription) {
+    private void validatePipeline(final SubscriptionDefinition subscription) {
         PipelineDefinitionPo def = pipelineDefinitionRepository
                 .findById(subscription.pipelineId())
                 .orElseThrow(() -> new IllegalArgumentException("pipeline not found: " + subscription.pipelineId()));

@@ -15,7 +15,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.imsw.observe.config.application.SubscriptionCrudService;
-import com.imsw.observe.config.domain.Subscription;
+import com.imsw.observe.config.domain.SubscriptionDefinition;
+import com.imsw.observe.config.domain.SubscriptionDefinition.ActionType;
+import com.imsw.observe.config.domain.SubscriptionDefinition.Status;
 import com.imsw.observe.controlplane.interfaces.dto.SubscriptionDto;
 import com.imsw.observe.kernel.event.model.Op;
 import com.imsw.observe.kernel.event.model.SourceType;
@@ -85,13 +87,12 @@ public class SubscriptionController {
             String description,
             String status) {
 
-        Subscription toDomain(final String namespace) {
+        SubscriptionDefinition toDomain(final String namespace) {
             Duration delay = scheduleDelayMs == null ? null : Duration.ofMillis(scheduleDelayMs);
-            Subscription.ActionType action =
-                    actionType == null ? Subscription.ActionType.RUN : Subscription.ActionType.valueOf(actionType);
-            Subscription.Status stat =
-                    status == null ? Subscription.Status.ACTIVE : Subscription.Status.valueOf(status);
-            return new Subscription(
+            SubscriptionDefinition.ActionType action =
+                    actionType == null ? ActionType.RUN : ActionType.valueOf(actionType);
+            SubscriptionDefinition.Status stat = status == null ? Status.ACTIVE : Status.valueOf(status);
+            return new SubscriptionDefinition(
                     null,
                     namespace,
                     pipelineId,
@@ -117,14 +118,14 @@ public class SubscriptionController {
 
     public record CreateSubscriptionRequest(SubscriptionFields subscription) {
 
-        Subscription toDomain(final String namespace) {
+        SubscriptionDefinition toDomain(final String namespace) {
             return subscription.toDomain(namespace);
         }
     }
 
     public record UpdateSubscriptionRequest(SubscriptionFields subscription) {
 
-        Subscription toDomain(final String namespace) {
+        SubscriptionDefinition toDomain(final String namespace) {
             return subscription.toDomain(namespace);
         }
     }
