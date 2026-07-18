@@ -1,5 +1,6 @@
 CREATE TABLE alerts (
     id BIGINT PRIMARY KEY,
+    namespace VARCHAR NOT NULL,
     team VARCHAR NOT NULL,
     application VARCHAR NOT NULL,
     pipeline_labels LONG VARCHAR,
@@ -27,6 +28,7 @@ CREATE TABLE alerts (
     CONSTRAINT ck_alerts_severity CHECK (severity IN ('INFO','WARNING','CRITICAL'))
 );
 
+CREATE INDEX idx_alerts_ns_status ON alerts(namespace, status, starts_at DESC);
 CREATE INDEX idx_alerts_status_ends ON alerts(status, ends_at);
 CREATE INDEX idx_alerts_team_time ON alerts(team, starts_at DESC);
 CREATE INDEX idx_alerts_fingerprint ON alerts(fingerprint, status);
@@ -38,6 +40,7 @@ CREATE INDEX idx_alerts_exec ON alerts(execution_id);
 
 CREATE TABLE alerts_evidence (
     alert_id BIGINT PRIMARY KEY,
+    namespace VARCHAR NOT NULL,
     pipeline_id BIGINT NOT NULL,
     pipeline_version INT NOT NULL,
     execution_id BIGINT NOT NULL,
@@ -52,5 +55,6 @@ CREATE TABLE alerts_evidence (
     size_bytes INT NOT NULL
 );
 
+CREATE INDEX idx_ev_ns_captured ON alerts_evidence(namespace, captured_at DESC);
 CREATE INDEX idx_ev_pipeline ON alerts_evidence(pipeline_id, captured_at DESC);
 CREATE INDEX idx_ev_exec ON alerts_evidence(execution_id);
