@@ -5,12 +5,12 @@ import java.util.Objects;
 
 public final class PipelineVersionPk implements Serializable {
 
-    public String pipelineId;
+    public Long pipelineId;
     public Integer version;
 
     public PipelineVersionPk() {}
 
-    public PipelineVersionPk(final String pipelineId, final Integer version) {
+    public PipelineVersionPk(final Long pipelineId, final Integer version) {
         this.pipelineId = pipelineId;
         this.version = version;
     }

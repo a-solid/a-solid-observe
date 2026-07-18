@@ -14,8 +14,8 @@ import jakarta.persistence.Table;
 public class PipelineVersionPo {
 
     @Id
-    @Column(name = "pipeline_id", length = 64, nullable = false)
-    public String pipelineId;
+    @Column(name = "pipeline_id", nullable = false)
+    public Long pipelineId;
 
     @Id
     @Column(name = "version", nullable = false)

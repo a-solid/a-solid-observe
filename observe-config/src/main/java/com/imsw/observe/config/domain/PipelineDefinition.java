@@ -4,7 +4,7 @@ import java.time.Instant;
 import java.util.Map;
 
 public record PipelineDefinition(
-        String id,
+        Long id,
         String team,
         String application,
         Map<String, String> labels,
