@@ -29,8 +29,12 @@ public class AlertQueryService {
         this.evidenceRepository = evidenceRepository;
     }
 
+    /**
+     * 列表查询，软隔离铁律（ADR-0002）：namespace 必填，行内存过滤（与既有 team/pipelineId 过滤同款；
+     * alert/evidence 资源表不对外暴露 BIGINT 物理主键，namespace 仅作软过滤维度）。
+     */
     public List<AlertEntity> findAlerts(
-            final String status, final String team, final Long pipelineId, final int limit) {
+            final String namespace, final String status, final String team, final Long pipelineId, final int limit) {
         int safeLimit = sanitizeLimit(limit);
         List<AlertEntity> alerts;
         if (status != null && !status.isBlank()) {
@@ -46,23 +50,32 @@ public class AlertQueryService {
                     .toList();
         }
         return alerts.stream()
+                .filter(a -> namespace == null || namespace.equals(a.namespace()))
                 .filter(a -> team == null || team.isBlank() || team.equals(a.team()))
                 .filter(a -> pipelineId == null || pipelineId.equals(a.pipelineId()))
                 .toList();
     }
 
-    public Optional<AlertEntity> findById(final Long id) {
+    /** 单条按 (namespace, id) 软校验：namespace 不匹配返回 empty，由控制层映射为 404。 */
+    public Optional<AlertEntity> findById(final String namespace, final Long id) {
         if (id == null) {
             return Optional.empty();
         }
-        return alertRepository.findById(id).map(AlertMapper::toEntity);
+        return alertRepository
+                .findById(id)
+                .map(AlertMapper::toEntity)
+                .filter(a -> namespace == null || namespace.equals(a.namespace()));
     }
 
-    public Optional<EvidenceEntity> findEvidenceByAlertId(final Long alertId) {
+    /** 单条按 (namespace, alertId) 软校验：namespace 不匹配返回 empty。 */
+    public Optional<EvidenceEntity> findEvidenceByAlertId(final String namespace, final Long alertId) {
         if (alertId == null) {
             return Optional.empty();
         }
-        return evidenceRepository.findByAlertId(alertId).map(EvidenceMapper::toEntity);
+        return evidenceRepository
+                .findByAlertId(alertId)
+                .map(EvidenceMapper::toEntity)
+                .filter(e -> namespace == null || namespace.equals(e.namespace()));
     }
 
     private static int sanitizeLimit(final int limit) {

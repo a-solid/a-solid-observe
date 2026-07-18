@@ -30,28 +30,41 @@ public class ExecutionQueryService {
         this.failedExecutionRepository = failedExecutionRepository;
     }
 
-    public List<Execution> findExecutions(final Long pipelineId, final int limit) {
+    /**
+     * 列表查询，软隔离铁律（ADR-0002）：namespace 必填，行内存过滤（与既有 pipelineId 过滤同款；
+     * execution 资源表不对外暴露 BIGINT 物理主键，namespace 仅作软过滤维度）。
+     */
+    public List<Execution> findExecutions(final String namespace, final Long pipelineId, final int limit) {
         int safeLimit = sanitize(limit);
         return executionRepository.findAll(PageRequest.of(0, safeLimit)).stream()
+                .filter(e -> namespace == null || namespace.equals(e.namespace))
                 .filter(e -> pipelineId == null || pipelineId.equals(e.pipelineId))
                 .map(ExecutionQueryService::toExecution)
                 .toList();
     }
 
-    public Optional<Execution> findExecution(final Long id) {
-        return executionRepository.findById(id).map(ExecutionQueryService::toExecution);
+    /** 单条按 (namespace, id) 软校验：namespace 不匹配返回 empty。 */
+    public Optional<Execution> findExecution(final String namespace, final Long id) {
+        return executionRepository
+                .findById(id)
+                .map(ExecutionQueryService::toExecution)
+                .filter(e -> namespace == null || namespace.equals(e.namespace()));
     }
 
-    public List<FailedExecution> findFailedExecutions(final Long pipelineId, final int limit) {
+    public List<FailedExecution> findFailedExecutions(final String namespace, final Long pipelineId, final int limit) {
         int safeLimit = sanitize(limit);
         return failedExecutionRepository.findAll(PageRequest.of(0, safeLimit)).stream()
+                .filter(e -> namespace == null || namespace.equals(e.namespace))
                 .filter(e -> pipelineId == null || pipelineId.equals(e.pipelineId))
                 .map(ExecutionQueryService::toFailedExecution)
                 .toList();
     }
 
-    public Optional<FailedExecution> findFailedExecution(final Long id) {
-        return failedExecutionRepository.findById(id).map(ExecutionQueryService::toFailedExecution);
+    public Optional<FailedExecution> findFailedExecution(final String namespace, final Long id) {
+        return failedExecutionRepository
+                .findById(id)
+                .map(ExecutionQueryService::toFailedExecution)
+                .filter(e -> namespace == null || namespace.equals(e.namespace()));
     }
 
     private static Execution toExecution(final ExecutionPo po) {

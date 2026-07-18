@@ -10,6 +10,7 @@ import com.imsw.observe.pipeline.domain.subscription.Condition;
 
 public record SubscriptionDto(
         Long id,
+        String namespace,
         Long pipelineId,
         int pipelineVersion,
         String mq,
@@ -28,6 +29,7 @@ public record SubscriptionDto(
         Duration delay = s.scheduleDelay();
         return new SubscriptionDto(
                 s.id(),
+                s.namespace(),
                 s.pipelineId(),
                 s.pipelineVersion(),
                 s.mq(),
