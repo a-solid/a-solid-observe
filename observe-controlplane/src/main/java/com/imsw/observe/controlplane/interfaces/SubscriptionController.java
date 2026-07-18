@@ -81,6 +81,7 @@ public class SubscriptionController {
                     status == null ? Subscription.Status.ACTIVE : Subscription.Status.valueOf(status);
             return new Subscription(
                     null,
+                    null,
                     pipelineId,
                     pipelineVersion,
                     mq,

@@ -55,6 +55,7 @@ public final class JpaExecutionRecorder implements ExecutionRecorder {
         ExecutionMeta meta = ctx.meta();
         ExecutionPo po = new ExecutionPo();
         po.id = snowflake.next();
+        po.namespace = meta.namespace();
         po.pipelineId = meta.pipelineId();
         po.pipelineVersion = meta.pipelineVersion();
         po.team = meta.team();
@@ -86,6 +87,7 @@ public final class JpaExecutionRecorder implements ExecutionRecorder {
         ExecutionMeta meta = ctx.meta();
         FailedExecutionPo po = new FailedExecutionPo();
         po.id = snowflake.next();
+        po.namespace = meta.namespace();
         po.pipelineId = meta.pipelineId();
         po.pipelineVersion = meta.pipelineVersion();
         po.executionId = meta.executionId();

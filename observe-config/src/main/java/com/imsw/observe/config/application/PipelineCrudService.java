@@ -20,26 +20,37 @@ public class PipelineCrudService {
 
     private final SnowflakeIdGenerator snowflakeIdGenerator;
 
+    private final NamespaceCrudService namespaceCrudService;
+
     public PipelineCrudService(
-            final PipelineDefinitionRepository repository, final SnowflakeIdGenerator snowflakeIdGenerator) {
+            final PipelineDefinitionRepository repository,
+            final SnowflakeIdGenerator snowflakeIdGenerator,
+            final NamespaceCrudService namespaceCrudService) {
         this.repository = repository;
         this.snowflakeIdGenerator = snowflakeIdGenerator;
+        this.namespaceCrudService = namespaceCrudService;
     }
 
     @Transactional
     public PipelineDefinition create(
+            final String namespace,
+            final String name,
             final String team,
             final String application,
             final Map<String, String> labels,
-            final String name,
             final String description,
             final String createdBy) {
-        long id = snowflakeIdGenerator.next();
-        if (repository.existsById(id)) {
-            throw new IllegalArgumentException("pipeline already exists: " + id);
+        // 软隔离铁律：namespace 必须存在（应用层校验，a-solid-observe 不使用 FK 约束）。
+        if (namespaceCrudService.findByName(namespace) == null) {
+            throw new IllegalArgumentException("namespace not found: " + namespace);
         }
+        if (repository.existsByNamespaceAndName(namespace, name)) {
+            throw new IllegalArgumentException("pipeline already exists: " + namespace + "/" + name);
+        }
+        long id = snowflakeIdGenerator.next();
         PipelineDefinitionPo po = new PipelineDefinitionPo();
         po.id = id;
+        po.namespace = namespace;
         po.team = team;
         po.application = application;
         po.labels = labels;
@@ -55,40 +66,44 @@ public class PipelineCrudService {
 
     @Transactional
     public PipelineDefinition update(
-            final Long id,
+            final String namespace,
+            final String name,
             final String team,
             final String application,
             final Map<String, String> labels,
-            final String name,
             final String description) {
-        PipelineDefinitionPo po =
-                repository.findById(id).orElseThrow(() -> new IllegalArgumentException("pipeline not found: " + id));
+        PipelineDefinitionPo po = repository
+                .findByNamespaceAndName(namespace, name)
+                .orElseThrow(() -> new IllegalArgumentException("pipeline not found: " + namespace + "/" + name));
         po.team = team;
         po.application = application;
         po.labels = labels;
-        po.name = name;
         po.description = description;
         po.updatedAt = Instant.now();
         return PipelineDefinitionMapper.toEntity(repository.save(po));
     }
 
     @Transactional
-    public void archive(final Long id) {
-        PipelineDefinitionPo po =
-                repository.findById(id).orElseThrow(() -> new IllegalArgumentException("pipeline not found: " + id));
+    public void archive(final String namespace, final String name) {
+        PipelineDefinitionPo po = repository
+                .findByNamespaceAndName(namespace, name)
+                .orElseThrow(() -> new IllegalArgumentException("pipeline not found: " + namespace + "/" + name));
         po.status = "ARCHIVED";
         po.updatedAt = Instant.now();
         repository.save(po);
     }
 
     @Transactional(readOnly = true)
-    public PipelineDefinition find(final Long id) {
-        return repository.findById(id).map(PipelineDefinitionMapper::toEntity).orElse(null);
+    public PipelineDefinition find(final String namespace, final String name) {
+        return repository
+                .findByNamespaceAndName(namespace, name)
+                .map(PipelineDefinitionMapper::toEntity)
+                .orElse(null);
     }
 
     @Transactional(readOnly = true)
-    public List<PipelineDefinition> findAll() {
-        return repository.findAll().stream()
+    public List<PipelineDefinition> findAll(final String namespace) {
+        return repository.findAllByNamespace(namespace).stream()
                 .map(PipelineDefinitionMapper::toEntity)
                 .toList();
     }

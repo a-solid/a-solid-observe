@@ -57,6 +57,7 @@ public class ExecutionQueryService {
     private static Execution toExecution(final ExecutionPo po) {
         return new Execution(
                 po.id,
+                po.namespace,
                 po.pipelineId,
                 po.pipelineVersion == null ? 0 : po.pipelineVersion,
                 po.team,
@@ -75,6 +76,7 @@ public class ExecutionQueryService {
     private static FailedExecution toFailedExecution(final FailedExecutionPo po) {
         return new FailedExecution(
                 po.id,
+                po.namespace,
                 po.pipelineId,
                 po.pipelineVersion == null ? 0 : po.pipelineVersion,
                 po.executionId,

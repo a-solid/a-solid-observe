@@ -118,6 +118,7 @@ public final class DefaultPipelineRunner implements PipelineRunner {
         Long executionId = snowflake.next();
         return new ExecutionMeta(
                 executionId,
+                pipeline.namespace(),
                 pipeline.id(),
                 pipeline.version(),
                 pipeline.team(),

@@ -88,8 +88,28 @@ public final class DefaultAlertSink implements com.imsw.observe.kernel.alert.spi
         }
         Map<String, String> annotations = annotationRenderer.render(signal.annotations(), ctx);
         EvidenceCollector.Collected evidence = evidenceCollector.collect(signal, ctx);
-        AlertEntity entity = new AlertEntity(
+        AlertEntity entity = buildAlertEntity(signal, meta, labels, annotations, fingerprint, now, endsAt);
+        AlertPo alertPo = AlertMapper.toPo(entity);
+        alertRepository.save(alertPo);
+        persistEvidence(alertPo.id, evidence.entity(), evidence.sizeBytes(), evidence.truncated());
+        LOG.info(
+                "alert inserted pipeline={} fingerprint={} severity={}",
+                meta.pipelineId(),
+                fingerprint,
+                signal.severity());
+    }
+
+    private AlertEntity buildAlertEntity(
+            final AlertSignal signal,
+            final ExecutionMeta meta,
+            final Map<String, String> labels,
+            final Map<String, String> annotations,
+            final String fingerprint,
+            final Instant now,
+            final Instant endsAt) {
+        return new AlertEntity(
                 snowflake.next(),
+                meta.namespace(),
                 meta.team(),
                 meta.application(),
                 meta.pipelineLabels(),
@@ -108,14 +128,6 @@ public final class DefaultAlertSink implements com.imsw.observe.kernel.alert.spi
                 1,
                 null,
                 meta.traceId());
-        AlertPo alertPo = AlertMapper.toPo(entity);
-        alertRepository.save(alertPo);
-        persistEvidence(alertPo.id, evidence.entity(), evidence.sizeBytes(), evidence.truncated());
-        LOG.info(
-                "alert inserted pipeline={} fingerprint={} severity={}",
-                meta.pipelineId(),
-                fingerprint,
-                signal.severity());
     }
 
     private void persistEvidence(

@@ -79,7 +79,28 @@ public final class PipelineRegistryLoader {
 
     private Pipeline deserialize(final PipelineVersionPo versionPo) {
         try {
-            return JsonUtil.fromJson(versionPo.definitionJson, Pipeline.class);
+            Pipeline pipeline = JsonUtil.fromJson(versionPo.definitionJson, Pipeline.class);
+            if (pipeline == null) {
+                return null;
+            }
+            // 旧数据（namespace 列加入前序列化的 definitionJson）可能 namespace=null；
+            // 用版本所在 PO 的 namespace 兜底，保证运行态 Pipeline 必带 namespace（软隔离铁律）。
+            if (pipeline.namespace() == null || pipeline.namespace().isBlank()) {
+                return new Pipeline(
+                        pipeline.id(),
+                        versionPo.namespace,
+                        pipeline.version(),
+                        pipeline.team(),
+                        pipeline.application(),
+                        pipeline.labels(),
+                        pipeline.name(),
+                        pipeline.status(),
+                        pipeline.nodes(),
+                        pipeline.createdAt(),
+                        pipeline.publishedAt(),
+                        pipeline.executionLogSampleRatio());
+            }
+            return pipeline;
         } catch (RuntimeException e) {
             LOG.warn("failed to deserialize pipeline {} version {}", versionPo.pipelineId, versionPo.version, e);
             return null;
@@ -93,6 +114,7 @@ public final class PipelineRegistryLoader {
                 entity.mq(), entity.topic(), entity.db(), entity.table(), entity.opTypes(), entity.sourceType());
         return new Subscription(
                 entity.id(),
+                entity.namespace(),
                 entity.pipelineId(),
                 entity.pipelineVersion(),
                 source,
