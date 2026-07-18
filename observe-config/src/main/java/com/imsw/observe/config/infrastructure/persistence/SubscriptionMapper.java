@@ -7,7 +7,7 @@ import java.util.stream.Collectors;
 
 import com.imsw.observe.config.domain.SubscriptionDefinition;
 import com.imsw.observe.config.infrastructure.ConditionCodec;
-import com.imsw.observe.kernel.event.model.Op;
+import com.imsw.observe.kernel.event.model.CdcOp;
 import com.imsw.observe.kernel.event.model.SourceType;
 
 public final class SubscriptionMapper {
@@ -77,18 +77,18 @@ public final class SubscriptionMapper {
         return value == null ? Instant.now() : value;
     }
 
-    private static Set<Op> toOpSet(final Set<String> raw) {
+    private static Set<CdcOp> toOpSet(final Set<String> raw) {
         if (raw == null) {
             return Set.of();
         }
-        return raw.stream().map(Op::valueOf).collect(Collectors.toSet());
+        return raw.stream().map(CdcOp::valueOf).collect(Collectors.toSet());
     }
 
-    private static Set<String> fromOpSet(final Set<Op> ops) {
+    private static Set<String> fromOpSet(final Set<CdcOp> ops) {
         if (ops == null) {
             return null;
         }
-        return ops.stream().map(Op::name).collect(Collectors.toSet());
+        return ops.stream().map(CdcOp::name).collect(Collectors.toSet());
     }
 
     private static SourceType toSourceType(final String raw) {
