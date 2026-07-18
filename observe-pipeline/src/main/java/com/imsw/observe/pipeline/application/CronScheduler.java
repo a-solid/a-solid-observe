@@ -43,10 +43,10 @@ import com.imsw.observe.pipeline.domain.subscription.Subscription.SourceRef.Conc
  * 失败即跳过本次（串行不堆积）；ALLOW 时跳过 CAS 直接投递。{@code concurrent == null} 视为 SKIP
  * （Task 1 推迟默认）。
  *
- * <p>到点产出 {@link TickEvent}（{@link TickMeta#source()} = 订阅的 cron name，等于
- * {@code Snapshot.subscriptionsBySource} 的索引键，含 {@code cronName}/{@code cronExpression}）
+ * <p>到点产出 {@link TickEvent}（{@link TickMeta#source()} = 订阅的索引键 = {@code sub.source().mq()}，
+ * 与 {@code Snapshot.subscriptionsBySource} 的 key 同源；{@code cronName} 作为元数据透传不参与路由）
  * 投给 {@link EventListener#onBatch(List)}（运行时 = {@code SourceDispatcher::onBatch}），
- * 由 matcher 按 cron name 路由到订阅了该 cron 的 pipeline。
+ * 由 matcher 按 source（= mq）路由到订阅了该 cron 的 pipeline。
  *
  * <p>本类属 application 层：只依赖 application 端口 {@link EventListener} + kernel Event。
  * 无 infrastructure 具体导入（{@link ScheduledExecutorService} /
@@ -228,12 +228,14 @@ public final class CronScheduler {
     }
 
     private void dispatch(final Long id, final CronSub sub) {
-        // TickMeta.source 必须等于订阅在 Snapshot.subscriptionsBySource 的索引键（= sub.source().mq()，
-        // 见 PipelineRegistry.Snapshot.loaded）——否则 DefaultSubscriptionMatcher.matchesNamed 会查不到。
-        // 历史 bug：曾用 "cron:" 前缀，导致 TickEvent 永不路由。B4-T3 修正：source 取裸值（cronName 优先，
-        // 退回 source/mq），与索引键严格一致。
-        String tickSource = sub.cronName != null && !sub.cronName.isBlank() ? sub.cronName : sub.source;
-        TickMeta meta = new TickMeta(tickSource, sub.cronName, sub.cronExpression, Map.of());
+        // TickMeta.source 必须等于订阅在 Snapshot.subscriptionsBySource 的索引键——该索引键就是
+        // sub.source().mq()（见 PipelineRegistry.Snapshot.loaded），与 CronSub.source 同源（from() 直接取
+        // s.mq()）。因此 source 取 sub.source 本身即可，不再优先 cronName：cronName 仅作为 TickMeta 元数据
+        // （便于脚本/索引/可观测），不参与路由。这样彻底消除"mq vs cronName"二义性导致的路由失败（B4-T3
+        // review Finding #1 的防御层；SubscriptionCrudService.validateCron 已在上游拦住二者不一致的创建）。
+        // 历史 bug：曾用 "cron:" 前缀，导致 TickEvent 永不路由；又曾用 cronName 优先而 mq 与 cronName 不一致时
+        // 仍会路由失败——本实现以索引键（mq）为唯一路由源。
+        TickMeta meta = new TickMeta(sub.source, sub.cronName, sub.cronExpression, Map.of());
         Event event = new TickEvent(meta, Instant.now());
         try {
             listener.onBatch(List.of(event));
@@ -287,8 +289,9 @@ public final class CronScheduler {
     }
 
     /**
-     * Cron 订阅的可比较快照（diff 依据）。{@code source} 作为 fallback 用于 TickMeta.source
-     * （cronName 为 null 时）。
+     * Cron 订阅的可比较快照（diff 依据）。{@code source}（= {@code sub.source().mq()}，索引键）
+     * 直接用作 {@link TickMeta#source()} 的路由键；{@code cronName} 仅作为元数据透传，不参与路由
+     * （见 {@link #dispatch} 的不变性说明）。
      */
     static final class CronSub {
 

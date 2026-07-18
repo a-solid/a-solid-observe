@@ -301,6 +301,80 @@ class SubscriptionCrudServiceTest {
         verify(repository, never()).save(any());
     }
 
+    @Test
+    void createRejectsCronSubscriptionWhenMqDivergesFromCronName() {
+        // B4-T3 review Finding #2：CRON 订阅的 mq（Snapshot 索引键 / TickMeta.source 来源）必须等于
+        // cronName（或 cronName == null）。二者不一致会在索引键 vs 逻辑名间产生二义性，导致 TickEvent
+        // 永不路由——validateCron 在创建/更新时从源头拒绝。合法 pipeline/namespace，cronExpression 合法，
+        // 仅 mq != cronName 时被拒，未触达写库。
+        SubscriptionRepository repository = mock(SubscriptionRepository.class);
+        PipelineDefinitionRepository pipelineDefRepo = mock(PipelineDefinitionRepository.class);
+        PipelineVersionRepository pipelineVersionRepo = mock(PipelineVersionRepository.class);
+        ConditionCodec codec = mock(ConditionCodec.class);
+        NamespaceCrudService namespaceCrudService = mock(NamespaceCrudService.class);
+        SnowflakeIdGenerator generator = new SnowflakeIdGenerator(1L, 0L);
+
+        stubValidPipeline(namespaceCrudService, pipelineDefRepo, pipelineVersionRepo, "billing", 100L, 1);
+        SubscriptionCrudService service = new SubscriptionCrudService(
+                repository, pipelineDefRepo, pipelineVersionRepo, codec, generator, namespaceCrudService);
+
+        SubscriptionDefinition sub = new SubscriptionDefinition(
+                null,
+                "billing",
+                100L,
+                1,
+                "idx-key", // mq（索引键）
+                null,
+                null,
+                null,
+                null,
+                SourceType.CRON,
+                null,
+                SubscriptionDefinition.ActionType.RUN,
+                null,
+                null,
+                "billing-rule",
+                "desc",
+                SubscriptionDefinition.Status.ACTIVE,
+                "alice",
+                null,
+                null,
+                "0 */5 * * * *",
+                "logical-name", // cronName != mq → 拒绝
+                null);
+
+        assertThatThrownBy(() -> service.create(sub))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("CRON subscription mq and cronName must match")
+                .hasMessageContaining("mq=idx-key")
+                .hasMessageContaining("cronName=logical-name");
+
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void createAcceptsCronSubscriptionWhenCronNameIsNull() {
+        // B4-T3 review Finding #2 的允许路径：cronName == null 时合法（mq 作为规范名）。
+        // 与 cronSubscription 辅助方法构造的形态一致（cronName 默认 null），这里显式断言接受。
+        SubscriptionRepository repository = mock(SubscriptionRepository.class);
+        PipelineDefinitionRepository pipelineDefRepo = mock(PipelineDefinitionRepository.class);
+        PipelineVersionRepository pipelineVersionRepo = mock(PipelineVersionRepository.class);
+        ConditionCodec codec = mock(ConditionCodec.class);
+        NamespaceCrudService namespaceCrudService = mock(NamespaceCrudService.class);
+        SnowflakeIdGenerator generator = new SnowflakeIdGenerator(1L, 0L);
+
+        stubValidPipeline(namespaceCrudService, pipelineDefRepo, pipelineVersionRepo, "billing", 100L, 1);
+        when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        SubscriptionCrudService service = new SubscriptionCrudService(
+                repository, pipelineDefRepo, pipelineVersionRepo, codec, generator, namespaceCrudService);
+
+        SubscriptionDefinition sub = cronSubscription("billing", 100L, 1, "billing-rule", "0 */5 * * * *");
+
+        SubscriptionDefinition saved = service.create(sub);
+        assertThat(saved.cronExpression()).isEqualTo("0 */5 * * * *");
+        verify(repository).save(any());
+    }
+
     /** 构造一条合法结构（除 cronExpression 外）的 CRON 订阅。 */
     private static SubscriptionDefinition cronSubscription(
             final String namespace,

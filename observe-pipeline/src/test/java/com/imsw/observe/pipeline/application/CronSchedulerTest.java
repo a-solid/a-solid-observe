@@ -217,12 +217,18 @@ class CronSchedulerTest {
      * Snapshot.subscriptionsBySource 索引里的键（= sub.source().mq()）——否则
      * DefaultSubscriptionMatcher.matchesNamed 查不到对应订阅，TickEvent 永远不路由。
      *
+     * <p>B4-T3 review Fix #1：dispatch 必须用索引键（mq）作路由键，不优先 cronName。此测试让 mq
+     * 与 cronName 真正不同（绕过 service 直接构造 SourceRef，模拟历史脏数据），断言 source 仍走 mq
+     * （与索引键严格相等），cronName 仅作为元数据透传。 SubscriptionCrudService.validateCron 已在上游
+     * 拒绝创建 mq != cronName 的 CRON 订阅，此处是对路由层的防御性验证（defense in depth）。
+     *
      * <p>此测试不依赖真实 fire 时序（用包可见 fire 同步驱动），断言 source 与索引键相等。
      */
     @Test
     void tickSourceMatchesIndexKeyForRouting() {
-        // mq（索引键来源）与 cronName 故意取不同值——验证 source 走 cronName（与 toEntity→loader
-        // 把 cronName 灌入 mq 的常规路径一致；即便不一致也按"裸值，不加前缀"契约）。
+        // mq（索引键来源 = "idx-key"）与 cronName（逻辑名 = "logical-name"）真正取不同值——验证 dispatch
+        // 用 mq 作路由键，不被 cronName 干扰。常规路径下 mq == cronName（service 层强制），本测试故意
+        // 构造脏数据验证路由层防御。
         Subscription sub = new Subscription(
                 5L,
                 "ns",
@@ -236,7 +242,7 @@ class CronSchedulerTest {
                         Set.of(),
                         SourceType.CRON,
                         "* * * * * ?",
-                        "idx-key",
+                        "logical-name",
                         Concurrent.SKIP),
                 null,
                 null);
@@ -251,9 +257,13 @@ class CronSchedulerTest {
         TickEvent tick = listener.received.get(0);
         // 索引键 = 该订阅在 subscriptionsBySource 的 key（loader 用 sub.source().mq()，本测试同包可直接读字段）。
         String indexKey = snap.subscriptionsBySource.keySet().iterator().next();
+        assertThat(indexKey).isEqualTo("idx-key");
         assertThat(tick.meta().source()).isEqualTo(indexKey);
-        // 同时保证不再是带 "cron:" 前缀的旧错误形态。
+        // source 必须等于 mq（idx-key），不能走 cronName（logical-name）——路由键严格来自索引键。
+        assertThat(tick.meta().source()).isEqualTo("idx-key");
         assertThat(tick.meta().source()).doesNotStartWith("cron:");
+        // cronName 仍作为元数据透传（不丢失逻辑名，便于可观测/脚本）。
+        assertThat(tick.meta().cronName()).isEqualTo("logical-name");
         listener.release();
     }
 

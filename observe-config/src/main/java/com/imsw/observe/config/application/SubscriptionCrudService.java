@@ -143,8 +143,17 @@ public class SubscriptionCrudService {
     /**
      * Cron 订阅校验（B4, ADR-0007）。
      *
-     * <p>当 {@code sourceType == CRON} 时：{@code cronExpression} 必须非空/非空白，且必须可被
-     * Spring {@link CronExpression} 解析（解析失败抛 {@link IllegalArgumentException}，此处转译为清晰错误）。
+     * <p>当 {@code sourceType == CRON} 时：
+     * <ul>
+     *   <li>{@code cronExpression} 必须非空/非空白，且必须可被 Spring {@link CronExpression} 解析
+     *       （解析失败抛 {@link IllegalArgumentException}，此处转译为清晰错误）。</li>
+     *   <li>{@code mq}/{@code cronName} 不变性：CRON 订阅的索引键来源是 {@code mq}（见
+     *       {@code PipelineRegistry.Snapshot.subscriptionsBySource} 以 {@code sub.source().mq()} 为 key），
+     *       而 {@code CronScheduler.dispatch} 用 {@code mq} 作为 {@code TickMeta.source} 路由键。若
+     *       {@code cronName} 非 null 且与 {@code mq} 不一致，会在"索引键 vs 逻辑名"间产生二义性——
+     *       此处从源头挡住：{@code cronName == null || cronName.equals(mq)}（即 cronName 缺省时以 mq 为
+     *       规范名；给定则必须与 mq 严格一致）。参考 B4-T3 review Finding #2。</li>
+     * </ul>
      * 当 {@code sourceType != CRON} 时：cron 字段对其它源类型无意义，{@code cronExpression} 必须为空
      * （避免 CRON 配置泄漏到 CDC/API 订阅造成歧义）。{@code concurrent} 默认 SKIP 由调用方/Loader 处理。
      */
@@ -159,6 +168,14 @@ public class SubscriptionCrudService {
             } catch (IllegalArgumentException e) {
                 throw new IllegalArgumentException(
                         "invalid cronExpression '" + subscription.cronExpression() + "': " + e.getMessage(), e);
+            }
+            // mq/cronName 不变性（B4-T3 Finding #2）：cronName 非 null 时必须等于 mq——
+            // mq 是 Snapshot 索引键与 TickMeta.source 的来源，cronName 二义会导致路由失败。
+            String mq = subscription.mq();
+            String cronName = subscription.cronName();
+            if (cronName != null && !cronName.equals(mq)) {
+                throw new IllegalArgumentException(
+                        "CRON subscription mq and cronName must match; got mq=" + mq + " cronName=" + cronName);
             }
         } else if (subscription.cronExpression() != null
                 && !subscription.cronExpression().isBlank()) {
