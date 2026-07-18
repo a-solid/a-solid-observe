@@ -5,6 +5,9 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -12,6 +15,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.imsw.observe.controlplane.interfaces.web.ApiResponse;
 import com.imsw.observe.kernel.event.model.ApiEvent;
 import com.imsw.observe.kernel.event.model.ApiMeta;
 import com.imsw.observe.pipeline.infrastructure.source.ApiSource;
@@ -28,10 +32,7 @@ public class EventController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.ACCEPTED)
-    public SubmitEventResponse submit(@RequestBody final SubmitEventRequest req) {
-        if (req.source() == null || req.source().isBlank()) {
-            throw new IllegalArgumentException("source is required");
-        }
+    public ApiResponse<SubmitEventResponse> submit(@Valid @RequestBody final SubmitEventRequest req) {
         String eventId = UUID.randomUUID().toString();
 
         Map<String, Object> attributes = new HashMap<>();
@@ -47,10 +48,11 @@ public class EventController {
         ApiEvent event = new ApiEvent(meta, payload, Instant.now());
 
         apiSource.submit(event);
-        return new SubmitEventResponse(eventId);
+        return ApiResponse.ok(new SubmitEventResponse(eventId));
     }
 
-    public record SubmitEventRequest(String source, Map<String, Object> payload, Map<String, Object> attributes) {}
+    public record SubmitEventRequest(
+            @NotBlank String source, Map<String, Object> payload, Map<String, Object> attributes) {}
 
     public record SubmitEventResponse(String eventId) {}
 }

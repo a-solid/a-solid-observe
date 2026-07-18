@@ -3,8 +3,6 @@ package com.imsw.observe.controlplane.interfaces;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -15,6 +13,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
+import com.imsw.observe.controlplane.interfaces.web.ApiResponse;
 import com.imsw.observe.kernel.event.model.ApiEvent;
 import com.imsw.observe.pipeline.infrastructure.source.ApiSource;
 
@@ -24,6 +23,9 @@ import com.imsw.observe.pipeline.infrastructure.source.ApiSource;
  * <p>Controller 把 {@code SubmitEventRequest(source, payload, attributes)} 映射成 {@link ApiEvent}：
  * apiName=source、payload 透传、attributes 带 controller 生成的 eventId。不再有 table/op/before/after 概念
  * （那些是 CDC 事件语义，ApiEvent 只有 payload + apiName）。
+ *
+ * <p>B5：响应包入 {@link ApiResponse}；source 的必填校验改为 {@code @NotBlank}，由 Spring MVC 层触发，
+ * 相关「拒绝缺/空 source」断言移至 {@code GlobalExceptionHandlerWebTest}（MockMvc）。
  */
 class EventControllerTest {
 
@@ -44,7 +46,7 @@ class EventControllerTest {
         EventController.SubmitEventRequest req =
                 new EventController.SubmitEventRequest("order-service", payload, Map.of());
 
-        EventController.SubmitEventResponse resp = controller.submit(req);
+        EventController.SubmitEventResponse resp = controller.submit(req).data();
 
         // submit 被调用一次，参数是 ApiEvent
         ArgumentCaptor<ApiEvent> captor = ArgumentCaptor.forClass(ApiEvent.class);
@@ -81,25 +83,11 @@ class EventControllerTest {
     }
 
     @Test
-    void submitRejectsMissingSource() {
-        EventController.SubmitEventRequest req = new EventController.SubmitEventRequest(null, null, null);
-        assertThrows(IllegalArgumentException.class, () -> controller.submit(req));
-        verify(apiSource, times(0)).submit(any(ApiEvent.class));
-    }
-
-    @Test
-    void submitRejectsBlankSource() {
-        EventController.SubmitEventRequest req = new EventController.SubmitEventRequest("   ", null, null);
-        assertThrows(IllegalArgumentException.class, () -> controller.submit(req));
-        verify(apiSource, times(0)).submit(any(ApiEvent.class));
-    }
-
-    @Test
     void submitOverwritesClientSuppliedEventId() {
         EventController.SubmitEventRequest req =
                 new EventController.SubmitEventRequest("svc", null, Map.of("eventId", "client-supplied"));
 
-        EventController.SubmitEventResponse resp = controller.submit(req);
+        EventController.SubmitEventResponse resp = controller.submit(req).data();
 
         ArgumentCaptor<ApiEvent> captor = ArgumentCaptor.forClass(ApiEvent.class);
         verify(apiSource).submit(captor.capture());

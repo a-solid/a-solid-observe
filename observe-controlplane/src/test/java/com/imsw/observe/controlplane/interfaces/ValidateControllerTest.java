@@ -83,16 +83,16 @@ class ValidateControllerTest {
         assertThat(((CdcEvent) passed).meta().db()).isEqualTo("trade");
         assertThat(((CdcEvent) passed).after()).containsEntry("amount", 2000);
         assertThat(passed.sourceTs()).isEqualTo(Instant.parse("2026-07-18T10:00:00Z"));
-        // 响应透传 outcome
-        assertThat(resp.outcome()).isEqualTo("SUCCESS");
+        // 响应透传 outcome（B5：解包 ApiResponse.data）
+        assertThat(resp.data().outcome()).isEqualTo("SUCCESS");
     }
 
     @Test
-    void dryRunWithoutAtTypeThrowsIllegalArgumentExceptionWithHint() {
-        // 缺 @type：Jackson 无法 dispatch 子类型，必须以明确 IllegalArgumentException 失败（而非 opaque 500）
+    void dryRunWithoutAtTypeThrowsBadRequestWithHint() {
+        // 缺 @type：Jackson 无法 dispatch 子类型，必须以明确 ErrorResponseException(BAD_REQUEST) 失败（而非 opaque 500）
         assertThatThrownBy(() -> controller.dryRun(
                         new ValidateController.DryRunRequest(MINIMAL_PIPELINE_JSON, MISSING_TYPE_EVENT_JSON)))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOf(com.imsw.observe.controlplane.interfaces.web.ErrorResponseException.class)
                 .hasMessageContaining("\"@type\"")
                 .hasMessageContaining("CdcEvent")
                 .hasMessageContaining("TickEvent")
@@ -103,21 +103,21 @@ class ValidateControllerTest {
     }
 
     @Test
-    void dryRunWithUnknownAtTypeThrowsIllegalArgumentExceptionWithHint() {
+    void dryRunWithUnknownAtTypeThrowsBadRequestWithHint() {
         // @type 指向非注册子类型：Jackson 同样无法 dispatch，应给同样清晰的错误
         assertThatThrownBy(() -> controller.dryRun(
                         new ValidateController.DryRunRequest(MINIMAL_PIPELINE_JSON, BAD_TYPE_EVENT_JSON)))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOf(com.imsw.observe.controlplane.interfaces.web.ErrorResponseException.class)
                 .hasMessageContaining("\"@type\"")
                 .hasMessageContaining("CdcEvent");
         verify(dryRunService, times(0)).run(any(Pipeline.class), any(Event.class));
     }
 
     @Test
-    void dryRunWithBlankEventJsonThrowsIllegalArgumentExceptionWithHint() {
+    void dryRunWithBlankEventJsonThrowsBadRequestWithHint() {
         // 空/blank eventJson：同样给明确的 discriminator 提示，而非走 JsonUtil.fromJson 的 null 静默路径
         assertThatThrownBy(() -> controller.dryRun(new ValidateController.DryRunRequest(MINIMAL_PIPELINE_JSON, "  ")))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOf(com.imsw.observe.controlplane.interfaces.web.ErrorResponseException.class)
                 .hasMessageContaining("\"@type\"")
                 .hasMessageContaining("CdcEvent");
         verify(dryRunService, times(0)).run(any(Pipeline.class), eq((Event) null));

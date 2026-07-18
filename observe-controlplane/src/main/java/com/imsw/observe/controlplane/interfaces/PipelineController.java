@@ -3,7 +3,9 @@ package com.imsw.observe.controlplane.interfaces;
 import java.util.List;
 import java.util.Map;
 
-import org.springframework.http.ResponseEntity;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -17,6 +19,8 @@ import com.imsw.observe.config.application.VersionPublishService;
 import com.imsw.observe.config.domain.PipelineDefinition;
 import com.imsw.observe.controlplane.interfaces.dto.PipelineDto;
 import com.imsw.observe.controlplane.interfaces.dto.VersionDto;
+import com.imsw.observe.controlplane.interfaces.web.ApiResponse;
+import com.imsw.observe.controlplane.interfaces.web.ResourceNotFoundException;
 import com.imsw.observe.kernel.util.JsonUtil;
 import com.imsw.observe.pipeline.domain.Pipeline;
 
@@ -39,75 +43,84 @@ public class PipelineController {
     }
 
     @PostMapping("/namespaces/{namespace}/pipelines")
-    public PipelineDto create(@PathVariable final String namespace, @RequestBody final CreatePipelineRequest req) {
+    public ApiResponse<PipelineDto> create(
+            @PathVariable final String namespace, @Valid @RequestBody final CreatePipelineRequest req) {
         PipelineDefinition def = crud.create(
                 namespace, req.name(), req.team(), req.application(), req.labels(), req.description(), req.createdBy());
-        return PipelineDto.from(def);
+        return ApiResponse.ok(PipelineDto.from(def));
     }
 
     @GetMapping("/namespaces/{namespace}/pipelines")
-    public List<PipelineDto> list(@PathVariable final String namespace) {
-        return crud.findAll(namespace).stream().map(PipelineDto::from).toList();
+    public ApiResponse<List<PipelineDto>> list(@PathVariable final String namespace) {
+        return ApiResponse.ok(
+                crud.findAll(namespace).stream().map(PipelineDto::from).toList());
     }
 
     @GetMapping("/namespaces/{namespace}/pipelines/{name}")
-    public ResponseEntity<PipelineDto> get(@PathVariable final String namespace, @PathVariable final String name) {
+    public ApiResponse<PipelineDto> get(@PathVariable final String namespace, @PathVariable final String name) {
         PipelineDefinition def = crud.find(namespace, name);
-        return def == null ? ResponseEntity.notFound().build() : ResponseEntity.ok(PipelineDto.from(def));
+        if (def == null) {
+            throw new ResourceNotFoundException("pipeline " + namespace + "/" + name + " not found");
+        }
+        return ApiResponse.ok(PipelineDto.from(def));
     }
 
     @PutMapping("/namespaces/{namespace}/pipelines/{name}")
-    public PipelineDto update(
+    public ApiResponse<PipelineDto> update(
             @PathVariable final String namespace,
             @PathVariable final String name,
-            @RequestBody final CreatePipelineRequest req) {
-        return PipelineDto.from(
-                crud.update(namespace, name, req.team(), req.application(), req.labels(), req.description()));
+            @Valid @RequestBody final CreatePipelineRequest req) {
+        return ApiResponse.ok(PipelineDto.from(
+                crud.update(namespace, name, req.team(), req.application(), req.labels(), req.description())));
     }
 
     @PostMapping("/namespaces/{namespace}/pipelines/{name}/archive")
-    public void archive(@PathVariable final String namespace, @PathVariable final String name) {
+    public ApiResponse<Void> archive(@PathVariable final String namespace, @PathVariable final String name) {
         crud.archive(namespace, name);
+        return ApiResponse.ok(null);
     }
 
     @PostMapping("/namespaces/{namespace}/pipelines/{name}/versions")
-    public VersionDto saveVersion(
+    public ApiResponse<VersionDto> saveVersion(
             @PathVariable final String namespace,
             @PathVariable final String name,
-            @RequestBody final SaveVersionRequest req) {
+            @Valid @RequestBody final SaveVersionRequest req) {
         Pipeline pipeline = JsonUtil.fromJson(req.pipelineJson(), Pipeline.class);
-        return VersionDto.from(versions.saveDraft(namespace, name, pipeline, req.publishedBy()));
+        return ApiResponse.ok(VersionDto.from(versions.saveDraft(namespace, name, pipeline, req.publishedBy())));
     }
 
     @GetMapping("/namespaces/{namespace}/pipelines/{name}/versions")
-    public List<VersionDto> versions(@PathVariable final String namespace, @PathVariable final String name) {
-        return versions.versions(namespace, name).stream().map(VersionDto::from).toList();
+    public ApiResponse<List<VersionDto>> versions(
+            @PathVariable final String namespace, @PathVariable final String name) {
+        return ApiResponse.ok(versions.versions(namespace, name).stream()
+                .map(VersionDto::from)
+                .toList());
     }
 
     @PostMapping("/namespaces/{namespace}/pipelines/{name}/versions/{v}/publish")
-    public VersionDto publish(
+    public ApiResponse<VersionDto> publish(
             @PathVariable final String namespace,
             @PathVariable final String name,
             @PathVariable final int v,
             @RequestBody final PublishRequest req) {
-        return VersionDto.from(versions.publish(namespace, name, v, req.publishedBy()));
+        return ApiResponse.ok(VersionDto.from(versions.publish(namespace, name, v, req.publishedBy())));
     }
 
     @PostMapping("/namespaces/{namespace}/pipelines/{name}/versions/{v}/archive")
-    public VersionDto archiveVersion(
+    public ApiResponse<VersionDto> archiveVersion(
             @PathVariable final String namespace, @PathVariable final String name, @PathVariable final int v) {
-        return VersionDto.from(versions.archive(namespace, name, v));
+        return ApiResponse.ok(VersionDto.from(versions.archive(namespace, name, v)));
     }
 
     public record CreatePipelineRequest(
-            String team,
-            String application,
+            @NotBlank String team,
+            @NotBlank String application,
             Map<String, String> labels,
-            String name,
+            @NotBlank String name,
             String description,
             String createdBy) {}
 
-    public record SaveVersionRequest(String pipelineJson, String publishedBy) {}
+    public record SaveVersionRequest(@NotBlank String pipelineJson, String publishedBy) {}
 
     public record PublishRequest(String publishedBy) {}
 }

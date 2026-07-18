@@ -3,7 +3,10 @@ package com.imsw.observe.pipeline.application;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
 import com.imsw.observe.pipeline.domain.Execution;
@@ -16,9 +19,7 @@ import com.imsw.observe.pipeline.infrastructure.persistence.FailedExecutionRepos
 @Service
 public class ExecutionQueryService {
 
-    private static final int DEFAULT_LIMIT = 100;
-
-    private static final int MAX_LIMIT = 1000;
+    private static final int FETCH_SIZE = 1000;
 
     private final ExecutionRepository executionRepository;
 
@@ -33,14 +34,17 @@ public class ExecutionQueryService {
     /**
      * 列表查询，软隔离铁律（ADR-0002）：namespace 必填，行内存过滤（与既有 pipelineId 过滤同款；
      * execution 资源表不对外暴露 BIGINT 物理主键，namespace 仅作软过滤维度）。
+     *
+     * <p>分页：先取候选行并完成 namespace/pipelineId 内存过滤，再分页，{@link PageImpl} 携带真实 total。
+     * B6 会为 stats 场景补 JPQL where 下推。
      */
-    public List<Execution> findExecutions(final String namespace, final Long pipelineId, final int limit) {
-        int safeLimit = sanitize(limit);
-        return executionRepository.findAll(PageRequest.of(0, safeLimit)).stream()
+    public Page<Execution> findExecutions(final String namespace, final Long pipelineId, final Pageable pageable) {
+        List<Execution> filtered = executionRepository.findAll(PageRequest.of(0, FETCH_SIZE)).stream()
                 .filter(e -> namespace.equals(e.namespace))
                 .filter(e -> pipelineId == null || pipelineId.equals(e.pipelineId))
                 .map(ExecutionQueryService::toExecution)
                 .toList();
+        return paginate(filtered, pageable);
     }
 
     /** 单条按 (namespace, id) 软校验：namespace 不匹配返回 empty。 */
@@ -51,13 +55,14 @@ public class ExecutionQueryService {
                 .filter(e -> namespace.equals(e.namespace()));
     }
 
-    public List<FailedExecution> findFailedExecutions(final String namespace, final Long pipelineId, final int limit) {
-        int safeLimit = sanitize(limit);
-        return failedExecutionRepository.findAll(PageRequest.of(0, safeLimit)).stream()
+    public Page<FailedExecution> findFailedExecutions(
+            final String namespace, final Long pipelineId, final Pageable pageable) {
+        List<FailedExecution> filtered = failedExecutionRepository.findAll(PageRequest.of(0, FETCH_SIZE)).stream()
                 .filter(e -> namespace.equals(e.namespace))
                 .filter(e -> pipelineId == null || pipelineId.equals(e.pipelineId))
                 .map(ExecutionQueryService::toFailedExecution)
                 .toList();
+        return paginate(filtered, pageable);
     }
 
     public Optional<FailedExecution> findFailedExecution(final String namespace, final Long id) {
@@ -65,6 +70,12 @@ public class ExecutionQueryService {
                 .findById(id)
                 .map(ExecutionQueryService::toFailedExecution)
                 .filter(e -> namespace.equals(e.namespace()));
+    }
+
+    private static <T> Page<T> paginate(final List<T> filtered, final Pageable pageable) {
+        int from = (int) Math.min(pageable.getOffset(), filtered.size());
+        int to = (int) Math.min(pageable.getOffset() + pageable.getPageSize(), filtered.size());
+        return new PageImpl<>(filtered.subList(from, to), pageable, filtered.size());
     }
 
     private static Execution toExecution(final ExecutionPo po) {
@@ -105,12 +116,5 @@ public class ExecutionQueryService {
                 po.status,
                 po.createdAt,
                 po.resolvedAt);
-    }
-
-    private static int sanitize(final int limit) {
-        if (limit <= 0) {
-            return DEFAULT_LIMIT;
-        }
-        return Math.min(limit, MAX_LIMIT);
     }
 }

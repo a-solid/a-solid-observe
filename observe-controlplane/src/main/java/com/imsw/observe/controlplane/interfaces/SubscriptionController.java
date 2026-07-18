@@ -4,7 +4,9 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Set;
 
-import org.springframework.http.ResponseEntity;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotNull;
+
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -19,6 +21,8 @@ import com.imsw.observe.config.domain.SubscriptionDefinition;
 import com.imsw.observe.config.domain.SubscriptionDefinition.ActionType;
 import com.imsw.observe.config.domain.SubscriptionDefinition.Status;
 import com.imsw.observe.controlplane.interfaces.dto.SubscriptionDto;
+import com.imsw.observe.controlplane.interfaces.web.ApiResponse;
+import com.imsw.observe.controlplane.interfaces.web.ResourceNotFoundException;
 import com.imsw.observe.kernel.event.model.CdcOp;
 import com.imsw.observe.kernel.event.model.SourceType;
 import com.imsw.observe.pipeline.domain.subscription.Condition;
@@ -40,38 +44,43 @@ public class SubscriptionController {
     }
 
     @PostMapping("/namespaces/{namespace}/subscriptions")
-    public SubscriptionDto create(
-            @PathVariable final String namespace, @RequestBody final CreateSubscriptionRequest req) {
-        return SubscriptionDto.from(service.create(req.toDomain(namespace)));
+    public ApiResponse<SubscriptionDto> create(
+            @PathVariable final String namespace, @Valid @RequestBody final CreateSubscriptionRequest req) {
+        return ApiResponse.ok(SubscriptionDto.from(service.create(req.toDomain(namespace))));
     }
 
     @GetMapping("/namespaces/{namespace}/subscriptions")
-    public List<SubscriptionDto> list(@PathVariable final String namespace) {
-        return service.findAll(namespace).stream().map(SubscriptionDto::from).toList();
+    public ApiResponse<List<SubscriptionDto>> list(@PathVariable final String namespace) {
+        return ApiResponse.ok(
+                service.findAll(namespace).stream().map(SubscriptionDto::from).toList());
     }
 
     @GetMapping("/namespaces/{namespace}/subscriptions/{name}")
-    public ResponseEntity<SubscriptionDto> get(@PathVariable final String namespace, @PathVariable final String name) {
+    public ApiResponse<SubscriptionDto> get(@PathVariable final String namespace, @PathVariable final String name) {
         var found = service.find(namespace, name);
-        return found == null ? ResponseEntity.notFound().build() : ResponseEntity.ok(SubscriptionDto.from(found));
+        if (found == null) {
+            throw new ResourceNotFoundException("subscription " + namespace + "/" + name + " not found");
+        }
+        return ApiResponse.ok(SubscriptionDto.from(found));
     }
 
     @PutMapping("/namespaces/{namespace}/subscriptions/{name}")
-    public SubscriptionDto update(
+    public ApiResponse<SubscriptionDto> update(
             @PathVariable final String namespace,
             @PathVariable final String name,
-            @RequestBody final UpdateSubscriptionRequest req) {
-        return SubscriptionDto.from(service.update(namespace, name, req.toDomain(namespace)));
+            @Valid @RequestBody final UpdateSubscriptionRequest req) {
+        return ApiResponse.ok(SubscriptionDto.from(service.update(namespace, name, req.toDomain(namespace))));
     }
 
     @DeleteMapping("/namespaces/{namespace}/subscriptions/{name}")
-    public void delete(@PathVariable final String namespace, @PathVariable final String name) {
+    public ApiResponse<Void> delete(@PathVariable final String namespace, @PathVariable final String name) {
         service.delete(namespace, name);
+        return ApiResponse.ok(null);
     }
 
     /** 可编辑的订阅字段（create/update 共用）。 */
     public record SubscriptionFields(
-            Long pipelineId,
+            @NotNull Long pipelineId,
             int pipelineVersion,
             String mq,
             String topic,
@@ -124,14 +133,14 @@ public class SubscriptionController {
         }
     }
 
-    public record CreateSubscriptionRequest(SubscriptionFields subscription) {
+    public record CreateSubscriptionRequest(@Valid @NotNull SubscriptionFields subscription) {
 
         SubscriptionDefinition toDomain(final String namespace) {
             return subscription.toDomain(namespace);
         }
     }
 
-    public record UpdateSubscriptionRequest(SubscriptionFields subscription) {
+    public record UpdateSubscriptionRequest(@Valid @NotNull SubscriptionFields subscription) {
 
         SubscriptionDefinition toDomain(final String namespace) {
             return subscription.toDomain(namespace);
