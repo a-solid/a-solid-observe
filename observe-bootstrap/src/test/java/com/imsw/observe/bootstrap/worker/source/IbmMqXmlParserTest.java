@@ -11,7 +11,6 @@ import javax.jms.TextMessage;
 import org.junit.jupiter.api.Test;
 
 import com.imsw.observe.kernel.error.MessageParseException;
-import com.imsw.observe.kernel.event.model.CdcEvent;
 import com.imsw.observe.kernel.event.model.CdcOp;
 
 class IbmMqXmlParserTest {

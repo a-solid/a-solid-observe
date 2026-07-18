@@ -50,10 +50,7 @@ public class EventController {
         return new SubmitEventResponse(eventId);
     }
 
-    public record SubmitEventRequest(
-            String source,
-            Map<String, Object> payload,
-            Map<String, Object> attributes) {}
+    public record SubmitEventRequest(String source, Map<String, Object> payload, Map<String, Object> attributes) {}
 
     public record SubmitEventResponse(String eventId) {}
 }
