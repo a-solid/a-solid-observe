@@ -4,10 +4,10 @@ import java.time.Instant;
 import java.util.Map;
 
 public record EvidenceEntity(
-        String alertId,
-        String pipelineId,
+        Long alertId,
+        Long pipelineId,
         int pipelineVersion,
-        String executionId,
+        Long executionId,
         String nodeName,
         Map<String, Object> outputs,
         String traceId,

@@ -3,7 +3,7 @@ package com.imsw.observe.config.domain;
 import java.time.Instant;
 
 public record PipelineVersion(
-        String pipelineId,
+        Long pipelineId,
         int version,
         String definitionJson,
         String definitionHash,

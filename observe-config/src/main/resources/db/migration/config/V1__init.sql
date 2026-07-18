@@ -1,5 +1,5 @@
 CREATE TABLE pipelines (
-    id VARCHAR(64) PRIMARY KEY,
+    id BIGINT PRIMARY KEY,
     team VARCHAR NOT NULL,
     application VARCHAR NOT NULL,
     labels VARCHAR(16384),
@@ -17,7 +17,7 @@ CREATE INDEX idx_pipelines_team_app ON pipelines(team, application);
 CREATE INDEX idx_pipelines_status_updated ON pipelines(status, updated_at);
 
 CREATE TABLE pipeline_versions (
-    pipeline_id VARCHAR(64) NOT NULL,
+    pipeline_id BIGINT NOT NULL,
     version INT NOT NULL,
     definition_json LONG VARCHAR NOT NULL,
     definition_hash VARCHAR(64) NOT NULL,
@@ -32,8 +32,8 @@ CREATE TABLE pipeline_versions (
 CREATE INDEX idx_pv_status_published ON pipeline_versions(status, published_at DESC);
 
 CREATE TABLE subscriptions (
-    id VARCHAR(64) PRIMARY KEY,
-    pipeline_id VARCHAR(64) NOT NULL,
+    id BIGINT PRIMARY KEY,
+    pipeline_id BIGINT NOT NULL,
     pipeline_version INT NOT NULL,
 
     mq VARCHAR,

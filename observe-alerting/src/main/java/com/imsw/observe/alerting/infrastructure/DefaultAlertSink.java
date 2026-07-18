@@ -5,7 +5,6 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,6 +25,7 @@ import com.imsw.observe.kernel.alert.model.AlertSignal;
 import com.imsw.observe.kernel.alert.model.Severity;
 import com.imsw.observe.kernel.event.model.ExecutionContext;
 import com.imsw.observe.kernel.event.model.ExecutionMeta;
+import com.imsw.observe.kernel.util.SnowflakeIdGenerator;
 
 public final class DefaultAlertSink implements com.imsw.observe.kernel.alert.spi.AlertSink {
 
@@ -39,15 +39,19 @@ public final class DefaultAlertSink implements com.imsw.observe.kernel.alert.spi
 
     private final AnnotationRenderer annotationRenderer;
 
+    private final SnowflakeIdGenerator snowflake;
+
     public DefaultAlertSink(
             final AlertRepository alertRepository,
             final EvidenceRepository evidenceRepository,
             final EvidenceCollector evidenceCollector,
-            final AnnotationRenderer annotationRenderer) {
+            final AnnotationRenderer annotationRenderer,
+            final SnowflakeIdGenerator snowflake) {
         this.alertRepository = alertRepository;
         this.evidenceRepository = evidenceRepository;
         this.evidenceCollector = evidenceCollector;
         this.annotationRenderer = annotationRenderer;
+        this.snowflake = snowflake;
     }
 
     @Override
@@ -85,7 +89,7 @@ public final class DefaultAlertSink implements com.imsw.observe.kernel.alert.spi
         Map<String, String> annotations = annotationRenderer.render(signal.annotations(), ctx);
         EvidenceCollector.Collected evidence = evidenceCollector.collect(signal, ctx);
         AlertEntity entity = new AlertEntity(
-                UUID.randomUUID().toString(),
+                snowflake.next(),
                 meta.team(),
                 meta.application(),
                 meta.pipelineLabels(),
@@ -115,7 +119,7 @@ public final class DefaultAlertSink implements com.imsw.observe.kernel.alert.spi
     }
 
     private void persistEvidence(
-            final String alertId, final EvidenceEntity entity, final int sizeBytes, final boolean truncated) {
+            final Long alertId, final EvidenceEntity entity, final int sizeBytes, final boolean truncated) {
         EvidencePo po = EvidenceMapper.toPo(entity);
         po.alertId = alertId;
         po.sizeBytes = sizeBytes;

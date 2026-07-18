@@ -3,14 +3,14 @@ package com.imsw.observe.controlplane.interfaces.dto;
 import com.imsw.observe.pipeline.domain.Execution;
 
 public record ExecutionDto(
-        String id,
-        String pipelineId,
+        Long id,
+        Long pipelineId,
         int pipelineVersion,
         String team,
         String application,
         String triggerType,
         String triggerEvent,
-        String subscriptionId,
+        Long subscriptionId,
         String status,
         java.time.Instant startedAt,
         java.time.Instant endedAt,

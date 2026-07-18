@@ -4,7 +4,6 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
 import org.slf4j.Logger;
@@ -16,6 +15,7 @@ import com.imsw.observe.kernel.event.model.ExecutionContext;
 import com.imsw.observe.kernel.event.model.ExecutionMeta;
 import com.imsw.observe.kernel.execution.model.ErrorType;
 import com.imsw.observe.kernel.execution.spi.ExecutionRecorder;
+import com.imsw.observe.kernel.util.SnowflakeIdGenerator;
 
 public final class JpaExecutionRecorder implements ExecutionRecorder {
 
@@ -29,13 +29,17 @@ public final class JpaExecutionRecorder implements ExecutionRecorder {
 
     private final ObjectMapper objectMapper;
 
+    private final SnowflakeIdGenerator snowflake;
+
     public JpaExecutionRecorder(
             final ExecutionRepository executionRepository,
             final FailedExecutionRepository failedExecutionRepository,
-            final ObjectMapper objectMapper) {
+            final ObjectMapper objectMapper,
+            final SnowflakeIdGenerator snowflake) {
         this.executionRepository = executionRepository;
         this.failedExecutionRepository = failedExecutionRepository;
         this.objectMapper = objectMapper;
+        this.snowflake = snowflake;
     }
 
     @Override
@@ -50,7 +54,7 @@ public final class JpaExecutionRecorder implements ExecutionRecorder {
         }
         ExecutionMeta meta = ctx.meta();
         ExecutionPo po = new ExecutionPo();
-        po.id = UUID.randomUUID().toString();
+        po.id = snowflake.next();
         po.pipelineId = meta.pipelineId();
         po.pipelineVersion = meta.pipelineVersion();
         po.team = meta.team();
@@ -81,7 +85,7 @@ public final class JpaExecutionRecorder implements ExecutionRecorder {
             final ErrorType errorType) {
         ExecutionMeta meta = ctx.meta();
         FailedExecutionPo po = new FailedExecutionPo();
-        po.id = UUID.randomUUID().toString();
+        po.id = snowflake.next();
         po.pipelineId = meta.pipelineId();
         po.pipelineVersion = meta.pipelineVersion();
         po.executionId = meta.executionId();

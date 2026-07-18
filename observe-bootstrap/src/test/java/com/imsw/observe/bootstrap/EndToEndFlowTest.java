@@ -60,14 +60,15 @@ class EndToEndFlowTest {
         evidenceRepository.deleteAll();
         alertRepository.deleteAll();
 
-        pipelines.create("e2e-pipeline", "team", "app", Map.of(), "E2E", "", "tester");
-        Pipeline pipeline = buildPipeline("e2e-pipeline", 1);
+        Long pipelineId =
+                pipelines.create("team", "app", Map.of(), "E2E", "", "tester").id();
+        Pipeline pipeline = buildPipeline(pipelineId, 1);
         versions.saveDraft(pipeline, "tester");
-        versions.publish("e2e-pipeline", 1, "tester");
+        versions.publish(pipelineId, 1, "tester");
 
         Subscription sub = new Subscription(
-                "e2e-sub",
-                "e2e-pipeline",
+                null,
+                pipelineId,
                 1,
                 "mq",
                 "topic",
@@ -79,10 +80,10 @@ class EndToEndFlowTest {
                 Subscription.ActionType.RUN,
                 null,
                 null,
-                null,
+                "e2e-sub",
                 null,
                 Subscription.Status.ACTIVE,
-                null,
+                "tester",
                 null,
                 null);
         subscriptions.create(sub);
@@ -110,7 +111,7 @@ class EndToEndFlowTest {
         throw new AssertionError("no alert persisted after 5s");
     }
 
-    private static Pipeline buildPipeline(final String id, final int version) {
+    private static Pipeline buildPipeline(final Long id, final int version) {
         NodeSpec node = new NodeSpec(
                 "check",
                 """

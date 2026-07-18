@@ -27,7 +27,7 @@ public class AlertController {
     public List<AlertDto> listAlerts(
             @RequestParam(name = "status", required = false) final String status,
             @RequestParam(name = "team", required = false) final String team,
-            @RequestParam(name = "pipeline_id", required = false) final String pipelineId,
+            @RequestParam(name = "pipeline_id", required = false) final Long pipelineId,
             @RequestParam(name = "limit", required = false, defaultValue = "100") final int limit) {
         return alertQueryService.findAlerts(status, team, pipelineId, limit).stream()
                 .map(AlertDto::from)
@@ -35,7 +35,7 @@ public class AlertController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<AlertDto> getAlert(@PathVariable final String id) {
+    public ResponseEntity<AlertDto> getAlert(@PathVariable final Long id) {
         return alertQueryService
                 .findById(id)
                 .map(AlertDto::from)
@@ -44,7 +44,7 @@ public class AlertController {
     }
 
     @GetMapping("/{id}/evidence")
-    public ResponseEntity<EvidenceDto> getEvidence(@PathVariable final String id) {
+    public ResponseEntity<EvidenceDto> getEvidence(@PathVariable final Long id) {
         return alertQueryService
                 .findEvidenceByAlertId(id)
                 .map(EvidenceDto::from)

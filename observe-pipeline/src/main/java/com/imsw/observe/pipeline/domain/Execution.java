@@ -3,14 +3,14 @@ package com.imsw.observe.pipeline.domain;
 import java.time.Instant;
 
 public record Execution(
-        String id,
-        String pipelineId,
+        Long id,
+        Long pipelineId,
         int pipelineVersion,
         String team,
         String application,
         String triggerType,
         String triggerEvent,
-        String subscriptionId,
+        Long subscriptionId,
         String status,
         Instant startedAt,
         Instant endedAt,

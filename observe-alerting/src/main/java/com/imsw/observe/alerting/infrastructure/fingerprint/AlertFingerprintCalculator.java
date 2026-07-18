@@ -9,7 +9,7 @@ public final class AlertFingerprintCalculator {
 
     private AlertFingerprintCalculator() {}
 
-    public static String compute(final String pipelineId, final Map<String, String> labels) {
+    public static String compute(final Long pipelineId, final Map<String, String> labels) {
         TreeMap<String, String> sorted = labels == null ? new TreeMap<>() : new TreeMap<>(labels);
         StringBuilder sb = new StringBuilder();
         sb.append("pipeline=").append(pipelineId == null ? "" : pipelineId);

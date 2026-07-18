@@ -3,15 +3,15 @@ package com.imsw.observe.pipeline.domain;
 import java.time.Instant;
 
 public record FailedExecution(
-        String id,
-        String pipelineId,
+        Long id,
+        Long pipelineId,
         int pipelineVersion,
-        String executionId,
+        Long executionId,
         String team,
         String application,
         String triggerType,
         String triggerEvent,
-        String subscriptionId,
+        Long subscriptionId,
         String nodeName,
         String errorType,
         String errorMessage,

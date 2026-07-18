@@ -4,8 +4,8 @@ import java.time.Instant;
 import java.util.Map;
 
 public record ExecutionMeta(
-        String executionId,
-        String pipelineId,
+        Long executionId,
+        Long pipelineId,
         int pipelineVersion,
         String team,
         String application,
@@ -15,4 +15,4 @@ public record ExecutionMeta(
         SourceType triggerType,
         Event triggerEvent,
         Instant triggeredAt,
-        String subscriptionId) {}
+        Long subscriptionId) {}

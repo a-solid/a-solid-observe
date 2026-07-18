@@ -7,13 +7,13 @@ import com.imsw.observe.alerting.domain.AlertEntity;
 import com.imsw.observe.kernel.alert.model.Severity;
 
 public record AlertDto(
-        String id,
+        Long id,
         String team,
         String application,
         Map<String, String> pipelineLabels,
-        String pipelineId,
+        Long pipelineId,
         int pipelineVersion,
-        String executionId,
+        Long executionId,
         String fingerprint,
         Severity severity,
         Map<String, String> labels,

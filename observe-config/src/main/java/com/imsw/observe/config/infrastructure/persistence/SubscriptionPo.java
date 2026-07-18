@@ -14,11 +14,11 @@ import jakarta.persistence.Table;
 public class SubscriptionPo {
 
     @Id
-    @Column(name = "id", length = 64, nullable = false)
-    public String id;
+    @Column(name = "id", nullable = false)
+    public Long id;
 
-    @Column(name = "pipeline_id", length = 64, nullable = false)
-    public String pipelineId;
+    @Column(name = "pipeline_id", nullable = false)
+    public Long pipelineId;
 
     @Column(name = "pipeline_version", nullable = false)
     public Integer pipelineVersion;

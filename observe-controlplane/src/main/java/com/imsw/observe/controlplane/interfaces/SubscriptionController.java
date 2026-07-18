@@ -33,7 +33,7 @@ public class SubscriptionController {
 
     @PostMapping
     public SubscriptionDto create(@RequestBody final CreateSubscriptionRequest req) {
-        return SubscriptionDto.from(service.create(req.toDomain(null)));
+        return SubscriptionDto.from(service.create(req.toDomain()));
     }
 
     @GetMapping
@@ -42,24 +42,24 @@ public class SubscriptionController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<SubscriptionDto> get(@PathVariable final String id) {
+    public ResponseEntity<SubscriptionDto> get(@PathVariable final Long id) {
         var found = service.find(id);
         return found == null ? ResponseEntity.notFound().build() : ResponseEntity.ok(SubscriptionDto.from(found));
     }
 
     @PutMapping("/{id}")
-    public SubscriptionDto update(@PathVariable final String id, @RequestBody final UpdateSubscriptionRequest req) {
+    public SubscriptionDto update(@PathVariable final Long id, @RequestBody final UpdateSubscriptionRequest req) {
         return SubscriptionDto.from(service.update(id, req.toDomain()));
     }
 
     @DeleteMapping("/{id}")
-    public void delete(@PathVariable final String id) {
+    public void delete(@PathVariable final Long id) {
         service.delete(id);
     }
 
     /** 可编辑的订阅字段（create/update 共用）。 */
     public record SubscriptionFields(
-            String pipelineId,
+            Long pipelineId,
             int pipelineVersion,
             String mq,
             String topic,
@@ -73,14 +73,14 @@ public class SubscriptionController {
             String scheduleCorrelationKeyPath,
             String status) {
 
-        Subscription toDomain(final String id) {
+        Subscription toDomain() {
             Duration delay = scheduleDelayMs == null ? null : Duration.ofMillis(scheduleDelayMs);
             Subscription.ActionType action =
                     actionType == null ? Subscription.ActionType.RUN : Subscription.ActionType.valueOf(actionType);
             Subscription.Status stat =
                     status == null ? Subscription.Status.ACTIVE : Subscription.Status.valueOf(status);
             return new Subscription(
-                    id,
+                    null,
                     pipelineId,
                     pipelineVersion,
                     mq,
@@ -104,15 +104,15 @@ public class SubscriptionController {
 
     public record CreateSubscriptionRequest(SubscriptionFields subscription) {
 
-        Subscription toDomain(final String id) {
-            return subscription.toDomain(id);
+        Subscription toDomain() {
+            return subscription.toDomain();
         }
     }
 
     public record UpdateSubscriptionRequest(SubscriptionFields subscription) {
 
         Subscription toDomain() {
-            return subscription.toDomain(null);
+            return subscription.toDomain();
         }
     }
 }

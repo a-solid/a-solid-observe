@@ -35,7 +35,7 @@ class InMemoryDelayedEventStoreTest {
     void scheduleFiresRunnerAfterDelay() throws Exception {
         CountingRunner runner = new CountingRunner();
         InMemoryDelayedEventStore store = new InMemoryDelayedEventStore(scheduler, runner);
-        Subscription sub = sub("s1", new Action.Schedule(Duration.ofMillis(50), "after.trade_id", "p1"));
+        Subscription sub = sub(10L, new Action.Schedule(Duration.ofMillis(50), "after.trade_id", 1L));
         store.schedule(sub, event("t1"), pipeline(), Duration.ofMillis(50), "after.trade_id");
 
         assertThat(runner.awaitRuns(1)).isTrue();
@@ -47,7 +47,7 @@ class InMemoryDelayedEventStoreTest {
     void scheduleReplacesSameKey() throws Exception {
         CountingRunner runner = new CountingRunner();
         InMemoryDelayedEventStore store = new InMemoryDelayedEventStore(scheduler, runner);
-        Subscription sub = sub("s1", new Action.Schedule(Duration.ofMillis(200), "after.trade_id", "p1"));
+        Subscription sub = sub(10L, new Action.Schedule(Duration.ofMillis(200), "after.trade_id", 1L));
         store.schedule(sub, event("t1"), pipeline(), Duration.ofMillis(200), "after.trade_id");
         store.schedule(sub, event("t1"), pipeline(), Duration.ofMillis(200), "after.trade_id");
 
@@ -61,7 +61,7 @@ class InMemoryDelayedEventStoreTest {
     void cancelRemovesPending() {
         CountingRunner runner = new CountingRunner();
         InMemoryDelayedEventStore store = new InMemoryDelayedEventStore(scheduler, runner);
-        Subscription sub = sub("s1", new Action.Cancel("after.trade_id"));
+        Subscription sub = sub(10L, new Action.Cancel("after.trade_id"));
         store.schedule(sub, event("t1"), pipeline(), Duration.ofSeconds(5), "after.trade_id");
         assertThat(store.pendingCount()).isEqualTo(1);
 
@@ -70,10 +70,10 @@ class InMemoryDelayedEventStoreTest {
         store.shutdown();
     }
 
-    private static Subscription sub(final String id, final Action action) {
+    private static Subscription sub(final Long id, final Action action) {
         return new Subscription(
                 id,
-                "p1",
+                1L,
                 1,
                 new Subscription.SourceRef(null, null, "db", "tbl", java.util.Set.of(), SourceType.CDC),
                 null,
@@ -87,7 +87,7 @@ class InMemoryDelayedEventStoreTest {
 
     private static Pipeline pipeline() {
         return new Pipeline(
-                "p1",
+                1L,
                 1,
                 "team",
                 "app",
@@ -105,7 +105,7 @@ class InMemoryDelayedEventStoreTest {
         final AtomicInteger runs = new AtomicInteger();
 
         @Override
-        public void run(final Pipeline pipeline, final Event triggerEvent, final String subscriptionId) {
+        public void run(final Pipeline pipeline, final Event triggerEvent, final Long subscriptionId) {
             runs.incrementAndGet();
         }
 

@@ -16,17 +16,17 @@ import com.imsw.observe.kernel.util.MapStringObjectToJsonConverter;
 public class EvidencePo {
 
     @Id
-    @Column(name = "alert_id", length = 36, nullable = false)
-    public String alertId;
+    @Column(name = "alert_id", nullable = false)
+    public Long alertId;
 
-    @Column(name = "pipeline_id", length = 64, nullable = false)
-    public String pipelineId;
+    @Column(name = "pipeline_id", nullable = false)
+    public Long pipelineId;
 
     @Column(name = "pipeline_version", nullable = false)
     public Integer pipelineVersion;
 
     @Column(name = "execution_id", nullable = false)
-    public String executionId;
+    public Long executionId;
 
     @Column(name = "node_name")
     public String nodeName;

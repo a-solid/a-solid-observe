@@ -13,6 +13,7 @@ import com.imsw.observe.kernel.event.model.Event;
 import com.imsw.observe.kernel.event.model.ExecutionContext;
 import com.imsw.observe.kernel.execution.spi.ExecutionRecorder;
 import com.imsw.observe.kernel.script.spi.DbApi;
+import com.imsw.observe.kernel.util.SnowflakeIdGenerator;
 import com.imsw.observe.pipeline.domain.Pipeline;
 import com.imsw.observe.pipeline.infrastructure.engine.DefaultPipelineRunner;
 import com.imsw.observe.pipeline.infrastructure.engine.LinearPipelineExecutor;
@@ -32,9 +33,15 @@ public final class DryRunService {
 
     private final DbApi dbApi;
 
-    public DryRunService(final PlatformTransactionManager transactionManager, final DbApi dbApi) {
+    private final SnowflakeIdGenerator snowflake;
+
+    public DryRunService(
+            final PlatformTransactionManager transactionManager,
+            final DbApi dbApi,
+            final SnowflakeIdGenerator snowflake) {
         this.transactionManager = transactionManager;
         this.dbApi = dbApi;
+        this.snowflake = snowflake;
     }
 
     public DryRunResult run(final Pipeline pipeline, final Event event) {
@@ -43,7 +50,11 @@ public final class DryRunService {
         LinearPipelineExecutor executor =
                 new LinearPipelineExecutor(specNode -> new ScriptNode(engine, DryRunAlertsApi::new, () -> dbApi));
         DefaultPipelineRunner runner = new DefaultPipelineRunner(
-                executor, sink, new DryRunTransactionOperator(transactionManager), NoopExecutionRecorder.INSTANCE);
+                executor,
+                sink,
+                new DryRunTransactionOperator(transactionManager),
+                NoopExecutionRecorder.INSTANCE,
+                snowflake);
         String outcome;
         try {
             runner.run(pipeline, event, null);

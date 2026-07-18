@@ -12,11 +12,11 @@ import jakarta.persistence.Table;
 public class ExecutionPo {
 
     @Id
-    @Column(name = "id", length = 36, nullable = false)
-    public String id;
+    @Column(name = "id", nullable = false)
+    public Long id;
 
-    @Column(name = "pipeline_id", length = 64, nullable = false)
-    public String pipelineId;
+    @Column(name = "pipeline_id", nullable = false)
+    public Long pipelineId;
 
     @Column(name = "pipeline_version", nullable = false)
     public Integer pipelineVersion;
@@ -34,7 +34,7 @@ public class ExecutionPo {
     public String triggerEvent;
 
     @Column(name = "subscription_id")
-    public String subscriptionId;
+    public Long subscriptionId;
 
     @Column(name = "status", nullable = false)
     public String status;

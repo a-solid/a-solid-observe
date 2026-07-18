@@ -24,16 +24,16 @@ class SourceDispatcherTest {
 
     @Test
     void dispatchesMatchedEventToRunner() throws Exception {
-        Pipeline pipeline = pipeline("p1", 1);
+        Pipeline pipeline = pipeline(1L, 1);
         Subscription sub = new Subscription(
-                "s1",
-                "p1",
+                10L,
+                1L,
                 1,
                 new Subscription.SourceRef("mq", "topic", "trade_db", "orders", Set.of(Op.INSERT), SourceType.CDC),
                 null,
                 new Action.Run());
         PipelineRegistry registry = new PipelineRegistry();
-        registry.replace(PipelineRegistry.Snapshot.loaded(Map.of("p1", pipeline), List.of(sub)));
+        registry.replace(PipelineRegistry.Snapshot.loaded(Map.of(1L, pipeline), List.of(sub)));
 
         RecordingRunner runner = new RecordingRunner();
         ThreadPoolExecutor pool = new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>());
@@ -50,10 +50,10 @@ class SourceDispatcherTest {
         pool.awaitTermination(2, TimeUnit.SECONDS);
 
         assertThat(runner.received).hasSize(1);
-        assertThat(runner.received.get(0).pipeline().id()).isEqualTo("p1");
+        assertThat(runner.received.get(0).pipeline().id()).isEqualTo(1L);
     }
 
-    private static Pipeline pipeline(final String id, final int version) {
+    private static Pipeline pipeline(final Long id, final int version) {
         return new Pipeline(
                 id,
                 version,
@@ -79,7 +79,7 @@ class SourceDispatcherTest {
                 new java.util.concurrent.CopyOnWriteArrayList<>();
 
         @Override
-        public void run(final Pipeline pipeline, final Event triggerEvent, final String subscriptionId) {
+        public void run(final Pipeline pipeline, final Event triggerEvent, final Long subscriptionId) {
             received.add(new SubscriptionMatcher.MatchedSubscription(
                     new Subscription(subscriptionId, pipeline.id(), pipeline.version(), null, null, new Action.Run()),
                     pipeline));

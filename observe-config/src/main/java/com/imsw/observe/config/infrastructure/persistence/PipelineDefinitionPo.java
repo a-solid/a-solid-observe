@@ -16,8 +16,8 @@ import com.imsw.observe.kernel.util.MapStringStringToJsonConverter;
 public class PipelineDefinitionPo {
 
     @Id
-    @Column(name = "id", length = 64, nullable = false)
-    public String id;
+    @Column(name = "id", nullable = false)
+    public Long id;
 
     @Column(name = "team", nullable = false)
     public String team;

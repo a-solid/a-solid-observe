@@ -16,6 +16,7 @@ import com.imsw.observe.config.infrastructure.persistence.PipelineVersionReposit
 import com.imsw.observe.config.infrastructure.persistence.SubscriptionMapper;
 import com.imsw.observe.config.infrastructure.persistence.SubscriptionPo;
 import com.imsw.observe.config.infrastructure.persistence.SubscriptionRepository;
+import com.imsw.observe.kernel.util.SnowflakeIdGenerator;
 
 @Service
 public class SubscriptionCrudService {
@@ -28,21 +29,26 @@ public class SubscriptionCrudService {
 
     private final ConditionCodec conditionCodec;
 
+    private final SnowflakeIdGenerator snowflakeIdGenerator;
+
     public SubscriptionCrudService(
             final SubscriptionRepository repository,
             final PipelineDefinitionRepository pipelineDefinitionRepository,
             final PipelineVersionRepository pipelineVersionRepository,
-            final ConditionCodec conditionCodec) {
+            final ConditionCodec conditionCodec,
+            final SnowflakeIdGenerator snowflakeIdGenerator) {
         this.repository = repository;
         this.pipelineDefinitionRepository = pipelineDefinitionRepository;
         this.pipelineVersionRepository = pipelineVersionRepository;
         this.conditionCodec = conditionCodec;
+        this.snowflakeIdGenerator = snowflakeIdGenerator;
     }
 
     @Transactional
     public Subscription create(final Subscription subscription) {
         validatePipeline(subscription);
         SubscriptionPo po = SubscriptionMapper.toPo(subscription, conditionCodec);
+        po.id = snowflakeIdGenerator.next();
         Instant now = Instant.now();
         po.createdAt = now;
         po.updatedAt = now;
@@ -57,7 +63,7 @@ public class SubscriptionCrudService {
     }
 
     @Transactional
-    public Subscription update(final String id, final Subscription subscription) {
+    public Subscription update(final Long id, final Subscription subscription) {
         SubscriptionPo existing = repository
                 .findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("subscription not found: " + id));
@@ -71,7 +77,7 @@ public class SubscriptionCrudService {
     }
 
     @Transactional(readOnly = true)
-    public Subscription find(final String id) {
+    public Subscription find(final Long id) {
         return repository
                 .findById(id)
                 .map(po -> SubscriptionMapper.toEntity(po, conditionCodec))
@@ -86,7 +92,7 @@ public class SubscriptionCrudService {
     }
 
     @Transactional
-    public void delete(final String id) {
+    public void delete(final Long id) {
         repository.deleteById(id);
     }
 

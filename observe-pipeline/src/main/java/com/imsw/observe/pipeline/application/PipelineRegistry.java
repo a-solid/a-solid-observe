@@ -25,20 +25,20 @@ public final class PipelineRegistry {
         return snapshot.loaded;
     }
 
-    public Pipeline pipeline(final String id) {
+    public Pipeline pipeline(final Long id) {
         return snapshot.pipelinesById.get(id);
     }
 
     public static final class Snapshot {
 
-        final Map<String, Pipeline> pipelinesById;
+        final Map<Long, Pipeline> pipelinesById;
 
         final Map<String, List<Subscription>> subscriptionsByDbTable;
 
         final boolean loaded;
 
         private Snapshot(
-                final Map<String, Pipeline> pipelinesById,
+                final Map<Long, Pipeline> pipelinesById,
                 final Map<String, List<Subscription>> subscriptionsByDbTable,
                 final boolean loaded) {
             this.pipelinesById = pipelinesById;
@@ -50,8 +50,8 @@ public final class PipelineRegistry {
             return new Snapshot(Map.of(), Map.of(), false);
         }
 
-        public static Snapshot loaded(final Map<String, Pipeline> pipelines, final List<Subscription> subscriptions) {
-            Map<String, Pipeline> pipelineCopy = Map.copyOf(pipelines);
+        public static Snapshot loaded(final Map<Long, Pipeline> pipelines, final List<Subscription> subscriptions) {
+            Map<Long, Pipeline> pipelineCopy = Map.copyOf(pipelines);
             Map<String, List<Subscription>> index = new HashMap<>();
             for (Subscription sub : subscriptions) {
                 if (sub.source() == null) {
@@ -70,7 +70,7 @@ public final class PipelineRegistry {
             return subscriptionsByDbTable.getOrDefault(dbTableKey(db, table), List.of());
         }
 
-        public Pipeline pipelineById(final String pipelineId) {
+        public Pipeline pipelineById(final Long pipelineId) {
             return pipelinesById.get(pipelineId);
         }
 

@@ -3,7 +3,6 @@ package com.imsw.observe.pipeline.infrastructure.engine;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
-import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,6 +20,7 @@ import com.imsw.observe.kernel.event.model.ExecutionMeta;
 import com.imsw.observe.kernel.execution.model.ErrorType;
 import com.imsw.observe.kernel.execution.spi.ExecutionRecorder;
 import com.imsw.observe.kernel.transaction.spi.TransactionOperator;
+import com.imsw.observe.kernel.util.SnowflakeIdGenerator;
 import com.imsw.observe.pipeline.application.PipelineExecutor;
 import com.imsw.observe.pipeline.application.PipelineRunner;
 import com.imsw.observe.pipeline.domain.Pipeline;
@@ -57,32 +57,24 @@ public final class DefaultPipelineRunner implements PipelineRunner {
     private final TransactionOperator transactionOperator;
     private final ExecutionRecorder executionRecorder;
 
+    private final SnowflakeIdGenerator snowflake;
+
     public DefaultPipelineRunner(
             final PipelineExecutor executor,
             final AlertSink alertSink,
             final TransactionOperator transactionOperator,
-            final ExecutionRecorder executionRecorder) {
+            final ExecutionRecorder executionRecorder,
+            final SnowflakeIdGenerator snowflake) {
         this.executor = executor;
         this.alertSink = alertSink;
         this.transactionOperator = transactionOperator;
         this.executionRecorder = executionRecorder;
+        this.snowflake = snowflake;
     }
 
     @Override
-    public void run(final Pipeline pipeline, final Event triggerEvent, final String subscriptionId) {
-        ExecutionMeta meta = new ExecutionMeta(
-                UUID.randomUUID().toString(),
-                pipeline.id(),
-                pipeline.version(),
-                pipeline.team(),
-                pipeline.application(),
-                pipeline.labels() == null ? Map.of() : pipeline.labels(),
-                null,
-                null,
-                triggerEvent == null ? null : triggerEvent.meta().sourceType(),
-                triggerEvent,
-                Instant.now(),
-                subscriptionId);
+    public void run(final Pipeline pipeline, final Event triggerEvent, final Long subscriptionId) {
+        ExecutionMeta meta = buildMeta(pipeline, triggerEvent, subscriptionId);
         ExecutionData data = new ExecutionData(triggerEvent);
         ExecutionContext ctx = new DefaultExecutionContext(meta, data);
 
@@ -121,12 +113,31 @@ public final class DefaultPipelineRunner implements PipelineRunner {
         }
     }
 
-    private static void count(
-            final LongCounter counter, final String pipelineId, final String tagKey, final String tag) {
+    private ExecutionMeta buildMeta(final Pipeline pipeline, final Event triggerEvent, final Long subscriptionId) {
+        // 全链路 snowflake BIGINT id（ADR-0003）：execution/pipeline/subscription id 均为 Long，直接透传 kernel。
+        Long executionId = snowflake.next();
+        return new ExecutionMeta(
+                executionId,
+                pipeline.id(),
+                pipeline.version(),
+                pipeline.team(),
+                pipeline.application(),
+                pipeline.labels() == null ? Map.of() : pipeline.labels(),
+                null,
+                null,
+                triggerEvent == null ? null : triggerEvent.meta().sourceType(),
+                triggerEvent,
+                Instant.now(),
+                subscriptionId);
+    }
+
+    private static void count(final LongCounter counter, final Long pipelineId, final String tagKey, final String tag) {
         try {
             Attributes attrs = Attributes.of(
-                    AttributeKey.stringKey("pipeline_id"), pipelineId,
-                    AttributeKey.stringKey(tagKey), tag);
+                    AttributeKey.stringKey("pipeline_id"),
+                    String.valueOf(pipelineId),
+                    AttributeKey.stringKey(tagKey),
+                    tag);
             counter.add(1, attrs);
         } catch (RuntimeException e) {
             LOG.debug("metrics count failed", e);

@@ -30,7 +30,7 @@ public class AlertQueryService {
     }
 
     public List<AlertEntity> findAlerts(
-            final String status, final String team, final String pipelineId, final int limit) {
+            final String status, final String team, final Long pipelineId, final int limit) {
         int safeLimit = sanitizeLimit(limit);
         List<AlertEntity> alerts;
         if (status != null && !status.isBlank()) {
@@ -47,15 +47,21 @@ public class AlertQueryService {
         }
         return alerts.stream()
                 .filter(a -> team == null || team.isBlank() || team.equals(a.team()))
-                .filter(a -> pipelineId == null || pipelineId.isBlank() || pipelineId.equals(a.pipelineId()))
+                .filter(a -> pipelineId == null || pipelineId.equals(a.pipelineId()))
                 .toList();
     }
 
-    public Optional<AlertEntity> findById(final String id) {
+    public Optional<AlertEntity> findById(final Long id) {
+        if (id == null) {
+            return Optional.empty();
+        }
         return alertRepository.findById(id).map(AlertMapper::toEntity);
     }
 
-    public Optional<EvidenceEntity> findEvidenceByAlertId(final String alertId) {
+    public Optional<EvidenceEntity> findEvidenceByAlertId(final Long alertId) {
+        if (alertId == null) {
+            return Optional.empty();
+        }
         return evidenceRepository.findByAlertId(alertId).map(EvidenceMapper::toEntity);
     }
 

@@ -8,8 +8,8 @@ import com.imsw.observe.kernel.event.model.SourceType;
 import com.imsw.observe.pipeline.domain.subscription.Condition;
 
 public record Subscription(
-        String id,
-        String pipelineId,
+        Long id,
+        Long pipelineId,
         int pipelineVersion,
         String mq,
         String topic,

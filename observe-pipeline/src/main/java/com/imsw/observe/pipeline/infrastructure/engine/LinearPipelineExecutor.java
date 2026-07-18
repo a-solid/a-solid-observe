@@ -37,7 +37,7 @@ public final class LinearPipelineExecutor implements PipelineExecutor {
         return PipelineOutcome.SUCCESS;
     }
 
-    private NodeOutcome runNode(final String pipelineId, final NodeSpec spec, final ExecutionContext ctx) {
+    private NodeOutcome runNode(final Long pipelineId, final NodeSpec spec, final ExecutionContext ctx) {
         Node node = nodeFactory.apply(spec);
         try {
             return node.execute(spec, ctx);

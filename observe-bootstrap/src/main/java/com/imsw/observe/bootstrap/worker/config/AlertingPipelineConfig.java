@@ -43,8 +43,10 @@ public class AlertingPipelineConfig {
             final AlertRepository alertRepository,
             final EvidenceRepository evidenceRepository,
             final EvidenceCollector evidenceCollector,
-            final AnnotationRenderer annotationRenderer) {
-        return new DefaultAlertSink(alertRepository, evidenceRepository, evidenceCollector, annotationRenderer);
+            final AnnotationRenderer annotationRenderer,
+            final com.imsw.observe.kernel.util.SnowflakeIdGenerator snowflakeIdGenerator) {
+        return new DefaultAlertSink(
+                alertRepository, evidenceRepository, evidenceCollector, annotationRenderer, snowflakeIdGenerator);
     }
 
     @Bean
@@ -67,9 +69,10 @@ public class AlertingPipelineConfig {
             final com.imsw.observe.pipeline.infrastructure.persistence.ExecutionRepository executionRepository,
             final com.imsw.observe.pipeline.infrastructure.persistence.FailedExecutionRepository
                     failedExecutionRepository,
-            final com.fasterxml.jackson.databind.ObjectMapper objectMapper) {
+            final com.fasterxml.jackson.databind.ObjectMapper objectMapper,
+            final com.imsw.observe.kernel.util.SnowflakeIdGenerator snowflakeIdGenerator) {
         return new com.imsw.observe.pipeline.infrastructure.persistence.JpaExecutionRecorder(
-                executionRepository, failedExecutionRepository, objectMapper);
+                executionRepository, failedExecutionRepository, objectMapper, snowflakeIdGenerator);
     }
 
     @Bean
@@ -84,8 +87,10 @@ public class AlertingPipelineConfig {
             final PipelineExecutor executor,
             final AlertSink alertSink,
             final com.imsw.observe.kernel.transaction.spi.TransactionOperator transactionOperator,
-            final com.imsw.observe.kernel.execution.spi.ExecutionRecorder executionRecorder) {
-        return new DefaultPipelineRunner(executor, alertSink, transactionOperator, executionRecorder);
+            final com.imsw.observe.kernel.execution.spi.ExecutionRecorder executionRecorder,
+            final com.imsw.observe.kernel.util.SnowflakeIdGenerator snowflakeIdGenerator) {
+        return new DefaultPipelineRunner(
+                executor, alertSink, transactionOperator, executionRecorder, snowflakeIdGenerator);
     }
 
     @Bean

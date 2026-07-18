@@ -31,10 +31,13 @@ import com.imsw.observe.kernel.event.model.ExecutionData;
 import com.imsw.observe.kernel.event.model.ExecutionMeta;
 import com.imsw.observe.kernel.event.model.Op;
 import com.imsw.observe.kernel.event.model.SourceType;
+import com.imsw.observe.kernel.util.SnowflakeIdGenerator;
 
 @ExtendWith(SpringExtension.class)
 @SpringBootTest(classes = TestJpaFactory.class)
 class DefaultAlertSinkIntegrationTest {
+
+    private static final SnowflakeIdGenerator SNOWFLAKE = new SnowflakeIdGenerator(1L, 0L);
 
     @Autowired
     private AlertRepository alertRepository;
@@ -59,7 +62,11 @@ class DefaultAlertSinkIntegrationTest {
     @Test
     void emitsPersistsAndDedupsAlert() {
         DefaultAlertSink sink = new DefaultAlertSink(
-                alertRepository, evidenceRepository, new EvidenceCollector(objectMapper), new AnnotationRenderer());
+                alertRepository,
+                evidenceRepository,
+                new EvidenceCollector(objectMapper),
+                new AnnotationRenderer(),
+                SNOWFLAKE);
 
         runInTx(() -> sink.drainAndPersist(newContext(alertSignal("fp-1", null))));
         runInTx(() -> sink.drainAndPersist(newContext(alertSignal("fp-1", null))));
@@ -76,7 +83,11 @@ class DefaultAlertSinkIntegrationTest {
     @Test
     void resolveJobFlipsExpiredFiringToResolved() {
         DefaultAlertSink sink = new DefaultAlertSink(
-                alertRepository, evidenceRepository, new EvidenceCollector(objectMapper), new AnnotationRenderer());
+                alertRepository,
+                evidenceRepository,
+                new EvidenceCollector(objectMapper),
+                new AnnotationRenderer(),
+                SNOWFLAKE);
         AlertResolveJob resolveJob = new AlertResolveJob(alertRepository);
 
         runInTx(() -> sink.drainAndPersist(newContext(alertSignal("fp-2", Duration.ofMillis(1)))));
@@ -97,8 +108,8 @@ class DefaultAlertSinkIntegrationTest {
         Event.EventMeta meta = new Event.EventMeta(SourceType.CDC, "t", "db", "tbl", Map.of());
         Event event = new Event(meta, Map.of(), Map.of("amount", 2000L), Op.INSERT, Instant.now());
         ExecutionMeta execMeta = new ExecutionMeta(
-                "exec-1",
-                "demo-pipeline",
+                1001L,
+                2001L,
                 1,
                 "team",
                 "app",
@@ -108,7 +119,7 @@ class DefaultAlertSinkIntegrationTest {
                 SourceType.CDC,
                 event,
                 Instant.now(),
-                "sub-1");
+                3001L);
         ExecutionData data = new ExecutionData(event);
         TestExecutionContext ctx = new TestExecutionContext(execMeta, data);
         ctx.putNodeOutput("check", "amt", new java.math.BigDecimal("2000"));

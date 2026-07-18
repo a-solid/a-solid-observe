@@ -1,11 +1,11 @@
 CREATE TABLE alerts (
-    id VARCHAR(36) PRIMARY KEY,
+    id BIGINT PRIMARY KEY,
     team VARCHAR NOT NULL,
     application VARCHAR NOT NULL,
     pipeline_labels LONG VARCHAR,
-    pipeline_id VARCHAR(64) NOT NULL,
+    pipeline_id BIGINT NOT NULL,
     pipeline_version INT NOT NULL,
-    execution_id VARCHAR NOT NULL,
+    execution_id BIGINT NOT NULL,
     fingerprint VARCHAR(256) NOT NULL,
     severity VARCHAR NOT NULL,
     labels LONG VARCHAR NOT NULL,
@@ -37,10 +37,10 @@ CREATE INDEX idx_alerts_trace ON alerts(trace_id);
 CREATE INDEX idx_alerts_exec ON alerts(execution_id);
 
 CREATE TABLE alerts_evidence (
-    alert_id VARCHAR(36) PRIMARY KEY,
-    pipeline_id VARCHAR(64) NOT NULL,
+    alert_id BIGINT PRIMARY KEY,
+    pipeline_id BIGINT NOT NULL,
     pipeline_version INT NOT NULL,
-    execution_id VARCHAR NOT NULL,
+    execution_id BIGINT NOT NULL,
     node_name VARCHAR,
 
     outputs LONG VARCHAR,

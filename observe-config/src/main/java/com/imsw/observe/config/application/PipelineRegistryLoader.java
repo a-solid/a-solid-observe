@@ -46,7 +46,7 @@ public final class PipelineRegistryLoader {
     }
 
     public PipelineRegistry.Snapshot load() {
-        Map<String, Pipeline> pipelines = new HashMap<>();
+        Map<Long, Pipeline> pipelines = new HashMap<>();
         List<Subscription> subscriptions = new ArrayList<>();
         for (PipelineDefinitionPo defPo : pipelineDefinitionRepository.findAll()) {
             if (defPo.currentVersion == null) {

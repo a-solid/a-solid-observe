@@ -52,7 +52,7 @@ public class VersionPublishService {
     }
 
     @Transactional
-    public PipelineVersion publish(final String pipelineId, final int version, final String publishedBy) {
+    public PipelineVersion publish(final Long pipelineId, final int version, final String publishedBy) {
         PipelineDefinitionPo def = definitionRepository
                 .findById(pipelineId)
                 .orElseThrow(() -> new IllegalArgumentException("pipeline not found: " + pipelineId));
@@ -72,7 +72,7 @@ public class VersionPublishService {
     }
 
     @Transactional
-    public PipelineVersion archive(final String pipelineId, final int version) {
+    public PipelineVersion archive(final Long pipelineId, final int version) {
         PipelineVersionPo po = versionRepository
                 .findById(versionPk(pipelineId, version))
                 .orElseThrow(() ->
@@ -83,7 +83,7 @@ public class VersionPublishService {
     }
 
     @Transactional(readOnly = true)
-    public List<PipelineVersion> versions(final String pipelineId) {
+    public List<PipelineVersion> versions(final Long pipelineId) {
         return versionRepository.findAll().stream()
                 .filter(v -> pipelineId.equals(v.pipelineId))
                 .sorted(Comparator.comparingInt((PipelineVersionPo v) -> v.version))
@@ -92,7 +92,7 @@ public class VersionPublishService {
     }
 
     @Transactional(readOnly = true)
-    public PipelineVersion find(final String pipelineId, final int version) {
+    public PipelineVersion find(final Long pipelineId, final int version) {
         return versionRepository
                 .findById(versionPk(pipelineId, version))
                 .map(VersionPublishService::toEntity)
@@ -100,7 +100,7 @@ public class VersionPublishService {
     }
 
     @Transactional
-    public int nextVersion(final String pipelineId) {
+    public int nextVersion(final Long pipelineId) {
         return versionRepository.findAll().stream()
                         .filter(v -> pipelineId.equals(v.pipelineId))
                         .mapToInt(v -> v.version)
@@ -110,7 +110,7 @@ public class VersionPublishService {
     }
 
     private static com.imsw.observe.config.infrastructure.persistence.PipelineVersionPk versionPk(
-            final String pipelineId, final int version) {
+            final Long pipelineId, final int version) {
         return new com.imsw.observe.config.infrastructure.persistence.PipelineVersionPk(pipelineId, version);
     }
 

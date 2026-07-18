@@ -32,16 +32,16 @@ class DefaultSubscriptionMatcherTest {
 
     @Test
     void matchesByDbTableOpAndFieldFilter() {
-        Pipeline pipeline = pipeline("p1", 1);
+        Pipeline pipeline = pipeline(1L, 1);
         Subscription sub = new Subscription(
-                "s1",
-                "p1",
+                10L,
+                1L,
                 1,
                 new Subscription.SourceRef("mq", "topic", "trade_db", "orders", Set.of(Op.INSERT), SourceType.CDC),
                 new Condition.Compare("after.status", Condition.Compare.Op.EQ, "PAID"),
                 new Action.Run());
         PipelineRegistry registry = new PipelineRegistry();
-        registry.replace(PipelineRegistry.Snapshot.loaded(Map.of("p1", pipeline), List.of(sub)));
+        registry.replace(PipelineRegistry.Snapshot.loaded(Map.of(1L, pipeline), List.of(sub)));
 
         SubscriptionMatcher matcher = new DefaultSubscriptionMatcher(registry);
 
@@ -58,23 +58,23 @@ class DefaultSubscriptionMatcherTest {
 
     @Test
     void skipsWhenPipelineVersionMismatch() {
-        Pipeline pipeline = pipeline("p1", 2);
+        Pipeline pipeline = pipeline(1L, 2);
         Subscription sub = new Subscription(
-                "s1",
-                "p1",
+                10L,
+                1L,
                 1,
                 new Subscription.SourceRef(null, null, "trade_db", "orders", Set.of(), SourceType.CDC),
                 null,
                 new Action.Run());
         PipelineRegistry registry = new PipelineRegistry();
-        registry.replace(PipelineRegistry.Snapshot.loaded(Map.of("p1", pipeline), List.of(sub)));
+        registry.replace(PipelineRegistry.Snapshot.loaded(Map.of(1L, pipeline), List.of(sub)));
 
         SubscriptionMatcher matcher = new DefaultSubscriptionMatcher(registry);
         assertThat(matcher.match(event("trade_db", "orders", Op.INSERT, Map.of())))
                 .isEmpty();
     }
 
-    private Pipeline pipeline(final String id, final int version) {
+    private Pipeline pipeline(final Long id, final int version) {
         return new Pipeline(
                 id,
                 version,

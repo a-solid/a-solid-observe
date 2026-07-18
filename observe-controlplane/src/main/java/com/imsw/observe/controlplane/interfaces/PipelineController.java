@@ -36,7 +36,7 @@ public class PipelineController {
     @PostMapping
     public PipelineDto create(@RequestBody final CreatePipelineRequest req) {
         PipelineDefinition def = crud.create(
-                req.id(), req.team(), req.application(), req.labels(), req.name(), req.description(), req.createdBy());
+                req.team(), req.application(), req.labels(), req.name(), req.description(), req.createdBy());
         return PipelineDto.from(def);
     }
 
@@ -46,46 +46,45 @@ public class PipelineController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<PipelineDto> get(@PathVariable final String id) {
+    public ResponseEntity<PipelineDto> get(@PathVariable final Long id) {
         PipelineDefinition def = crud.find(id);
         return def == null ? ResponseEntity.notFound().build() : ResponseEntity.ok(PipelineDto.from(def));
     }
 
     @PutMapping("/{id}")
-    public PipelineDto update(@PathVariable final String id, @RequestBody final CreatePipelineRequest req) {
+    public PipelineDto update(@PathVariable final Long id, @RequestBody final CreatePipelineRequest req) {
         return PipelineDto.from(
                 crud.update(id, req.team(), req.application(), req.labels(), req.name(), req.description()));
     }
 
     @PostMapping("/{id}/archive")
-    public void archive(@PathVariable final String id) {
+    public void archive(@PathVariable final Long id) {
         crud.archive(id);
     }
 
     @PostMapping("/{id}/versions")
-    public VersionDto saveVersion(@PathVariable final String id, @RequestBody final SaveVersionRequest req) {
+    public VersionDto saveVersion(@PathVariable final Long id, @RequestBody final SaveVersionRequest req) {
         Pipeline pipeline = JsonUtil.fromJson(req.pipelineJson(), Pipeline.class);
         return VersionDto.from(versions.saveDraft(pipeline, req.publishedBy()));
     }
 
     @GetMapping("/{id}/versions")
-    public List<VersionDto> versions(@PathVariable final String id) {
+    public List<VersionDto> versions(@PathVariable final Long id) {
         return versions.versions(id).stream().map(VersionDto::from).toList();
     }
 
     @PostMapping("/{id}/versions/{v}/publish")
     public VersionDto publish(
-            @PathVariable final String id, @PathVariable final int v, @RequestBody final PublishRequest req) {
+            @PathVariable final Long id, @PathVariable final int v, @RequestBody final PublishRequest req) {
         return VersionDto.from(versions.publish(id, v, req.publishedBy()));
     }
 
     @PostMapping("/{id}/versions/{v}/archive")
-    public VersionDto archiveVersion(@PathVariable final String id, @PathVariable final int v) {
+    public VersionDto archiveVersion(@PathVariable final Long id, @PathVariable final int v) {
         return VersionDto.from(versions.archive(id, v));
     }
 
     public record CreatePipelineRequest(
-            String id,
             String team,
             String application,
             Map<String, String> labels,

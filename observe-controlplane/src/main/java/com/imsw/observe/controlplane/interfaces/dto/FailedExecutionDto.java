@@ -3,15 +3,15 @@ package com.imsw.observe.controlplane.interfaces.dto;
 import com.imsw.observe.pipeline.domain.FailedExecution;
 
 public record FailedExecutionDto(
-        String id,
-        String pipelineId,
+        Long id,
+        Long pipelineId,
         int pipelineVersion,
-        String executionId,
+        Long executionId,
         String team,
         String application,
         String triggerType,
         String triggerEvent,
-        String subscriptionId,
+        Long subscriptionId,
         String nodeName,
         String errorType,
         String errorMessage,
