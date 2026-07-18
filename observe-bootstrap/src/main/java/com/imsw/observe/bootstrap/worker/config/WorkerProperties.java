@@ -19,6 +19,17 @@ public class WorkerProperties {
      */
     private int cronSchedulerPoolSize = 4;
 
+    /**
+     * SourceDispatcher 内部队列容量（B9 §3.2）。Source 端 {@code onEvent} 阻塞入队——队列满时
+     * 反压到上游（MQ 不 ack / Cron 延后 / Api 阻塞）。
+     */
+    private int dispatchQueueSize = 1000;
+
+    /**
+     * SourceDispatcher 分发线程数（B9 §3.2）。线程循环 take→match→阻塞提交 runnerPool。
+     */
+    private int dispatchThreads = 2;
+
     private int delayedPoolSize = 4;
 
     public int getRunnerCore() {
@@ -51,6 +62,22 @@ public class WorkerProperties {
 
     public void setCronSchedulerPoolSize(final int cronSchedulerPoolSize) {
         this.cronSchedulerPoolSize = cronSchedulerPoolSize;
+    }
+
+    public int getDispatchQueueSize() {
+        return dispatchQueueSize;
+    }
+
+    public void setDispatchQueueSize(final int dispatchQueueSize) {
+        this.dispatchQueueSize = dispatchQueueSize;
+    }
+
+    public int getDispatchThreads() {
+        return dispatchThreads;
+    }
+
+    public void setDispatchThreads(final int dispatchThreads) {
+        this.dispatchThreads = dispatchThreads;
     }
 
     public int getDelayedPoolSize() {

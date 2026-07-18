@@ -10,6 +10,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 import com.imsw.observe.kernel.event.model.CdcEvent;
@@ -23,6 +24,20 @@ import com.imsw.observe.pipeline.domain.subscription.Subscription;
 import com.imsw.observe.pipeline.infrastructure.subscription.DefaultSubscriptionMatcher;
 
 class SourceDispatcherTest {
+
+    private SourceDispatcher dispatcher;
+
+    private ThreadPoolExecutor pool;
+
+    @AfterEach
+    void tearDown() {
+        if (dispatcher != null) {
+            dispatcher.stop();
+        }
+        if (pool != null) {
+            pool.shutdownNow();
+        }
+    }
 
     @Test
     void dispatchesMatchedEventToRunner() throws Exception {
@@ -40,20 +55,29 @@ class SourceDispatcherTest {
         registry.replace(PipelineRegistry.Snapshot.loaded(Map.of(1L, pipeline), List.of(sub)));
 
         RecordingRunner runner = new RecordingRunner();
-        ThreadPoolExecutor pool = new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>());
-        com.imsw.observe.pipeline.application.DelayedEventStore delayedStore = new NoopDelayedEventStore();
+        pool = new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>());
+        DelayedEventStore delayedStore = new NoopDelayedEventStore();
         DelayedActionHandler delayedHandler = new DelayedActionHandler(delayedStore, runner);
-        SourceDispatcher dispatcher =
-                new SourceDispatcher(new DefaultSubscriptionMatcher(registry), runner, pool, delayedHandler);
+        // queue 容量 8、dispatch 线程 1、runner 在途上限 16（足够大不阻塞测试路径）。
+        dispatcher =
+                new SourceDispatcher(new DefaultSubscriptionMatcher(registry), runner, pool, delayedHandler, 8, 1, 16);
 
-        dispatcher.onBatch(List.of(event("trade_db", "orders", CdcOp.INSERT)));
-        dispatcher.onBatch(List.of(event("trade_db", "payments", CdcOp.INSERT)));
+        dispatcher.start();
+        dispatcher.onEvent(event("trade_db", "orders", CdcOp.INSERT));
+        dispatcher.onEvent(event("trade_db", "payments", CdcOp.INSERT));
 
-        pool.shutdown();
-        pool.awaitTermination(2, TimeUnit.SECONDS);
+        awaitRunnerCount(runner, 1, 2_000L);
 
         assertThat(runner.received).hasSize(1);
         assertThat(runner.received.get(0).pipeline().id()).isEqualTo(1L);
+    }
+
+    private static void awaitRunnerCount(final RecordingRunner runner, final int expected, final long timeoutMs)
+            throws InterruptedException {
+        long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMs);
+        while (runner.received.size() < expected && System.nanoTime() < deadline) {
+            Thread.sleep(20L);
+        }
     }
 
     private static Pipeline pipeline(final Long id, final int version) {

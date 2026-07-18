@@ -31,8 +31,12 @@ public final class InMemoryCdcSource implements Source {
     }
 
     public void push(final List<Event> events) {
-        if (listener != null && events != null && !events.isEmpty()) {
-            listener.onBatch(events);
+        if (listener == null || events == null || events.isEmpty()) {
+            return;
+        }
+        // B9：单事件契约——逐条 onEvent（onEvent 内部阻塞入队，反压随事件传播）。
+        for (Event event : events) {
+            listener.onEvent(event);
         }
     }
 }

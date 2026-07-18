@@ -45,7 +45,7 @@ import com.imsw.observe.pipeline.domain.subscription.Subscription.SourceRef.Conc
  *
  * <p>到点产出 {@link TickEvent}（{@link TickMeta#source()} = 订阅的索引键 = {@code sub.source().mq()}，
  * 与 {@code Snapshot.subscriptionsBySource} 的 key 同源；{@code cronName} 作为元数据透传不参与路由）
- * 投给 {@link EventListener#onBatch(List)}（运行时 = {@code SourceDispatcher::onBatch}），
+ * 投给 {@link EventListener#onEvent(Event)}（运行时 = {@code SourceDispatcher::onEvent}），
  * 由 matcher 按 source（= mq）路由到订阅了该 cron 的 pipeline。
  *
  * <p>本类属 application 层：只依赖 application 端口 {@link EventListener} + kernel Event。
@@ -238,10 +238,11 @@ public final class CronScheduler {
         TickMeta meta = new TickMeta(sub.source, sub.cronName, sub.cronExpression, Map.of());
         Event event = new TickEvent(meta, Instant.now());
         try {
-            listener.onBatch(List.of(event));
+            // B9：单事件契约（onBatch 已下线）。onEvent 阻塞入队——队列满时反压到 cron fire（轻微延后）。
+            listener.onEvent(event);
         } catch (RuntimeException e) {
             // 下游失败不影响 re-arm（at-least-once 由下游负责；本类保证下一发仍调度）。
-            LOG.warn("CRON subscription {} listener.onBatch failed", id, e);
+            LOG.warn("CRON subscription {} listener.onEvent failed", id, e);
         }
     }
 

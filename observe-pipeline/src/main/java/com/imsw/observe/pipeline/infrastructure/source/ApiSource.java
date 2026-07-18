@@ -1,7 +1,5 @@
 package com.imsw.observe.pipeline.infrastructure.source;
 
-import java.util.List;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -31,6 +29,6 @@ public final class ApiSource implements Source {
         if (listener == null) {
             throw new IllegalStateException("ApiSource not started");
         }
-        listener.onBatch(List.of(event));
+        listener.onEvent(event);
     }
 }

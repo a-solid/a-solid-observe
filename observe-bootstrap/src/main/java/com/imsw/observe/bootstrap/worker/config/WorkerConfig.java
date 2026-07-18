@@ -88,19 +88,36 @@ public class WorkerConfig {
         return new com.imsw.observe.pipeline.application.DelayedActionHandler(store, runner);
     }
 
-    @Bean
+    /**
+     * 单事件分发器（B9 §3.2）。内部有界队列 + N 分发线程 + 阻塞 runnerPool 提交（不丢事件）。
+     *
+     * <p>{@code destroyMethod = "stop"}：容器关闭时 drain 队列 + 中断分发线程（at-least-once 由 MQ
+     * 重投兜底）。{@code initMethod} 在 Spring 完成依赖注入后启动分发线程——保证 runnerPool / matcher
+     * / delayedHandler 等协作者已就绪。
+     */
+    @Bean(initMethod = "start", destroyMethod = "stop")
     public SourceDispatcher sourceDispatcher(
             final SubscriptionMatcher matcher,
             final PipelineRunner runner,
             final ThreadPoolExecutor pool,
-            final com.imsw.observe.pipeline.application.DelayedActionHandler delayedActionHandler) {
-        return new SourceDispatcher(matcher, runner, pool, delayedActionHandler);
+            final com.imsw.observe.pipeline.application.DelayedActionHandler delayedActionHandler,
+            final WorkerProperties props) {
+        // runnerPool 在途上限 = 工作队列容量 + 最大线程数；饱和时分发线程阻塞在 Semaphore.acquire。
+        int runnerInFlight = props.getRunnerQueue() + props.getRunnerMax();
+        return new SourceDispatcher(
+                matcher,
+                runner,
+                pool,
+                delayedActionHandler,
+                props.getDispatchQueueSize(),
+                props.getDispatchThreads(),
+                runnerInFlight);
     }
 
     @Bean
     public InMemoryCdcSource inMemoryCdcSource(final SourceDispatcher dispatcher) {
         InMemoryCdcSource source = new InMemoryCdcSource();
-        source.start(dispatcher::onBatch);
+        source.start(dispatcher::onEvent);
         return source;
     }
 
@@ -118,16 +135,15 @@ public class WorkerConfig {
             throw new IllegalStateException("cannot configure IBM MQ connection factory", e);
         }
         IbmMqXmlParser parser = new IbmMqXmlParser();
-        IbmMqCdcSource source =
-                new IbmMqCdcSource(cf, props.getQueue(), parser, props.getBatchSize(), props.getBatchTimeoutMillis());
-        source.start(dispatcher::onBatch);
+        IbmMqCdcSource source = new IbmMqCdcSource(cf, props.getQueue(), parser);
+        source.start(dispatcher::onEvent);
         return source;
     }
 
     @Bean
     public ApiSource apiSource(final SourceDispatcher dispatcher) {
         ApiSource source = new ApiSource();
-        source.start(dispatcher::onBatch);
+        source.start(dispatcher::onEvent);
         return source;
     }
 
@@ -147,13 +163,13 @@ public class WorkerConfig {
 
     /**
      * 每订阅 cron 调度器（ADR-0007）。监听 {@link PipelineRegistry} 快照变化：{@link CronScheduler#sync} diff
-     * 出新增/变更/删除的 CRON 订阅并起停调度句柄。运行时 listener = {@code SourceDispatcher::onBatch}，
+     * 出新增/变更/删除的 CRON 订阅并起停调度句柄。运行时 listener = {@code SourceDispatcher::onEvent}，
      * 到点产出 {@link com.imsw.observe.kernel.event.model.TickEvent} 由 matcher 按 cron name 路由。
      */
     @Bean
     public CronScheduler cronScheduler(
             final ScheduledExecutorService cronSchedulerPool, final SourceDispatcher dispatcher) {
-        return new CronScheduler(cronSchedulerPool, dispatcher::onBatch);
+        return new CronScheduler(cronSchedulerPool, dispatcher::onEvent);
     }
 
     @Bean

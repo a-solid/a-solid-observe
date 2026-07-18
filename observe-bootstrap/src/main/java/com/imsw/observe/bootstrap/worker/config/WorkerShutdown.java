@@ -13,6 +13,7 @@ import org.springframework.stereotype.Component;
 import com.imsw.observe.pipeline.application.CronScheduler;
 import com.imsw.observe.pipeline.application.DelayedEventStore;
 import com.imsw.observe.pipeline.application.Source;
+import com.imsw.observe.pipeline.application.SourceDispatcher;
 
 @Component
 @ConditionalOnProperty(prefix = "observe.worker", name = "enabled", havingValue = "true", matchIfMissing = true)
@@ -30,15 +31,19 @@ public class WorkerShutdown {
 
     private final CronScheduler cronScheduler;
 
+    private final SourceDispatcher dispatcher;
+
     public WorkerShutdown(
             final ThreadPoolExecutor runnerPool,
             final java.util.List<Source> sources,
             final DelayedEventStore delayedStore,
-            final CronScheduler cronScheduler) {
+            final CronScheduler cronScheduler,
+            final SourceDispatcher dispatcher) {
         this.runnerPool = runnerPool;
         this.sources = sources;
         this.delayedStore = delayedStore;
         this.cronScheduler = cronScheduler;
+        this.dispatcher = dispatcher;
     }
 
     @PreDestroy
@@ -56,6 +61,14 @@ public class WorkerShutdown {
             cronScheduler.shutdown();
         } catch (RuntimeException e) {
             LOG.warn("cron scheduler shutdown failed", e);
+        }
+        // 停 dispatcher：drain 内部队列剩余事件（match+提交到 runnerPool）后中断分发线程。
+        // dispatcher 的 destroyMethod=stop 也会再调一次（幂等）；此处主动提前 drain，保证 runnerPool
+        // 关闭前剩余事件已入 runnerPool（at-least-once 由 MQ 重投兜底）。
+        try {
+            dispatcher.stop();
+        } catch (RuntimeException e) {
+            LOG.warn("dispatcher stop failed", e);
         }
         runnerPool.shutdown();
         try {

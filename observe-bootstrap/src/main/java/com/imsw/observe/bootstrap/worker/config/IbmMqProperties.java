@@ -19,10 +19,6 @@ public class IbmMqProperties {
 
     private String queue;
 
-    private int batchSize = 50;
-
-    private long batchTimeoutMillis = 200L;
-
     public boolean isEnabled() {
         return enabled;
     }
@@ -69,21 +65,5 @@ public class IbmMqProperties {
 
     public void setQueue(final String queue) {
         this.queue = queue;
-    }
-
-    public int getBatchSize() {
-        return batchSize;
-    }
-
-    public void setBatchSize(final int batchSize) {
-        this.batchSize = batchSize;
-    }
-
-    public long getBatchTimeoutMillis() {
-        return batchTimeoutMillis;
-    }
-
-    public void setBatchTimeoutMillis(final long batchTimeoutMillis) {
-        this.batchTimeoutMillis = batchTimeoutMillis;
     }
 }

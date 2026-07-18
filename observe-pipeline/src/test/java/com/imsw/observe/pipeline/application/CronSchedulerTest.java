@@ -302,18 +302,16 @@ class CronSchedulerTest {
         private volatile boolean parked = false;
 
         @Override
-        public void onBatch(final List<Event> events) {
-            for (Event e : events) {
-                if (e instanceof TickEvent tick) {
-                    received.add(tick);
-                    int n = tickCount.incrementAndGet();
-                    if (n == 1) {
-                        firstEventLatch.countDown();
-                    } else if (n == 2) {
-                        firstEventLatch2.countDown();
-                    }
-                    parkIfHeld();
+        public void onEvent(final Event e) {
+            if (e instanceof TickEvent tick) {
+                received.add(tick);
+                int n = tickCount.incrementAndGet();
+                if (n == 1) {
+                    firstEventLatch.countDown();
+                } else if (n == 2) {
+                    firstEventLatch2.countDown();
                 }
+                parkIfHeld();
             }
         }
 

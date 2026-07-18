@@ -21,6 +21,9 @@ observe:
     runner-max: 16
     runner-queue: 1000
     cron-scheduler-pool-size: 4
+    # B9 §3.2 单事件分发器配置（内部有界队列 + N 分发线程）
+    dispatch-queue-size: 1000
+    dispatch-threads: 2
     ibm-mq:
       enabled: false
       host: localhost
@@ -28,8 +31,6 @@ observe:
       queue-manager: QM1
       channel: DEV.APP.SVRCONN
       queue: APP.Q
-      batch-size: 50
-      batch-timeout-millis: 200
   alerting:
     resolve-job:
       interval-millis: 60000
