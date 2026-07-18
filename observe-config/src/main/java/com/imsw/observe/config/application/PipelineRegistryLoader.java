@@ -108,7 +108,7 @@ public final class PipelineRegistryLoader {
     }
 
     private Subscription toPipelineSubscription(final SubscriptionPo po) {
-        com.imsw.observe.config.domain.Subscription entity =
+        com.imsw.observe.config.domain.SubscriptionDefinition entity =
                 com.imsw.observe.config.infrastructure.persistence.SubscriptionMapper.toEntity(po, conditionCodec);
         Subscription.SourceRef source = new Subscription.SourceRef(
                 entity.mq(), entity.topic(), entity.db(), entity.table(), entity.opTypes(), entity.sourceType());
@@ -122,7 +122,7 @@ public final class PipelineRegistryLoader {
                 toAction(entity));
     }
 
-    private static Action toAction(final com.imsw.observe.config.domain.Subscription entity) {
+    private static Action toAction(final com.imsw.observe.config.domain.SubscriptionDefinition entity) {
         if (entity.actionType() == null) {
             return new Action.Run();
         }
