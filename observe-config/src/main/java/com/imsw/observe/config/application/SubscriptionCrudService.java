@@ -112,6 +112,11 @@ public class SubscriptionCrudService {
         PipelineDefinitionPo def = pipelineDefinitionRepository
                 .findById(subscription.pipelineId())
                 .orElseThrow(() -> new IllegalArgumentException("pipeline not found: " + subscription.pipelineId()));
+        // 软隔离铁律（ADR-0002）：subscription 只能引用同 namespace 下的 pipeline。
+        if (!def.namespace.equals(subscription.namespace())) {
+            throw new IllegalArgumentException("pipeline " + subscription.pipelineId()
+                    + " does not belong to namespace " + subscription.namespace());
+        }
         if (!"PUBLISHED".equals(def.status)) {
             throw new IllegalArgumentException("pipeline not published: " + subscription.pipelineId());
         }
