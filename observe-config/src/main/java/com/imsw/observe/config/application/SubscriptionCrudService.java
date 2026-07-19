@@ -11,9 +11,6 @@ import com.imsw.observe.config.domain.SubscriptionDefinition;
 import com.imsw.observe.config.infrastructure.ConditionCodec;
 import com.imsw.observe.config.infrastructure.persistence.PipelineDefinitionPo;
 import com.imsw.observe.config.infrastructure.persistence.PipelineDefinitionRepository;
-import com.imsw.observe.config.infrastructure.persistence.PipelineVersionPk;
-import com.imsw.observe.config.infrastructure.persistence.PipelineVersionPo;
-import com.imsw.observe.config.infrastructure.persistence.PipelineVersionRepository;
 import com.imsw.observe.config.infrastructure.persistence.SubscriptionMapper;
 import com.imsw.observe.config.infrastructure.persistence.SubscriptionPo;
 import com.imsw.observe.config.infrastructure.persistence.SubscriptionRepository;
@@ -27,8 +24,6 @@ public class SubscriptionCrudService {
 
     private final PipelineDefinitionRepository pipelineDefinitionRepository;
 
-    private final PipelineVersionRepository pipelineVersionRepository;
-
     private final ConditionCodec conditionCodec;
 
     private final SnowflakeIdGenerator snowflakeIdGenerator;
@@ -38,13 +33,11 @@ public class SubscriptionCrudService {
     public SubscriptionCrudService(
             final SubscriptionRepository repository,
             final PipelineDefinitionRepository pipelineDefinitionRepository,
-            final PipelineVersionRepository pipelineVersionRepository,
             final ConditionCodec conditionCodec,
             final SnowflakeIdGenerator snowflakeIdGenerator,
             final NamespaceCrudService namespaceCrudService) {
         this.repository = repository;
         this.pipelineDefinitionRepository = pipelineDefinitionRepository;
-        this.pipelineVersionRepository = pipelineVersionRepository;
         this.conditionCodec = conditionCodec;
         this.snowflakeIdGenerator = snowflakeIdGenerator;
         this.namespaceCrudService = namespaceCrudService;
@@ -119,24 +112,21 @@ public class SubscriptionCrudService {
     }
 
     private void validatePipeline(final SubscriptionDefinition subscription) {
-        PipelineDefinitionPo def = pipelineDefinitionRepository
-                .findById(subscription.pipelineId())
-                .orElseThrow(() -> new IllegalArgumentException("pipeline not found: " + subscription.pipelineId()));
-        // 软隔离铁律（ADR-0002）：subscription 只能引用同 namespace 下的 pipeline。
-        if (!def.namespace.equals(subscription.namespace())) {
-            throw new IllegalArgumentException("pipeline " + subscription.pipelineId()
-                    + " does not belong to namespace " + subscription.namespace());
+        if (subscription.pipelineIds() == null || subscription.pipelineIds().isEmpty()) {
+            throw new IllegalArgumentException("pipelineIds must not be empty");
         }
-        if (!"PUBLISHED".equals(def.status)) {
-            throw new IllegalArgumentException("pipeline not published: " + subscription.pipelineId());
-        }
-        PipelineVersionPo version = pipelineVersionRepository
-                .findById(new PipelineVersionPk(subscription.pipelineId(), subscription.pipelineVersion()))
-                .orElseThrow(() -> new IllegalArgumentException("pipeline version not found: "
-                        + subscription.pipelineId() + " v" + subscription.pipelineVersion()));
-        if (!"PUBLISHED".equals(version.status)) {
-            throw new IllegalArgumentException("pipeline version not published: " + subscription.pipelineId() + " v"
-                    + subscription.pipelineVersion());
+        for (Long pipelineId : subscription.pipelineIds()) {
+            PipelineDefinitionPo def = pipelineDefinitionRepository
+                    .findById(pipelineId)
+                    .orElseThrow(() -> new IllegalArgumentException("pipeline not found: " + pipelineId));
+            // 软隔离铁律（ADR-0002）：subscription 只能引用同 namespace 下的 pipeline。
+            if (!def.namespace.equals(subscription.namespace())) {
+                throw new IllegalArgumentException(
+                        "pipeline " + pipelineId + " does not belong to namespace " + subscription.namespace());
+            }
+            if (!"PUBLISHED".equals(def.status)) {
+                throw new IllegalArgumentException("pipeline not published: " + pipelineId);
+            }
         }
     }
 

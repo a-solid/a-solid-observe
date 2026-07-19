@@ -80,8 +80,7 @@ public class SubscriptionController {
 
     /** 可编辑的订阅字段（create/update 共用）。 */
     public record SubscriptionFields(
-            @NotNull Long pipelineId,
-            int pipelineVersion,
+            @NotNull java.util.List<Long> pipelineIds,
             String mq,
             String topic,
             String db,
@@ -109,8 +108,7 @@ public class SubscriptionController {
             return new SubscriptionDefinition(
                     null,
                     namespace,
-                    pipelineId,
-                    pipelineVersion,
+                    pipelineIds,
                     mq,
                     topic,
                     db,

@@ -8,8 +8,7 @@ import com.imsw.observe.kernel.event.model.SourceType;
 public record Subscription(
         Long id,
         String namespace,
-        Long pipelineId,
-        int pipelineVersion,
+        java.util.List<Long> pipelineIds,
         SourceRef source,
         Condition fieldFilter,
         Action action) {

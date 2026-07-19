@@ -65,16 +65,26 @@ public final class PipelineRegistryLoader {
             pipelines.put(pipeline.id(), pipeline);
         }
         for (SubscriptionPo subPo : subscriptionRepository.findAll()) {
-            if (!"ACTIVE".equals(subPo.status)) {
-                continue;
+            // 扇出：pipelineIds 至少一个 id 在已加载 pipelines 里才纳入订阅；全部缺失则跳过。
+            if ("ACTIVE".equals(subPo.status) && anyPipelinePresent(subPo, pipelines)) {
+                subscriptions.add(toPipelineSubscription(subPo));
             }
-            if (!pipelines.containsKey(subPo.pipelineId)) {
-                continue;
-            }
-            subscriptions.add(toPipelineSubscription(subPo));
         }
         LOG.info("registry loaded: {} pipelines, {} subscriptions", pipelines.size(), subscriptions.size());
         return PipelineRegistry.Snapshot.loaded(pipelines, subscriptions);
+    }
+
+    /** 扇出纳入判定：subscription 的 pipelineIds 至少一个 id 在已加载 pipelines 里。 */
+    private static boolean anyPipelinePresent(final SubscriptionPo subPo, final Map<Long, Pipeline> pipelines) {
+        if (subPo.pipelineIds == null || subPo.pipelineIds.isEmpty()) {
+            return false;
+        }
+        for (Long pid : subPo.pipelineIds) {
+            if (pipelines.containsKey(pid)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private Pipeline deserialize(final PipelineVersionPo versionPo) {
@@ -121,13 +131,7 @@ public final class PipelineRegistryLoader {
                 entity.cronName(),
                 toSourceConcurrent(entity.concurrent()));
         return new Subscription(
-                entity.id(),
-                entity.namespace(),
-                entity.pipelineId(),
-                entity.pipelineVersion(),
-                source,
-                entity.fieldFilter(),
-                toAction(entity));
+                entity.id(), entity.namespace(), entity.pipelineIds(), source, entity.fieldFilter(), toAction(entity));
     }
 
     private static Subscription.SourceRef.Concurrent toSourceConcurrent(
@@ -147,8 +151,7 @@ public final class PipelineRegistryLoader {
         }
         return switch (entity.actionType()) {
             case RUN -> new Action.Run();
-            case SCHEDULE -> new Action.Schedule(
-                    entity.scheduleDelay(), entity.scheduleCorrelationKeyPath(), entity.pipelineId());
+            case SCHEDULE -> new Action.Schedule(entity.scheduleDelay(), entity.scheduleCorrelationKeyPath());
             case CANCEL -> new Action.Cancel(entity.scheduleCorrelationKeyPath());
         };
     }

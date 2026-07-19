@@ -43,27 +43,31 @@ public final class DefaultSubscriptionMatcher implements SubscriptionMatcher {
         }
         PipelineRegistry.Snapshot snapshot = registry.snapshot();
         for (Subscription sub : snapshot.subscriptionsFor(event)) {
-            Pipeline pipeline = tryMatch(sub, event, snapshot);
-            if (pipeline != null) {
-                matched.add(new MatchedSubscription(sub, pipeline));
+            List<Pipeline> pipelines = tryMatch(sub, event, snapshot);
+            if (!pipelines.isEmpty()) {
+                matched.add(new MatchedSubscription(sub, pipelines));
             }
         }
         return matched;
     }
 
-    private static Pipeline tryMatch(
+    private static List<Pipeline> tryMatch(
             final Subscription sub, final Event event, final PipelineRegistry.Snapshot snapshot) {
         if (!matchesSource(sub, event)) {
-            return null;
+            return List.of();
         }
         if (!passesFieldFilter(sub, event)) {
-            return null;
+            return List.of();
         }
-        Pipeline pipeline = snapshot.pipelineById(sub.pipelineId());
-        if (pipeline == null || pipeline.version() != sub.pipelineVersion()) {
-            return null;
+        // 扇出：遍历 pipelineIds，过滤掉 null（pipeline 不存在/未发布）。版本不再校验——跟 currentVersion。
+        List<Pipeline> result = new ArrayList<>();
+        for (Long id : sub.pipelineIds()) {
+            Pipeline pipeline = snapshot.pipelineById(id);
+            if (pipeline != null) {
+                result.add(pipeline);
+            }
         }
-        return pipeline;
+        return result;
     }
 
     private static boolean passesFieldFilter(final Subscription sub, final Event event) {

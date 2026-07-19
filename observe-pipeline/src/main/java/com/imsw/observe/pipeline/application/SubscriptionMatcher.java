@@ -12,5 +12,5 @@ public interface SubscriptionMatcher {
 
     record MatchedSubscription(
             com.imsw.observe.pipeline.domain.subscription.Subscription subscription,
-            com.imsw.observe.pipeline.domain.Pipeline pipeline) {}
+            java.util.List<com.imsw.observe.pipeline.domain.Pipeline> pipelines) {}
 }

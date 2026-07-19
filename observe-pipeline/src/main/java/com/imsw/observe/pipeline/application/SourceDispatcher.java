@@ -195,15 +195,22 @@ public final class SourceDispatcher implements EventListener {
             return;
         }
         for (SubscriptionMatcher.MatchedSubscription m : matched) {
-            submitMatched(m, event);
+            // 扇出：subscription 维度外层 for，pipeline 维度内层 for。
+            // 顺序提交、并发执行（runnerPool 多线程）；每个 (sub,pipeline) 独立 inFlight permit + 失败隔离。
+            for (Pipeline pipeline : m.pipelines()) {
+                submitMatched(m.subscription(), pipeline, event);
+            }
         }
     }
 
-    private void submitMatched(final SubscriptionMatcher.MatchedSubscription m, final Event event)
+    private void submitMatched(
+            final com.imsw.observe.pipeline.domain.subscription.Subscription subscription,
+            final Pipeline pipeline,
+            final Event event)
             throws InterruptedException {
-        Pipeline pipeline = m.pipeline();
-        Long subscriptionId = m.subscription().id();
-        if (delayedActionHandler.handle(m.subscription(), event, pipeline)) {
+        Long subscriptionId = subscription.id();
+        // 延时 handler 保留现状（延时 spec 处理）；扇出后每个 (sub,pipeline) 各调一次。
+        if (delayedActionHandler.handle(subscription, event, pipeline)) {
             return;
         }
         // 阻塞提交：runnerPool 饱和时分发线程在此阻塞（acquire），不丢弃事件。

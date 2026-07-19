@@ -11,8 +11,7 @@ import com.imsw.observe.pipeline.domain.subscription.Condition;
 public record SubscriptionDto(
         Long id,
         String namespace,
-        Long pipelineId,
-        int pipelineVersion,
+        java.util.List<Long> pipelineIds,
         String mq,
         String topic,
         String db,
@@ -35,8 +34,7 @@ public record SubscriptionDto(
         return new SubscriptionDto(
                 s.id(),
                 s.namespace(),
-                s.pipelineId(),
-                s.pipelineVersion(),
+                s.pipelineIds(),
                 s.mq(),
                 s.topic(),
                 s.db(),
