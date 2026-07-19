@@ -42,14 +42,14 @@ class AlertStatsRepositoryTest {
     @BeforeEach
     void setUp() {
         alertRepository.deleteAll();
-        // 灌入测试数据：窗口内 3 条（2 CRITICAL FIRING, 1 WARNING RESOLVED）+ 窗口外 1 条
+        // 灌入测试数据：窗口内 3 条（2 CRITICAL ACTIVE, 1 WARNING EXPIRED）+ 窗口外 1 条
         // B9 / ADR-0004：team 维度从一等列下线为 label_team 投影；测试数据在 labelTeam 上携带 team 值。
         Instant base = Instant.parse("2026-07-19T10:00:00Z");
-        alertRepository.save(alert("ns", "team-a", Severity.CRITICAL, AlertStatus.FIRING, base, 1L));
-        alertRepository.save(alert("ns", "team-a", Severity.CRITICAL, AlertStatus.FIRING, base.plusSeconds(900), 1L));
-        alertRepository.save(alert("ns", "team-b", Severity.WARNING, AlertStatus.RESOLVED, base.plusSeconds(1800), 2L));
+        alertRepository.save(alert("ns", "team-a", Severity.CRITICAL, AlertStatus.ACTIVE, base, 1L));
+        alertRepository.save(alert("ns", "team-a", Severity.CRITICAL, AlertStatus.ACTIVE, base.plusSeconds(900), 1L));
+        alertRepository.save(alert("ns", "team-b", Severity.WARNING, AlertStatus.EXPIRED, base.plusSeconds(1800), 2L));
         // 窗口外（早于 from）
-        alertRepository.save(alert("ns", "team-a", Severity.CRITICAL, AlertStatus.FIRING, base.minusSeconds(3600), 1L));
+        alertRepository.save(alert("ns", "team-a", Severity.CRITICAL, AlertStatus.ACTIVE, base.minusSeconds(3600), 1L));
     }
 
     @Test
@@ -61,7 +61,7 @@ class AlertStatsRepositoryTest {
 
         assertThat(stats.total()).isEqualTo(3L);
         assertThat(stats.bySeverity()).containsEntry("CRITICAL", 2L).containsEntry("WARNING", 1L);
-        assertThat(stats.byStatus()).containsEntry("FIRING", 2L).containsEntry("RESOLVED", 1L);
+        assertThat(stats.byStatus()).containsEntry("ACTIVE", 2L).containsEntry("EXPIRED", 1L);
     }
 
     @Test
@@ -157,8 +157,9 @@ class AlertStatsRepositoryTest {
         po.startsAt = startsAt;
         po.lastSeenAt = startsAt;
         po.endsAt = startsAt.plusSeconds(600);
-        po.resolvedAt = status == AlertStatus.RESOLVED ? startsAt.plusSeconds(600) : null;
+        po.resolvedAt = status == AlertStatus.EXPIRED ? startsAt.plusSeconds(600) : null;
         po.status = status.name();
+        po.disposition = "NONE";
         po.dedupCount = 1;
         po.createdAt = startsAt;
         po.updatedAt = startsAt;

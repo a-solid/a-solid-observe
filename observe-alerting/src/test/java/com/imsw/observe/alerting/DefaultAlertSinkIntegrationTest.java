@@ -64,7 +64,8 @@ class DefaultAlertSinkIntegrationTest {
                 new AnnotationRenderer(),
                 new com.imsw.observe.alerting.infrastructure.AlertSilenceMatcher(
                         silenceRepository, java.time.Duration.ofMillis(1000)),
-                SNOWFLAKE);
+                SNOWFLAKE,
+                new com.imsw.observe.alerting.domain.WavePolicy());
     }
 
     @BeforeEach
@@ -85,7 +86,7 @@ class DefaultAlertSinkIntegrationTest {
         List<AlertPo> all = alertRepository.findAll();
         assertThat(all).hasSize(1);
         AlertPo alert = all.get(0);
-        assertThat(alert.status).isEqualTo("FIRING");
+        assertThat(alert.status).isEqualTo("ACTIVE");
         assertThat(alert.fingerprint).isEqualTo("fp-1");
         assertThat(alert.namespace).isEqualTo("trade"); // 告警继承执行上下文的 namespace (ADR-0002)
         assertThat(alert.dedupCount).isEqualTo(2);
@@ -138,21 +139,21 @@ class DefaultAlertSinkIntegrationTest {
     }
 
     @Test
-    void resolveJobFlipsExpiredFiringToResolved() {
+    void resolveJobFlipsExpiredActiveToExpired() {
         DefaultAlertSink sink = newSink();
         AlertResolveJob resolveJob = new AlertResolveJob(alertRepository, 1000);
 
         runInTx(() -> sink.drainAndPersist(newContext(alertSignal("fp-2", Duration.ofMillis(1)))));
 
         AlertPo alert = alertRepository.findAll().get(0);
-        assertThat(alert.status).isEqualTo("FIRING");
+        assertThat(alert.status).isEqualTo("ACTIVE");
 
         sleep(20);
-        int resolved = runInTxReturning(() -> resolveJob.resolveExpiredAlerts());
-        assertThat(resolved).isEqualTo(1);
+        int expired = runInTxReturning(() -> resolveJob.expireAlerts());
+        assertThat(expired).isEqualTo(1);
 
         AlertPo refreshed = alertRepository.findById(alert.id).orElseThrow();
-        assertThat(refreshed.status).isEqualTo("RESOLVED");
+        assertThat(refreshed.status).isEqualTo("EXPIRED");
         assertThat(refreshed.resolvedAt).isNotNull();
     }
 

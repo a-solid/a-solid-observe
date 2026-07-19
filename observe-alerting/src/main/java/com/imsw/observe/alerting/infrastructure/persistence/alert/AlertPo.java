@@ -60,6 +60,10 @@ public class AlertPo {
     @Column(name = "status", nullable = false)
     public String status;
 
+    // ADR-0005 两维分离：用户处置维度（NONE/ACKNOWLEDGED/IGNORED），与 status 正交。
+    @Column(name = "disposition", nullable = false)
+    public String disposition = "NONE";
+
     @Column(name = "dedup_count", nullable = false)
     public Integer dedupCount = 1;
 

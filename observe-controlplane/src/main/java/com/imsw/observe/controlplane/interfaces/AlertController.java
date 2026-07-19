@@ -24,7 +24,7 @@ import com.imsw.observe.controlplane.interfaces.web.Pages;
 import com.imsw.observe.controlplane.interfaces.web.ResourceNotFoundException;
 
 /**
- * Alerts 查询 + 处置接口（ADR-0002 软隔离铁律；ADR-0005 ack/resolve/ignore + 1:N evidence）。
+ * Alerts 查询 + 处置接口（ADR-0002 软隔离铁律；ADR-0005 ack/ignore + 1:N evidence）。
  *
  * <p>namespace 作必填查询参数 {@code ?namespace=}；单条按 {@code (namespace, id)} 软校验，不匹配返回 404。
  */
@@ -96,15 +96,6 @@ public class AlertController {
         return ApiResponse.ok(AlertDto.from(alert));
     }
 
-    @PostMapping("/{id}/resolve")
-    public ApiResponse<AlertDto> resolve(
-            @PathVariable final Long id,
-            @RequestParam final String namespace,
-            @Valid @RequestBody(required = false) final DispositionRequest req) {
-        AlertEntity alert = dispositionService.resolve(namespace, id, noteOf(req), byOf(req));
-        return ApiResponse.ok(AlertDto.from(alert));
-    }
-
     @PostMapping("/{id}/ignore")
     public ApiResponse<AlertDto> ignore(
             @PathVariable final Long id,
@@ -122,6 +113,6 @@ public class AlertController {
         return req == null ? null : req.by();
     }
 
-    /** ack/resolve/ignore 请求体（均可选）。 */
+    /** ack/ignore 请求体（均可选）。 */
     public record DispositionRequest(String note, @NotBlank String by) {}
 }

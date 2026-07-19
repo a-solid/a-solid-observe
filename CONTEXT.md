@@ -64,23 +64,23 @@ _Avoid_: 把 label_team/label_app 当独立领域字段（它们是 label 的投
 ## Alerting
 
 **Wave（波次）**:
-告警收敛的时间窗口，等于该告警的 ttl。波次内同 fingerprint 的 emit 视为同一告警（dedup，计数 +1，每次写新 evidence）；波次边界（ends_at 到期）系统自动将告警翻为 RESOLVED；下次同 fingerprint emit 开一条新 FIRING alert 行 = 新波次。默认按 severity 分级（CRITICAL 30min / WARNING 10min / INFO 5min），脚本 emit 时传 ttl 可覆盖。
+告警收敛的时间窗口，等于该告警的 ttl。波次内同 fingerprint 的 emit 视为同一告警（dedup，计数 +1，每次写新 evidence）；波次边界（ends_at 到期）系统自动将告警 `status` 翻为 `EXPIRED`；下次同 fingerprint emit 开一条新 `ACTIVE` alert 行 = 新波次。波次动力学（dedup/续期/开新/到期）由 `domain/WavePolicy` 纯函数承载（ADR-0005 addendum）。默认按 severity 分级（CRITICAL 30min / WARNING 10min / INFO 5min），脚本 emit 时传 ttl 可覆盖。
 _Avoid_: ttl（波次吸收了 ttl 概念，统一称波次）、收敛窗口
 
 **Fingerprint**:
 告警的去重键。脚本可显式传；否则由 `pipeline=<id>` + 排序后 labels KV 的 sha256 计算。同一波次内同 fingerprint 合并为一条 alert。
 _Avoid_: 把 fingerprint 当永久全局唯一键——它是"波次内去重键"，波次结束后同 fp 会开新 alert 行。
 
-**Alert 状态机**:
-`FIRING`（活跃）→ 系统自动 `RESOLVED`（波次到期）；任意态可被用户操作转为 `ACKNOWLEDGED`（已确认处理）或 `IGNORED`（主动忽略单条）。RESOLVED 是系统态，ACKNOWLEDGED/IGNORED 是用户态——三者语义不同，不混。
-_Avoid_: 用 resolved 同时表达"系统到期"和"用户处理"（歧义）
+**Alert 状态机（两维分离，ADR-0005 addendum）**:
+两个正交维度——`status`（系统态：`ACTIVE`/`EXPIRED`，时间驱动）与 `disposition`（用户处置：`NONE`/`ACKNOWLEDGED`/`IGNORED`，人驱动）。`status=ACTIVE` 波次活跃、`EXPIRED` 波次 TTL 到点（**非**业界"条件恢复"——本项目事件驱动+TTL，问题未必解决，下次同 fingerprint emit 开新 ACTIVE 行）。`disposition` 独立于 `status`：ack/ignore 只改 disposition 列、不动 status，任意 status 行（含 EXPIRED）都能被打 ack/ignore。resolveJob 只看 `status=ACTIVE and ends_at<now → EXPIRED`，不看 disposition（ACK/IGNORE 告警到期照常翻）。**不设用户手动 close**——要关靠 silence 或等到期。
+_Avoid_: 把系统态和用户处置混进同一枚举（旧四态 FIRING/RESOLVED/ACKNOWLEDGED/IGNORED 已拆）；用 RESOLVED 表达本项目 TTL 到点（会误导为"问题解决"，用 EXPIRED）
 
 **ACKNOWLEDGED**:
-用户手动确认"已知/在处理"，带备注 + 操作人 + 时间。不代表问题消失。
-_Avoid_: resolved（resolved 是系统到期，不代表人介入）
+用户处置维度（disposition）的值——确认"已知/在处理"，带备注 + 操作人 + 时间。独立于 status，不代表问题消失、不阻止系统到期。
+_Avoid_: resolved（本项目无用户 resolve，系统到期用 EXPIRED）
 
 **IGNORED**:
-用户主动忽略**单条**告警，带备注。区别于 SILENCE（作用于未来同类）。
+用户处置维度的值——主动忽略**单条**告警，带备注。区别于 SILENCE（作用于未来同类）。
 
 **SILENCE 规则（静默）**:
 按 fingerprint 精确 / label 维度 / namespace+pipeline 维度 + 有效期（如 10 天）定义的静默规则（`alert_silences` 表）。emit 阶段（AlertSink）命中静默规则则不建 alert。作用于"未来同类告警"，区别于对单条告警的 IGNORED。

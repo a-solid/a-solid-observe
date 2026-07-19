@@ -17,8 +17,8 @@ public interface AlertRepository extends JpaRepository<AlertPo, Long> {
 
     Optional<AlertPo> findFirstByFingerprintAndStatusOrderByIdAsc(String fingerprint, String status);
 
-    @Query("select a.id from AlertPo a where a.status = 'FIRING' and a.endsAt < :now order by a.id")
-    List<Long> findExpiredFiringIds(@Param("now") Instant now, Pageable pageable);
+    @Query("select a.id from AlertPo a where a.status = 'ACTIVE' and a.endsAt < :now order by a.id")
+    List<Long> findExpiredActiveIds(@Param("now") Instant now, Pageable pageable);
 
     /**
      * 列表查询（ADR-0002 软隔离铁律）：namespace 下推 where，避免 findAll + 内存过滤导致的跨 namespace 截断。
@@ -48,27 +48,25 @@ public interface AlertRepository extends JpaRepository<AlertPo, Long> {
     int updateEmit(@Param("id") Long id, @Param("now") Instant now, @Param("endsAt") Instant endsAt);
 
     @Modifying
-    @Query("update AlertPo a set a.status = 'RESOLVED', a.resolvedAt = a.endsAt, a.updatedAt = :now "
-            + "where a.id in :ids and a.status = 'FIRING'")
-    int resolveBatch(@Param("ids") List<Long> ids, @Param("now") Instant now);
+    @Query("update AlertPo a set a.status = 'EXPIRED', a.resolvedAt = a.endsAt, a.updatedAt = :now "
+            + "where a.id in :ids and a.status = 'ACTIVE'")
+    int expireBatch(@Param("ids") List<Long> ids, @Param("now") Instant now);
 
     /**
-     * ADR-0005 §4：ack/resolve/ignore 的 CAS 式处置更新。{@code fromStatus} 作为乐观锁条件——
-     * 影响 0 行表示并发已转移，service 层抛 ConflictException。
+     * ADR-0005 §4（两维分离后）：ack/ignore 的处置更新——只改 {@code disposition} 列，不动 {@code status}
+     * （维度正交：任何 status——ACTIVE 或 EXPIRED——都能被打 ack/ignore）。{@code (id, namespace)} 定位，
+     * 影响 0 行表示行不存在，service 层抛 ResourceNotFoundException。
      */
     @Modifying(flushAutomatically = true, clearAutomatically = true)
-    @Query("update AlertPo a set a.status = :toStatus, a.ackNote = :note, a.ackBy = :by, "
-            + "a.ackAt = :at, a.resolvedAt = coalesce(:resolvedAt, a.resolvedAt), a.updatedAt = :at "
-            + "where a.id = :id and a.namespace = :namespace and a.status = :fromStatus")
+    @Query("update AlertPo a set a.disposition = :disposition, a.ackNote = :note, a.ackBy = :by, "
+            + "a.ackAt = :at, a.updatedAt = :at where a.id = :id and a.namespace = :namespace")
     int applyDisposition(
             @Param("id") Long id,
             @Param("namespace") String namespace,
-            @Param("fromStatus") String fromStatus,
-            @Param("toStatus") String toStatus,
+            @Param("disposition") String disposition,
             @Param("note") String note,
             @Param("by") String by,
-            @Param("at") Instant at,
-            @Param("resolvedAt") Instant resolvedAt);
+            @Param("at") Instant at);
 
     // ---------- B6 聚合统计（namespace 下推 where，可选过滤 :x is null or ...） ----------
     // B9 / ADR-0004：原 a.team 一等列下线为 a.labelTeam 投影列；JPQL where 同步重指向 a.labelTeam。

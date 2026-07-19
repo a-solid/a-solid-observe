@@ -2,6 +2,7 @@ package com.imsw.observe.alerting.infrastructure.persistence.alert;
 
 import java.time.Instant;
 
+import com.imsw.observe.alerting.domain.AlertDisposition;
 import com.imsw.observe.alerting.domain.AlertEntity;
 import com.imsw.observe.alerting.domain.AlertStatus;
 import com.imsw.observe.kernel.alert.model.Severity;
@@ -29,6 +30,7 @@ public final class AlertMapper {
                 po.endsAt,
                 po.resolvedAt,
                 po.status == null ? null : AlertStatus.valueOf(po.status),
+                po.disposition == null ? AlertDisposition.NONE : AlertDisposition.valueOf(po.disposition),
                 po.dedupCount == null ? 0 : po.dedupCount,
                 po.ackNote,
                 po.ackBy,
@@ -58,6 +60,8 @@ public final class AlertMapper {
         po.endsAt = entity.endsAt();
         po.resolvedAt = entity.resolvedAt();
         po.status = entity.status() == null ? null : entity.status().name();
+        po.disposition =
+                entity.disposition() == null ? null : entity.disposition().name();
         po.dedupCount = entity.dedupCount();
         po.ackNote = entity.ackNote();
         po.ackBy = entity.ackBy();
@@ -66,9 +70,13 @@ public final class AlertMapper {
         po.labelTeam = entity.labelTeam();
         po.labelApp = entity.labelApp();
         po.labelLine = entity.labelLine();
+        stampTimestamps(po);
+        return po;
+    }
+
+    private static void stampTimestamps(final AlertPo po) {
         Instant now = Instant.now();
         po.createdAt = now;
         po.updatedAt = now;
-        return po;
     }
 }

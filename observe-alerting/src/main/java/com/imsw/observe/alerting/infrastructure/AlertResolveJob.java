@@ -12,7 +12,10 @@ import org.springframework.scheduling.annotation.Scheduled;
 import com.imsw.observe.alerting.infrastructure.persistence.alert.AlertRepository;
 
 /**
- * ADR-0005 §1：wave 过期自动 resolve。{@code @Scheduled} 周期扫 {@code status=FIRING and ends_at<now} 批量翻 RESOLVED。
+ * ADR-0005 §1：wave 过期自动 resolve。{@code @Scheduled} 周期扫 {@code status=ACTIVE and ends_at<now} 批量翻 EXPIRED。
+ *
+ * <p>两维分离后：只看系统态（status），<b>不看 disposition</b>——ACKNOWLEDGED/IGNORED 的 ACTIVE 告警到期照常
+ * 翻 EXPIRED（用户处置不阻止系统到期）。
  *
  * <p>间隔由 {@code observe.alerting.resolve-job.interval-millis}（默认 60s）控制；{@code @EnableScheduling} 已在
  * {@code ObserveApplication} 开启。
@@ -34,26 +37,26 @@ public class AlertResolveJob {
 
     @Scheduled(fixedDelayString = "${observe.alerting.resolve-job.interval-millis:60000}")
     public void scheduled() {
-        resolveExpiredAlerts();
+        expireAlerts();
     }
 
-    /** 测试可直调：扫过期 FIRING，批量翻 RESOLVED，返回翻转条数。 */
-    public int resolveExpiredAlerts() {
+    /** 测试可直调：扫过期 ACTIVE，批量翻 EXPIRED，返回翻转条数。 */
+    public int expireAlerts() {
         Instant now = Instant.now();
         int total = 0;
         while (true) {
-            List<Long> ids = alertRepository.findExpiredFiringIds(now, PageRequest.of(0, batchSize));
+            List<Long> ids = alertRepository.findExpiredActiveIds(now, PageRequest.of(0, batchSize));
             if (ids.isEmpty()) {
                 break;
             }
-            int updated = alertRepository.resolveBatch(ids, now);
+            int updated = alertRepository.expireBatch(ids, now);
             total += updated;
             if (ids.size() < batchSize) {
                 break;
             }
         }
         if (total > 0) {
-            LOG.info("resolved {} expired alerts", total);
+            LOG.info("expired {} active alerts", total);
         }
         return total;
     }

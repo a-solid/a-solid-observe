@@ -19,8 +19,10 @@ CREATE TABLE alerts (
     ends_at TIMESTAMP NOT NULL,
     resolved_at TIMESTAMP,
 
-    -- ADR-0005 四态状态机：FIRING / RESOLVED / ACKNOWLEDGED / IGNORED
+    -- ADR-0005 两维分离：status=系统态（ACTIVE/EXPIRED），disposition=用户处置（NONE/ACKNOWLEDGED/IGNORED），
+    -- 二者正交。EXPIRED=波次 TTL 到点（非业界"条件恢复"）；用户处置不再混入 status。
     status VARCHAR NOT NULL,
+    disposition VARCHAR NOT NULL DEFAULT 'NONE',
     dedup_count INT NOT NULL DEFAULT 1,
 
     -- ADR-0005 disposition（ack/ignore，用户介入处置时落库）
@@ -38,7 +40,8 @@ CREATE TABLE alerts (
     created_at TIMESTAMP NOT NULL,
     updated_at TIMESTAMP NOT NULL,
 
-    CONSTRAINT ck_alerts_status CHECK (status IN ('FIRING','RESOLVED','ACKNOWLEDGED','IGNORED')),
+    CONSTRAINT ck_alerts_status CHECK (status IN ('ACTIVE','EXPIRED')),
+    CONSTRAINT ck_alerts_disposition CHECK (disposition IN ('NONE','ACKNOWLEDGED','IGNORED')),
     CONSTRAINT ck_alerts_severity CHECK (severity IN ('INFO','WARNING','CRITICAL'))
 );
 

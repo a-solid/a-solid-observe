@@ -6,7 +6,7 @@ import java.util.Map;
 import com.imsw.observe.alerting.domain.AlertEntity;
 import com.imsw.observe.kernel.alert.model.Severity;
 
-/** 告警 DTO（含 ADR-0005 disposition 字段 ackNote/ackBy/ackAt；ADR-0004 label 投影字段）。 */
+/** 告警 DTO（ADR-0005 两维：status 系统态 + disposition 用户处置；含 ackNote/ackBy/ackAt；ADR-0004 label 投影）。 */
 public record AlertDto(
         Long id,
         String namespace,
@@ -22,6 +22,7 @@ public record AlertDto(
         Instant endsAt,
         Instant resolvedAt,
         String status,
+        String disposition,
         int dedupCount,
         String ackNote,
         String ackBy,
@@ -47,6 +48,7 @@ public record AlertDto(
                 e.endsAt(),
                 e.resolvedAt(),
                 e.status() == null ? null : e.status().name(),
+                e.disposition() == null ? null : e.disposition().name(),
                 e.dedupCount(),
                 e.ackNote(),
                 e.ackBy(),

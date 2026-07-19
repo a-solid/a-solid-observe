@@ -1,6 +1,5 @@
 package com.imsw.observe.alerting.infrastructure;
 
-import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -9,9 +8,13 @@ import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.imsw.observe.alerting.domain.ActiveWave;
+import com.imsw.observe.alerting.domain.AlertDisposition;
 import com.imsw.observe.alerting.domain.AlertEntity;
 import com.imsw.observe.alerting.domain.AlertStatus;
 import com.imsw.observe.alerting.domain.EvidenceEntity;
+import com.imsw.observe.alerting.domain.WaveDecision;
+import com.imsw.observe.alerting.domain.WavePolicy;
 import com.imsw.observe.alerting.infrastructure.evidence.AnnotationRenderer;
 import com.imsw.observe.alerting.infrastructure.evidence.EvidenceCollector;
 import com.imsw.observe.alerting.infrastructure.fingerprint.AlertFingerprintCalculator;
@@ -22,7 +25,6 @@ import com.imsw.observe.alerting.infrastructure.persistence.evidence.EvidenceMap
 import com.imsw.observe.alerting.infrastructure.persistence.evidence.EvidencePo;
 import com.imsw.observe.alerting.infrastructure.persistence.evidence.EvidenceRepository;
 import com.imsw.observe.kernel.alert.model.AlertSignal;
-import com.imsw.observe.kernel.alert.model.Severity;
 import com.imsw.observe.kernel.event.model.ExecutionContext;
 import com.imsw.observe.kernel.event.model.ExecutionMeta;
 import com.imsw.observe.kernel.util.SnowflakeIdGenerator;
@@ -48,19 +50,23 @@ public final class DefaultAlertSink implements com.imsw.observe.kernel.alert.spi
 
     private final SnowflakeIdGenerator snowflake;
 
+    private final WavePolicy wavePolicy;
+
     public DefaultAlertSink(
             final AlertRepository alertRepository,
             final EvidenceRepository evidenceRepository,
             final EvidenceCollector evidenceCollector,
             final AnnotationRenderer annotationRenderer,
             final AlertSilenceMatcher silenceMatcher,
-            final SnowflakeIdGenerator snowflake) {
+            final SnowflakeIdGenerator snowflake,
+            final WavePolicy wavePolicy) {
         this.alertRepository = alertRepository;
         this.evidenceRepository = evidenceRepository;
         this.evidenceCollector = evidenceCollector;
         this.annotationRenderer = annotationRenderer;
         this.silenceMatcher = silenceMatcher;
         this.snowflake = snowflake;
+        this.wavePolicy = wavePolicy;
     }
 
     @Override
@@ -84,30 +90,37 @@ public final class DefaultAlertSink implements com.imsw.observe.kernel.alert.spi
         String fingerprint = signal.fingerprint() != null
                 ? signal.fingerprint()
                 : AlertFingerprintCalculator.compute(meta.pipelineId(), mergedLabels);
-        Duration ttl = signal.ttl() != null ? signal.ttl() : defaultTtl(signal.severity());
-        Instant now = Instant.now();
-        Instant endsAt = now.plus(ttl);
 
         // ADR-0005 §3：emit 前查 silence，命中则静默（不建告警、不写证据）
         if (silenceMatcher.silenced(meta.namespace(), fingerprint, mergedLabels, meta.pipelineId())) {
             return;
         }
 
-        Optional<AlertPo> existing = alertRepository.findFirstByFingerprintAndStatusOrderByIdAsc(fingerprint, "FIRING");
+        Instant now = Instant.now();
+        // 波次决策（WavePolicy，纯函数）：现有 ACTIVE 行 → 续期；无 → 开新波次。"新波次=新行"由此显式。
+        Optional<AlertPo> existing =
+                alertRepository.findFirstByFingerprintAndStatusOrderByIdAsc(fingerprint, AlertStatus.ACTIVE.name());
+        WaveDecision decision = wavePolicy.decide(existing.map(po -> new ActiveWave(po.id, po.endsAt)), signal, now);
         EvidenceCollector.Collected evidence = evidenceCollector.collect(signal, ctx);
-        if (existing.isPresent()) {
+
+        if (decision instanceof WaveDecision.Extend extend) {
             // wave 内 dedup：刷新 wave + 写一条新证据（1:N）
-            alertRepository.updateEmit(existing.get().id, now, endsAt);
-            writeEvidence(existing.get().id, evidence, now);
+            alertRepository.updateEmit(extend.existingId(), now, extend.newEndsAt());
+            writeEvidence(extend.existingId(), evidence, now);
+            int dedupCount = existing.map(po -> po.dedupCount == null ? 1 : po.dedupCount + 1)
+                    .orElse(1);
             LOG.info(
                     "alert deduped pipeline={} fingerprint={} dedup_count={}",
                     meta.pipelineId(),
                     fingerprint,
-                    existing.get().dedupCount + 1);
+                    dedupCount);
             return;
         }
+        // WaveDecision.Open：开新波次
+        WaveDecision.Open open = (WaveDecision.Open) decision;
         Map<String, String> annotations = annotationRenderer.render(signal.annotations(), ctx);
-        AlertEntity entity = buildAlertEntity(signal, meta, mergedLabels, annotations, fingerprint, now, endsAt);
+        AlertEntity entity =
+                buildAlertEntity(signal, meta, mergedLabels, annotations, fingerprint, now, open.newEndsAt());
         AlertPo alertPo = AlertMapper.toPo(entity);
         alertRepository.save(alertPo);
         writeEvidence(alertPo.id, evidence, now);
@@ -177,7 +190,8 @@ public final class DefaultAlertSink implements com.imsw.observe.kernel.alert.spi
                 now,
                 endsAt,
                 null,
-                AlertStatus.FIRING,
+                AlertStatus.ACTIVE,
+                AlertDisposition.NONE,
                 1,
                 null,
                 null,
@@ -186,14 +200,5 @@ public final class DefaultAlertSink implements com.imsw.observe.kernel.alert.spi
                 labels == null ? null : labels.get("team"),
                 labels == null ? null : labels.get("app"),
                 labels == null ? null : labels.get("line"));
-    }
-
-    /** ADR-0005 §1：默认 wave TTL C30/W10/I5（覆盖旧 C60/W30/I15）。 */
-    private static Duration defaultTtl(final Severity severity) {
-        return switch (severity) {
-            case CRITICAL -> Duration.ofMinutes(30);
-            case WARNING -> Duration.ofMinutes(10);
-            case INFO -> Duration.ofMinutes(5);
-        };
     }
 }

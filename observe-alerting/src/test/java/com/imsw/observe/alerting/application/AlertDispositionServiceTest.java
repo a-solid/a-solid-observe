@@ -15,16 +15,19 @@ import org.springframework.test.context.junit.jupiter.SpringExtension;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.imsw.observe.alerting.TestJpaFactory;
+import com.imsw.observe.alerting.domain.AlertDisposition;
 import com.imsw.observe.alerting.domain.AlertEntity;
 import com.imsw.observe.alerting.domain.AlertStatus;
 import com.imsw.observe.alerting.infrastructure.persistence.alert.AlertPo;
 import com.imsw.observe.alerting.infrastructure.persistence.alert.AlertRepository;
 import com.imsw.observe.kernel.alert.model.Severity;
-import com.imsw.observe.kernel.error.ConflictException;
 import com.imsw.observe.kernel.error.ResourceNotFoundException;
 
 /**
- * B7：告警状态机处置（ack/resolve/ignore）—— 合法转移、非法转移冲突、不存在 404、并发 CAS。
+ * 告警处置（ADR-0005 两维分离后）：ack / ignore 改 disposition 列，与 status 正交。
+ *
+ * <p>覆盖：ack/ignore 落 disposition；任意 status（ACTIVE/EXPIRED）都能处置；不存在 404；跨 namespace 404。
+ * 用户 resolve 已砍（R2），不再测。
  */
 @ExtendWith(SpringExtension.class)
 @SpringBootTest(classes = TestJpaFactory.class)
@@ -42,39 +45,35 @@ class AlertDispositionServiceTest {
 
     @BeforeEach
     void setUp() {
-        alertId = insertAlert("ns", "FIRING", null);
+        alertId = insertAlert("ns", "ACTIVE", "NONE", null);
     }
 
     @Test
-    void acknowledgeTransitionsFiringToAcknowledged() {
+    void acknowledgeStampsDisposition() {
         AlertEntity acked = dispositionService.acknowledge("ns", alertId, "looking", "ops");
 
-        assertThat(acked.status()).isEqualTo(AlertStatus.ACKNOWLEDGED);
+        assertThat(acked.disposition()).isEqualTo(AlertDisposition.ACKNOWLEDGED);
+        assertThat(acked.status()).isEqualTo(AlertStatus.ACTIVE); // status 不变（正交）
         assertThat(acked.ackBy()).isEqualTo("ops");
         assertThat(acked.ackNote()).isEqualTo("looking");
         assertThat(acked.ackAt()).isNotNull();
     }
 
     @Test
-    void ignoreTransitionsFiringToIgnored() {
+    void ignoreStampsDisposition() {
         AlertEntity ignored = dispositionService.ignore("ns", alertId, "dup", "ops");
-        assertThat(ignored.status()).isEqualTo(AlertStatus.IGNORED);
+        assertThat(ignored.disposition()).isEqualTo(AlertDisposition.IGNORED);
+        assertThat(ignored.status()).isEqualTo(AlertStatus.ACTIVE);
     }
 
     @Test
-    void resolveFromAcknowledgedAllowed() {
-        dispositionService.acknowledge("ns", alertId, null, "ops");
-        AlertEntity resolved = dispositionService.resolve("ns", alertId, "fixed", "ops");
-        assertThat(resolved.status()).isEqualTo(AlertStatus.RESOLVED);
-        assertThat(resolved.resolvedAt()).isNotNull();
-    }
+    void acknowledgeExpiredAlertAllowed() {
+        // 维度正交：EXPIRED 行也能 ack（事后标记）。本项目 EXPIRED 非条件恢复，事后 ack 有意义。
+        Long expiredId = insertAlert("ns", "EXPIRED", "NONE", Instant.now());
+        AlertEntity acked = dispositionService.acknowledge("ns", expiredId, "saw it late", "ops");
 
-    @Test
-    void acknowledgeFromResolvedIsConflict() {
-        dispositionService.resolve("ns", alertId, null, "ops");
-
-        assertThatThrownBy(() -> dispositionService.acknowledge("ns", alertId, null, "ops"))
-                .isInstanceOf(ConflictException.class);
+        assertThat(acked.disposition()).isEqualTo(AlertDisposition.ACKNOWLEDGED);
+        assertThat(acked.status()).isEqualTo(AlertStatus.EXPIRED); // status 不被 ack 改
     }
 
     @Test
@@ -89,7 +88,8 @@ class AlertDispositionServiceTest {
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 
-    private Long insertAlert(final String namespace, final String status, final Instant resolvedAt) {
+    private Long insertAlert(
+            final String namespace, final String status, final String disposition, final Instant resolvedAt) {
         AlertPo po = new AlertPo();
         po.id = System.nanoTime();
         po.namespace = namespace;
@@ -107,6 +107,7 @@ class AlertDispositionServiceTest {
         po.endsAt = now.plusSeconds(600);
         po.resolvedAt = resolvedAt;
         po.status = status;
+        po.disposition = disposition;
         po.dedupCount = 1;
         po.createdAt = now;
         po.updatedAt = now;

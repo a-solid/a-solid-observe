@@ -128,7 +128,7 @@ class EndToEndFlowTest {
         cdcSource.push(List.of(event));
 
         AlertPo alert = waitForFirstAlert();
-        assertThat(alert.status).isEqualTo("FIRING");
+        assertThat(alert.status).isEqualTo("ACTIVE");
         assertThat(alert.severity).isEqualTo("CRITICAL");
         // namespace 软隔离端到端证明：落库告警的 namespace 必须等于触发链路的 namespace。
         assertThat(alert.namespace).isEqualTo(NAMESPACE);
@@ -203,7 +203,7 @@ class EndToEndFlowTest {
         assertThat(registry.isLoaded()).isTrue();
 
         AlertPo alert = waitForFirstAlert();
-        assertThat(alert.status).isEqualTo("FIRING");
+        assertThat(alert.status).isEqualTo("ACTIVE");
         // namespace 软隔离：cron 触发链路同样落库到触发订阅所在 namespace。
         assertThat(alert.namespace).isEqualTo(NAMESPACE);
 
@@ -276,7 +276,7 @@ class EndToEndFlowTest {
         cdcSource.push(List.of(event));
 
         AlertPo alert = waitForFirstAlert();
-        assertThat(alert.status).isEqualTo("FIRING");
+        assertThat(alert.status).isEqualTo("ACTIVE");
         assertThat(alert.namespace).isEqualTo(NAMESPACE);
         assertThat(evidenceRepository.findAll()).hasSize(1);
     }

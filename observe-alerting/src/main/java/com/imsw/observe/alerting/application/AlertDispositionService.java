@@ -1,30 +1,26 @@
 package com.imsw.observe.alerting.application;
 
 import java.time.Instant;
-import java.util.Set;
 
 import org.springframework.stereotype.Service;
 
+import com.imsw.observe.alerting.domain.AlertDisposition;
 import com.imsw.observe.alerting.domain.AlertEntity;
-import com.imsw.observe.alerting.domain.AlertStatus;
 import com.imsw.observe.alerting.infrastructure.persistence.alert.AlertMapper;
 import com.imsw.observe.alerting.infrastructure.persistence.alert.AlertRepository;
-import com.imsw.observe.kernel.error.ConflictException;
 import com.imsw.observe.kernel.error.ResourceNotFoundException;
 
 /**
- * 告警处置 service（ADR-0005 §4）：ack / resolve / ignore 写接口 + 状态转移守卫。
+ * 告警处置 service（ADR-0005 §4，两维分离后）：ack / ignore 写接口。
  *
- * <p>合法转移：
- * <ul>
- *   <li>FIRING → ACKNOWLEDGED / IGNORED / RESOLVED（用户手动 close）</li>
- *   <li>ACKNOWLEDGED → RESOLVED</li>
- *   <li>IGNORED → RESOLVED</li>
- *   <li>RESOLVED → 终态</li>
- * </ul>
- * 非法转移抛 {@link ErrorResponseException}(CONFLICT)；不存在抛 {@link ResourceNotFoundException}。
+ * <p><b>正交语义</b>：disposition（用户处置）独立于 status（系统态）。ack/ignore 只改 {@code disposition} 列，
+ * <b>不校验 status、不改 status</b>——任意 status（ACTIVE 或 EXPIRED）的行都能被打 ack/ignore。
+ * EXPIRED 行也能 ack（表达"事后我看到了"——本项目 EXPIRED 是 TTL 到点、非条件恢复，事后标记有意义）。
  *
- * <p>更新走 CAS 式 JPQL（带 {@code status=:from} 条件），影响 0 行（并发已转移）抛 CONFLICT。
+ * <p><b>不设用户手动 close</b>：要"让告警消失"靠 silence（作用于未来同类）或等到期，与业界
+ * （Alertmanager/Grafana 都无手动 close）一致。故无 resolve 端点。
+ *
+ * <p>不存在（id+namespace 不匹配）抛 {@link ResourceNotFoundException}。
  */
 @Service
 public class AlertDispositionService {
@@ -36,47 +32,28 @@ public class AlertDispositionService {
     }
 
     public AlertEntity acknowledge(final String namespace, final Long id, final String note, final String by) {
-        return transition(namespace, id, Set.of(AlertStatus.FIRING), AlertStatus.ACKNOWLEDGED, note, by, false);
+        return apply(namespace, id, AlertDisposition.ACKNOWLEDGED, note, by);
     }
 
     public AlertEntity ignore(final String namespace, final Long id, final String note, final String by) {
-        return transition(namespace, id, Set.of(AlertStatus.FIRING), AlertStatus.IGNORED, note, by, false);
+        return apply(namespace, id, AlertDisposition.IGNORED, note, by);
     }
 
-    public AlertEntity resolve(final String namespace, final Long id, final String note, final String by) {
-        return transition(
-                namespace,
-                id,
-                Set.of(AlertStatus.FIRING, AlertStatus.ACKNOWLEDGED, AlertStatus.IGNORED),
-                AlertStatus.RESOLVED,
-                note,
-                by,
-                true);
-    }
-
-    private AlertEntity transition(
+    private AlertEntity apply(
             final String namespace,
             final Long id,
-            final Set<AlertStatus> allowedFrom,
-            final AlertStatus target,
+            final AlertDisposition disposition,
             final String note,
-            final String by,
-            final boolean setResolvedAt) {
-        AlertEntity alert = alertRepository
+            final String by) {
+        // 先校验行存在且属于本 namespace（软隔离铁律 ADR-0002），再写 disposition。
+        alertRepository
                 .findById(id)
                 .map(AlertMapper::toEntity)
                 .filter(a -> namespace.equals(a.namespace()))
                 .orElseThrow(
                         () -> new ResourceNotFoundException("alert " + id + " not found in namespace " + namespace));
-        if (!allowedFrom.contains(alert.status())) {
-            throw new ConflictException("alert " + id + " cannot transition " + alert.status() + " → " + target);
-        }
         Instant now = Instant.now();
-        int updated = alertRepository.applyDisposition(
-                id, namespace, alert.status().name(), target.name(), note, by, now, setResolvedAt ? now : null);
-        if (updated == 0) {
-            throw new ConflictException("alert " + id + " state changed concurrently");
-        }
+        alertRepository.applyDisposition(id, namespace, disposition.name(), note, by, now);
         return AlertMapper.toEntity(alertRepository.findById(id).orElseThrow());
     }
 }

@@ -52,7 +52,8 @@ public class AlertingPipelineConfig {
                 evidenceCollector,
                 annotationRenderer,
                 silenceMatcher,
-                snowflakeIdGenerator);
+                snowflakeIdGenerator,
+                new com.imsw.observe.alerting.domain.WavePolicy());
     }
 
     @Bean
