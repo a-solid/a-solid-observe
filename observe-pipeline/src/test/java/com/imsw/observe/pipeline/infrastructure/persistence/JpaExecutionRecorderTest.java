@@ -27,15 +27,15 @@ import com.imsw.observe.kernel.execution.model.ErrorType;
 import com.imsw.observe.kernel.util.SnowflakeIdGenerator;
 import com.imsw.observe.pipeline.infrastructure.script.DefaultExecutionContext;
 
+/**
+ * 合表后 recorder：成功全量写行（trigger_event 按采样）、失败写同表 status=FAILED（含 trigger_event + stack）。
+ */
 @ExtendWith(SpringExtension.class)
 @SpringBootTest(classes = TestJpaFactory.class)
 class JpaExecutionRecorderTest {
 
     @Autowired
     private ExecutionRepository executionRepository;
-
-    @Autowired
-    private FailedExecutionRepository failedExecutionRepository;
 
     @Autowired
     private PlatformTransactionManager transactionManager;
@@ -49,22 +49,22 @@ class JpaExecutionRecorderTest {
 
     @BeforeEach
     void setUp() {
-        recorder = new JpaExecutionRecorder(executionRepository, failedExecutionRepository, objectMapper, snowflake);
-        runInTx(() -> {
-            executionRepository.deleteAll();
-            failedExecutionRepository.deleteAll();
-        });
+        recorder = new JpaExecutionRecorder(executionRepository, objectMapper, snowflake);
+        runInTx(() -> executionRepository.deleteAll());
     }
 
     @Test
-    void successWithoutAlertAndZeroSampleWritesNothing() {
+    void successWithoutAlertAndZeroSampleWritesRowWithNullTriggerEvent() {
+        // 合表后：成功永远写行（success-rate 计数准）；采样只作用于 trigger_event——未 emit + 零采样 → null。
         runInTx(() -> recorder.recordSuccess(newContext(), "SUCCESS", Duration.ofMillis(5), false, 0.0));
-        assertThat(executionRepository.count()).isZero();
-        assertThat(failedExecutionRepository.count()).isZero();
+        assertThat(executionRepository.count()).isEqualTo(1);
+        ExecutionPo po = executionRepository.findAll().get(0);
+        assertThat(po.status).isEqualTo("SUCCESS");
+        assertThat(po.triggerEvent).isNull();
     }
 
     @Test
-    void successWithEmittedAlertForcesWrite() {
+    void successWithEmittedAlertWritesTriggerEvent() {
         runInTx(() -> recorder.recordSuccess(newContext(), "SUCCESS", Duration.ofMillis(5), true, 0.0));
         assertThat(executionRepository.count()).isEqualTo(1);
         ExecutionPo po = executionRepository.findAll().get(0);
@@ -78,23 +78,23 @@ class JpaExecutionRecorderTest {
     }
 
     @Test
-    void failureWritesDeadLetterNotExecutions() {
+    void failureWritesSameTableAsFailed() {
         NodeExecutionException error = new NodeExecutionException("boom-node", "kaboom", new IllegalStateException());
         runInTx(() -> recorder.recordFailure(
                 newContext(), error, Duration.ofMillis(7), "boom-node", ErrorType.NODE_EXECUTION));
 
-        assertThat(executionRepository.count()).isZero();
-        assertThat(failedExecutionRepository.count()).isEqualTo(1);
-        var fe = failedExecutionRepository.findAll().get(0);
-        assertThat(fe.id).isPositive(); // snowflake-allocated BIGINT id (ADR-0003)
-        assertThat(fe.namespace).isEqualTo("trade"); // namespace 软隔离维度透传 (ADR-0002)
-        assertThat(fe.executionId).isEqualTo(1001L);
-        assertThat(fe.pipelineId).isEqualTo(2001L);
-        assertThat(fe.subscriptionId).isEqualTo(3001L);
-        assertThat(fe.errorType).isEqualTo("NODE_EXECUTION");
-        assertThat(fe.nodeName).isEqualTo("boom-node");
-        assertThat(fe.status).isEqualTo("PENDING");
-        assertThat(fe.stackTrace).contains("kaboom");
+        assertThat(executionRepository.count()).isEqualTo(1);
+        ExecutionPo po = executionRepository.findAll().get(0);
+        assertThat(po.id).isPositive();
+        assertThat(po.namespace).isEqualTo("trade");
+        assertThat(po.executionId).isEqualTo(1001L);
+        assertThat(po.pipelineId).isEqualTo(2001L);
+        assertThat(po.subscriptionId).isEqualTo(3001L);
+        assertThat(po.status).isEqualTo("FAILED");
+        assertThat(po.errorType).isEqualTo("NODE_EXECUTION");
+        assertThat(po.nodeName).isEqualTo("boom-node");
+        assertThat(po.stackTrace).contains("kaboom");
+        assertThat(po.triggerEvent).contains("orders"); // 失败 trigger_event 全量写（排错刚需）
     }
 
     private DefaultExecutionContext newContext() {

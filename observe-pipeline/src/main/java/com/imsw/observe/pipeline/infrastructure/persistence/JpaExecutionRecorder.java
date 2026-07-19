@@ -25,23 +25,23 @@ public final class JpaExecutionRecorder implements ExecutionRecorder {
 
     private final ExecutionRepository executionRepository;
 
-    private final FailedExecutionRepository failedExecutionRepository;
-
     private final ObjectMapper objectMapper;
 
     private final SnowflakeIdGenerator snowflake;
 
     public JpaExecutionRecorder(
             final ExecutionRepository executionRepository,
-            final FailedExecutionRepository failedExecutionRepository,
             final ObjectMapper objectMapper,
             final SnowflakeIdGenerator snowflake) {
         this.executionRepository = executionRepository;
-        this.failedExecutionRepository = failedExecutionRepository;
         this.objectMapper = objectMapper;
         this.snowflake = snowflake;
     }
 
+    /**
+     * 成功执行：合表后**全量写行**（不再因采样跳过整行——保证 success-rate 计数准）。采样只作用于
+     * 重字段 {@code trigger_event}：emittedAlert 或命中 sampleRatio 才写 JSON，否则 null（省存储）。
+     */
     @Override
     public void recordSuccess(
             final ExecutionContext ctx,
@@ -49,9 +49,6 @@ public final class JpaExecutionRecorder implements ExecutionRecorder {
             final Duration duration,
             final boolean emittedAlert,
             final double sampleRatio) {
-        if (!emittedAlert && !shouldSample(sampleRatio)) {
-            return;
-        }
         ExecutionMeta meta = ctx.meta();
         ExecutionPo po = new ExecutionPo();
         po.id = snowflake.next();
@@ -62,7 +59,8 @@ public final class JpaExecutionRecorder implements ExecutionRecorder {
                         ? com.imsw.observe.kernel.event.model.SourceType.UNKNOWN
                         : meta.triggerType())
                 .name();
-        po.triggerEvent = serializeEvent(meta.triggerEvent());
+        // 采样仅决定 trigger_event 写不写；行本身全量落库（success-rate 准）。
+        po.triggerEvent = shouldPersistEvent(emittedAlert, sampleRatio) ? serializeEvent(meta.triggerEvent()) : null;
         po.subscriptionId = meta.subscriptionId();
         po.status = outcome;
         po.startedAt = meta.triggeredAt();
@@ -77,6 +75,9 @@ public final class JpaExecutionRecorder implements ExecutionRecorder {
         }
     }
 
+    /**
+     * 失败执行：写同表 status=FAILED，全量填失败专属字段（node/error/stack）+ trigger_event（排错刚需，不采样）。
+     */
     @Override
     public void recordFailure(
             final ExecutionContext ctx,
@@ -85,7 +86,7 @@ public final class JpaExecutionRecorder implements ExecutionRecorder {
             final String nodeName,
             final ErrorType errorType) {
         ExecutionMeta meta = ctx.meta();
-        FailedExecutionPo po = new FailedExecutionPo();
+        ExecutionPo po = new ExecutionPo();
         po.id = snowflake.next();
         po.namespace = meta.namespace();
         po.pipelineId = meta.pipelineId();
@@ -101,10 +102,14 @@ public final class JpaExecutionRecorder implements ExecutionRecorder {
         po.errorType = errorType.name();
         po.errorMessage = truncate(error == null ? null : error.getMessage(), MAX_ERROR_MESSAGE);
         po.stackTrace = truncate(toStackTrace(error), 32 * 1024);
-        po.status = "PENDING";
+        po.status = "FAILED";
+        po.startedAt = meta.triggeredAt();
+        po.endedAt = Instant.now();
+        po.durationMs = duration == null ? null : duration.toMillis();
+        po.traceId = meta.traceId();
         po.createdAt = Instant.now();
         try {
-            failedExecutionRepository.save(po);
+            executionRepository.save(po);
         } catch (RuntimeException e) {
             LOG.warn("failed to persist failed execution {} for pipeline {}", po.id, po.pipelineId, e);
         }
@@ -120,6 +125,11 @@ public final class JpaExecutionRecorder implements ExecutionRecorder {
             LOG.warn("failed to serialize trigger event", e);
             return null;
         }
+    }
+
+    /** 成功执行的 trigger_event 是否落库：emit 过告警或命中采样比例（合表后只采 trigger_event，不采整行）。 */
+    private static boolean shouldPersistEvent(final boolean emittedAlert, final double sampleRatio) {
+        return emittedAlert || shouldSample(sampleRatio);
     }
 
     private static boolean shouldSample(final double sampleRatio) {

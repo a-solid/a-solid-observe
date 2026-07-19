@@ -7,7 +7,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.imsw.observe.controlplane.interfaces.dto.ExecutionDto;
-import com.imsw.observe.controlplane.interfaces.dto.FailedExecutionDto;
 import com.imsw.observe.controlplane.interfaces.web.ApiResponse;
 import com.imsw.observe.controlplane.interfaces.web.PageResponse;
 import com.imsw.observe.controlplane.interfaces.web.Pages;
@@ -15,10 +14,13 @@ import com.imsw.observe.controlplane.interfaces.web.ResourceNotFoundException;
 import com.imsw.observe.pipeline.application.ExecutionQueryService;
 
 /**
- * Executions/FailedExecutions 查询接口（ADR-0002 软隔离铁律）。
+ * Executions 查询接口（合表后单表；ADR-0002 软隔离铁律）。
  *
  * <p>与 {@link AlertController} 同款：行以 snowflake BIGINT id 为物理主键，namespace 作必填查询参数
  * {@code ?namespace=}；单条按 {@code (namespace, id)} 软校验，不匹配返回 404。
+ *
+ * <p>合表后原 {@code /failed-executions} 并入 {@code /executions?status=FAILED}——失败专属字段
+ * （nodeName/errorType/errorMessage/stackTrace）在 {@link ExecutionDto} 上可空（仅 FAILED 行填）。
  */
 @RestController
 @RequestMapping("/api/v1")
@@ -35,13 +37,15 @@ public class ExecutionController {
             @RequestParam final String namespace,
             @RequestParam(name = "pipeline_id", required = false) final Long pipelineId,
             @RequestParam(name = "status", required = false) final String status,
+            @RequestParam(name = "error_type", required = false) final String errorType,
             @RequestParam(name = "from", required = false) final java.time.Instant from,
             @RequestParam(name = "to", required = false) final java.time.Instant to,
             @RequestParam(name = "page", required = false, defaultValue = "1") final int page,
             @RequestParam(name = "size", required = false) final Integer size,
             @RequestParam(name = "limit", required = false) final Integer limit) {
         return Pages.toResponse(
-                service.findExecutions(namespace, pipelineId, status, from, to, Pages.pageable(page, size, limit)),
+                service.findExecutions(
+                        namespace, pipelineId, status, errorType, from, to, Pages.pageable(page, size, limit)),
                 ExecutionDto::from,
                 page,
                 size,
@@ -55,35 +59,5 @@ public class ExecutionController {
                 .map(ApiResponse::ok)
                 .orElseThrow(() ->
                         new ResourceNotFoundException("execution " + id + " not found in namespace " + namespace));
-    }
-
-    @GetMapping("/failed-executions")
-    public PageResponse<FailedExecutionDto> failedExecutions(
-            @RequestParam final String namespace,
-            @RequestParam(name = "pipeline_id", required = false) final Long pipelineId,
-            @RequestParam(name = "status", required = false) final String status,
-            @RequestParam(name = "error_type", required = false) final String errorType,
-            @RequestParam(name = "from", required = false) final java.time.Instant from,
-            @RequestParam(name = "to", required = false) final java.time.Instant to,
-            @RequestParam(name = "page", required = false, defaultValue = "1") final int page,
-            @RequestParam(name = "size", required = false) final Integer size,
-            @RequestParam(name = "limit", required = false) final Integer limit) {
-        return Pages.toResponse(
-                service.findFailedExecutions(
-                        namespace, pipelineId, status, errorType, from, to, Pages.pageable(page, size, limit)),
-                FailedExecutionDto::from,
-                page,
-                size,
-                limit);
-    }
-
-    @GetMapping("/failed-executions/{id}")
-    public ApiResponse<FailedExecutionDto> failedExecution(
-            @PathVariable final Long id, @RequestParam final String namespace) {
-        return service.findFailedExecution(namespace, id)
-                .map(FailedExecutionDto::from)
-                .map(ApiResponse::ok)
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "failed-execution " + id + " not found in namespace " + namespace));
     }
 }

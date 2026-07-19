@@ -50,4 +50,21 @@ public class ExecutionPo {
 
     @Column(name = "created_at", nullable = false)
     public Instant createdAt;
+
+    // ---------- 失败专属（仅 status=FAILED 行填充，其余 null；合表自 failed_executions） ----------
+
+    @Column(name = "execution_id")
+    public Long executionId;
+
+    @Column(name = "node_name")
+    public String nodeName;
+
+    @Column(name = "error_type")
+    public String errorType;
+
+    @Column(name = "error_message", length = 4000)
+    public String errorMessage;
+
+    @Column(name = "stack_trace", length = 32_768)
+    public String stackTrace;
 }

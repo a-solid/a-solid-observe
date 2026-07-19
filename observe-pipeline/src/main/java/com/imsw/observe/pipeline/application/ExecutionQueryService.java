@@ -13,11 +13,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
 import com.imsw.observe.pipeline.domain.Execution;
-import com.imsw.observe.pipeline.domain.FailedExecution;
 import com.imsw.observe.pipeline.infrastructure.persistence.ExecutionPo;
 import com.imsw.observe.pipeline.infrastructure.persistence.ExecutionRepository;
-import com.imsw.observe.pipeline.infrastructure.persistence.FailedExecutionPo;
-import com.imsw.observe.pipeline.infrastructure.persistence.FailedExecutionRepository;
 
 @Service
 public class ExecutionQueryService {
@@ -26,34 +23,30 @@ public class ExecutionQueryService {
 
     private final ExecutionRepository executionRepository;
 
-    private final FailedExecutionRepository failedExecutionRepository;
-
-    public ExecutionQueryService(
-            final ExecutionRepository executionRepository, final FailedExecutionRepository failedExecutionRepository) {
+    public ExecutionQueryService(final ExecutionRepository executionRepository) {
         this.executionRepository = executionRepository;
-        this.failedExecutionRepository = failedExecutionRepository;
     }
 
     /**
      * 列表查询，软隔离铁律（ADR-0002）：namespace 必填，**namespace/过滤条件下推到 JPQL where**
      * （避免 findAll + 内存过滤在跨 namespace 超 {@code FETCH_SIZE} 行时静默截断），再对结果分页，
      * {@link PageImpl} 携带真实 total。
+     *
+     * <p>合表后统一查询：{@code status} 可 SUCCESS/SHORT_CIRCUITED/FAILED；{@code errorType} 仅对 FAILED 行有意义。
      */
-    public Page<Execution> findExecutions(final String namespace, final Long pipelineId, final Pageable pageable) {
-        return findExecutions(namespace, pipelineId, null, null, null, pageable);
-    }
-
-    /** B6 扩展：补 status（SUCCESS/SHORT_CIRCUITED）与 from/to（按 {@code started_at}）过滤。 */
     public Page<Execution> findExecutions(
             final String namespace,
             final Long pipelineId,
             final String status,
+            final String errorType,
             final Instant from,
             final Instant to,
             final Pageable pageable) {
         String normStatus = status == null || status.isBlank() ? null : status.toUpperCase();
+        String normError = errorType == null || errorType.isBlank() ? null : errorType.toUpperCase();
         List<Execution> filtered = executionRepository
-                .findByNamespaceFilters(namespace, pipelineId, normStatus, from, to, PageRequest.of(0, FETCH_SIZE))
+                .findByNamespaceFilters(
+                        namespace, pipelineId, normStatus, normError, from, to, PageRequest.of(0, FETCH_SIZE))
                 .stream()
                 .map(ExecutionQueryService::toExecution)
                 .toList();
@@ -68,43 +61,13 @@ public class ExecutionQueryService {
                 .filter(e -> namespace.equals(e.namespace()));
     }
 
-    public Page<FailedExecution> findFailedExecutions(
-            final String namespace, final Long pipelineId, final Pageable pageable) {
-        return findFailedExecutions(namespace, pipelineId, null, null, null, null, pageable);
-    }
-
-    /** B6 扩展：补 status（PENDING/RESOLVED/IGNORED）、error_type 与 from/to（按 {@code created_at}）过滤。 */
-    public Page<FailedExecution> findFailedExecutions(
-            final String namespace,
-            final Long pipelineId,
-            final String status,
-            final String errorType,
-            final Instant from,
-            final Instant to,
-            final Pageable pageable) {
-        String normStatus = status == null || status.isBlank() ? null : status.toUpperCase();
-        String normError = errorType == null || errorType.isBlank() ? null : errorType.toUpperCase();
-        List<FailedExecution> filtered = failedExecutionRepository
-                .findByNamespaceFilters(
-                        namespace, pipelineId, normStatus, normError, from, to, PageRequest.of(0, FETCH_SIZE))
-                .stream()
-                .map(ExecutionQueryService::toFailedExecution)
-                .toList();
-        return paginate(filtered, pageable);
-    }
-
-    public Optional<FailedExecution> findFailedExecution(final String namespace, final Long id) {
-        return failedExecutionRepository
-                .findById(id)
-                .map(ExecutionQueryService::toFailedExecution)
-                .filter(e -> namespace.equals(e.namespace()));
-    }
-
     // ---------- B6 聚合统计 ----------
 
     /**
-     * 执行统计 + 成功率：byStatus/total 来自 executions（{@code started_at}），failedCount 来自
-     * failed_executions（{@code created_at}），分查相除（两表无关联）。
+     * 执行统计 + 成功率（合表后单表口径）：{@code byStatus}（SUCCESS/SHORT_CIRCUITED/FAILED）与
+     * {@code total} 全来自 executions 单表（按 {@code started_at} 同窗口、全量行）。{@code failedCount}
+     * 即 {@code byStatus["FAILED"]}。{@code successRate = (total - failedCount) / total}，分母 0 返回 1.0。
+     * 单表全量行 → 无跨表采样偏差。
      */
     public ExecutionStats executionStats(
             final String namespace,
@@ -116,8 +79,8 @@ public class ExecutionQueryService {
         Map<String, Long> byStatus =
                 toMap(executionRepository.countByStatus(namespace, from, to, pipelineId, normTrigger));
         long total = byStatus.values().stream().mapToLong(Long::longValue).sum();
-        long failedCount = failedExecutionRepository.countInWindow(namespace, from, to, pipelineId, normTrigger);
-        double successRate = total + failedCount == 0 ? 1.0 : (double) total / (total + failedCount);
+        long failedCount = byStatus.getOrDefault("FAILED", 0L);
+        double successRate = total == 0 ? 1.0 : (double) (total - failedCount) / total;
         return new ExecutionStats(namespace, from, to, byStatus, total, failedCount, successRate);
     }
 
@@ -149,25 +112,11 @@ public class ExecutionQueryService {
                 po.endedAt,
                 po.durationMs,
                 po.traceId,
-                po.createdAt);
-    }
-
-    private static FailedExecution toFailedExecution(final FailedExecutionPo po) {
-        return new FailedExecution(
-                po.id,
-                po.namespace,
-                po.pipelineId,
-                po.pipelineVersion == null ? 0 : po.pipelineVersion,
+                po.createdAt,
                 po.executionId,
-                po.triggerType,
-                po.triggerEvent,
-                po.subscriptionId,
                 po.nodeName,
                 po.errorType,
                 po.errorMessage,
-                po.stackTrace,
-                po.status,
-                po.createdAt,
-                po.resolvedAt);
+                po.stackTrace);
     }
 }

@@ -13,10 +13,13 @@ public interface ExecutionRepository extends JpaRepository<ExecutionPo, Long> {
 
     /**
      * 列表查询（ADR-0002 软隔离铁律）：namespace 下推 where，避免 findAll + 内存过滤的跨 namespace 截断。
+     * 合表后覆盖原 executions + failed_executions 两路查询：{@code status=FAILED} 即原失败列表，
+     * {@code errorType} 过滤仅对 FAILED 行有意义（成功行 errorType 为 null，自动不命中）。
      */
     @Query("select e from ExecutionPo e where e.namespace = :namespace "
             + "and (:pipelineId is null or e.pipelineId = :pipelineId) "
             + "and (:status is null or e.status = :status) "
+            + "and (:errorType is null or e.errorType = :errorType) "
             + "and (:from is null or e.startedAt >= :from) "
             + "and (:to is null or e.startedAt < :to) "
             + "order by e.id desc")
@@ -24,10 +27,15 @@ public interface ExecutionRepository extends JpaRepository<ExecutionPo, Long> {
             @Param("namespace") String namespace,
             @Param("pipelineId") Long pipelineId,
             @Param("status") String status,
+            @Param("errorType") String errorType,
             @Param("from") Instant from,
             @Param("to") Instant to,
             @Param("pageable") org.springframework.data.domain.Pageable pageable);
 
+    /**
+     * 合表后单表按 status 聚合（SUCCESS / SHORT_CIRCUITED / FAILED）——successRate 由此准算，
+     * 无跨表采样偏差。窗口统一按 {@code started_at}。
+     */
     @Query("select new com.imsw.observe.pipeline.application.DimensionCount(e.status, count(e)) "
             + "from ExecutionPo e where e.namespace = :namespace "
             + "and e.startedAt >= :from and e.startedAt < :to "

@@ -72,10 +72,8 @@ public class AlertingPipelineConfig {
 
     @Bean
     public ExecutionQueryService executionQueryService(
-            final com.imsw.observe.pipeline.infrastructure.persistence.ExecutionRepository executionRepository,
-            final com.imsw.observe.pipeline.infrastructure.persistence.FailedExecutionRepository
-                    failedExecutionRepository) {
-        return new ExecutionQueryService(executionRepository, failedExecutionRepository);
+            final com.imsw.observe.pipeline.infrastructure.persistence.ExecutionRepository executionRepository) {
+        return new ExecutionQueryService(executionRepository);
     }
 
     @Bean
@@ -83,12 +81,10 @@ public class AlertingPipelineConfig {
             com.imsw.observe.kernel.execution.spi.ExecutionRecorder.class)
     public com.imsw.observe.kernel.execution.spi.ExecutionRecorder executionRecorder(
             final com.imsw.observe.pipeline.infrastructure.persistence.ExecutionRepository executionRepository,
-            final com.imsw.observe.pipeline.infrastructure.persistence.FailedExecutionRepository
-                    failedExecutionRepository,
             final com.fasterxml.jackson.databind.ObjectMapper objectMapper,
             final com.imsw.observe.kernel.util.SnowflakeIdGenerator snowflakeIdGenerator) {
         return new com.imsw.observe.pipeline.infrastructure.persistence.JpaExecutionRecorder(
-                executionRepository, failedExecutionRepository, objectMapper, snowflakeIdGenerator);
+                executionRepository, objectMapper, snowflakeIdGenerator);
     }
 
     @Bean

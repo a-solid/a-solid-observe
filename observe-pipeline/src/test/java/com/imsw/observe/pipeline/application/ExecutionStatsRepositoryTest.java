@@ -15,12 +15,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.imsw.observe.pipeline.infrastructure.persistence.ExecutionPo;
 import com.imsw.observe.pipeline.infrastructure.persistence.ExecutionRepository;
-import com.imsw.observe.pipeline.infrastructure.persistence.FailedExecutionPo;
-import com.imsw.observe.pipeline.infrastructure.persistence.FailedExecutionRepository;
 import com.imsw.observe.pipeline.infrastructure.persistence.TestJpaFactory;
 
 /**
- * B6：验证执行统计 + 成功率（executions 按 {@code started_at}、failed_executions 按 {@code created_at} 分查相除）。
+ * 合表后执行统计 + 成功率（单表 group by status，按 {@code started_at} 同窗口、全量行）。
  *
  * <p>{@code @Import(ExecutionQueryService)} 把 application 包的 service 注册成 bean（TestJpaFactory 只扫 persistence）。
  */
@@ -34,20 +32,16 @@ class ExecutionStatsRepositoryTest {
     private ExecutionRepository executionRepository;
 
     @Autowired
-    private FailedExecutionRepository failedExecutionRepository;
-
-    @Autowired
     private ExecutionQueryService executionQueryService;
 
     @BeforeEach
     void setUp() {
         executionRepository.deleteAll();
-        failedExecutionRepository.deleteAll();
         Instant base = Instant.parse("2026-07-19T10:00:00Z");
         executionRepository.save(execution("ns", "SUCCESS", base, 1L));
         executionRepository.save(execution("ns", "SUCCESS", base.plusSeconds(60), 1L));
         executionRepository.save(execution("ns", "SHORT_CIRCUITED", base.plusSeconds(120), 2L));
-        failedExecutionRepository.save(failed("ns", base.plusSeconds(30), 1L));
+        executionRepository.save(failed("ns", base.plusSeconds(30), 1L));
     }
 
     @Test
@@ -57,10 +51,14 @@ class ExecutionStatsRepositoryTest {
 
         ExecutionStats stats = executionQueryService.executionStats("ns", from, to, null, null);
 
-        assertThat(stats.total()).isEqualTo(3L);
+        // total 含 FAILED 行（单表全量）；byStatus 含三类
+        assertThat(stats.total()).isEqualTo(4L);
         assertThat(stats.failedCount()).isEqualTo(1L);
-        assertThat(stats.byStatus()).containsEntry("SUCCESS", 2L).containsEntry("SHORT_CIRCUITED", 1L);
-        // successRate = total / (total + failed) = 3/4
+        assertThat(stats.byStatus())
+                .containsEntry("SUCCESS", 2L)
+                .containsEntry("SHORT_CIRCUITED", 1L)
+                .containsEntry("FAILED", 1L);
+        // successRate = (total - failed) / total = 3/4
         assertThat(stats.successRate()).isEqualTo(0.75);
     }
 
@@ -114,16 +112,19 @@ class ExecutionStatsRepositoryTest {
         return po;
     }
 
-    private static FailedExecutionPo failed(final String ns, final Instant createdAt, final Long pid) {
-        FailedExecutionPo po = new FailedExecutionPo();
+    private static ExecutionPo failed(final String ns, final Instant startedAt, final Long pid) {
+        ExecutionPo po = new ExecutionPo();
         po.id = System.nanoTime();
         po.namespace = ns;
         po.pipelineId = pid;
         po.pipelineVersion = 1;
         po.triggerType = "CDC";
+        po.status = "FAILED";
         po.errorType = "NODE_EXECUTION";
-        po.status = "PENDING";
-        po.createdAt = createdAt;
+        po.startedAt = startedAt;
+        po.endedAt = startedAt.plusSeconds(5);
+        po.durationMs = 5L;
+        po.createdAt = startedAt;
         return po;
     }
 }
