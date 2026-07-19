@@ -30,6 +30,9 @@ _Avoid_: Subscription（裸名在运行态语境指运行态模型）、Subscrip
 Subscription 的运行态：把 source 字段聚合成 `SourceRef`、把 action 聚合成 `Action` sealed interface 的紧凑模型。`observe-pipeline.domain.subscription.Subscription`。
 _Avoid_: 用裸 Subscription 指代配置态（造成同名歧义）
 
+**订阅状态（ACTIVE/INACTIVE）**:
+订阅的生命周期状态。`ACTIVE`（默认）= 参与触发；`INACTIVE` = 停用（不删配置、可恢复）。`PipelineRegistryLoader.load` 只收 `ACTIVE` 订阅进运行态 registry → `INACTIVE` 订阅被 matcher 天然路由不到、不触发 pipeline。停用/启用靠 `/deactivate`、`/activate` 接口，状态翻转后靠 30s 热加载 poll 生效（不主动 refresh）。与 `delete` 的区别：保留配置、可恢复。
+
 **PipelineRegistryLoader**:
 把配置态（PipelineDefinition/PipelineVersion/SubscriptionDefinition）反序列化 + 聚合成运行态（Pipeline/Subscription）的桥接器，产出 `PipelineRegistry.Snapshot`。
 
@@ -107,7 +110,7 @@ _Avoid_: 给 TickEvent 塞 before/after（cron 无数据变更语义）
 HTTP 触发事件，含 `payload`（HTTP POST body 反序列化的 Map）+ `ApiMeta`（api name）。由 `ApiSource` 产出。
 
 **DelayedEvent**:
-延时触发事件，**嵌套原始 Event**（`originalEvent`，通常是 CdcEvent）+ `DelayedMeta`（subscriptionId 路由键 + attributes 审计字段）。语义：延时 = 延迟重放原始事件。由 `DelayedActionHandler.fire` 到点构造，经 `SourceDispatcher.onEvent` 回流——与其它 Event 子类型一样走 matcher，按 subscriptionId 路由回原订阅扇出（见 ADR-0006 addendum）。
+延时触发事件，**嵌套原始 Event**（`originalEvent`，通常是 CdcEvent）+ `DelayedMeta`（subscriptionId 路由键 + correlationKey 业务键）。语义：延时 = 延迟重放原始事件。由 `DelayedActionHandler.fire` 到点构造，经 `SourceDispatcher.onEvent` 回流——与其它 Event 子类型一样走 matcher，按 subscriptionId 路由回原订阅扇出（见 ADR-0006 addendum）。
 
 **CdcOp**:
 CDC 数据变更语义枚举：`INSERT`/`UPDATE`/`DELETE`，仅挂 `CdcEvent`。

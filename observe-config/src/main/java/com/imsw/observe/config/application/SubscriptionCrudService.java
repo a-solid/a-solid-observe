@@ -107,10 +107,36 @@ public class SubscriptionCrudService {
 
     @Transactional
     public void delete(final String namespace, final String name) {
-        SubscriptionPo po = repository
+        SubscriptionPo po = requireSubscription(namespace, name);
+        repository.delete(po);
+    }
+
+    /**
+     * 停用订阅（status → INACTIVE）。loader 热加载时只收 ACTIVE 订阅（{@code PipelineRegistryLoader.load}），
+     * INACTIVE 订阅不进运行态 registry → matcher 天然路由不到、不触发 pipeline。与 delete 的区别：保留配置、
+     * 可经 {@link #activate} 恢复。生效延迟 = 下次热加载 poll（≤30s），不主动触发 refresh。
+     */
+    @Transactional
+    public SubscriptionDefinition deactivate(final String namespace, final String name) {
+        SubscriptionPo po = requireSubscription(namespace, name);
+        po.status = "INACTIVE";
+        po.updatedAt = Instant.now();
+        return SubscriptionMapper.toEntity(repository.save(po), conditionCodec);
+    }
+
+    /** 启用订阅（status → ACTIVE）。下次热加载 poll（≤30s）后重新进 registry 生效。 */
+    @Transactional
+    public SubscriptionDefinition activate(final String namespace, final String name) {
+        SubscriptionPo po = requireSubscription(namespace, name);
+        po.status = "ACTIVE";
+        po.updatedAt = Instant.now();
+        return SubscriptionMapper.toEntity(repository.save(po), conditionCodec);
+    }
+
+    private SubscriptionPo requireSubscription(final String namespace, final String name) {
+        return repository
                 .findByNamespaceAndName(namespace, name)
                 .orElseThrow(() -> new IllegalArgumentException("subscription not found: " + namespace + "/" + name));
-        repository.delete(po);
     }
 
     private void validatePipeline(final SubscriptionDefinition subscription) {

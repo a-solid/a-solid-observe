@@ -78,6 +78,20 @@ public class SubscriptionController {
         return ApiResponse.ok(null);
     }
 
+    /** 停用订阅（status → INACTIVE，不删配置；下次热加载 ≤30s 生效，loader 不再收此订阅进 registry）。 */
+    @PostMapping("/namespaces/{namespace}/subscriptions/{name}/deactivate")
+    public ApiResponse<SubscriptionDto> deactivate(
+            @PathVariable final String namespace, @PathVariable final String name) {
+        return ApiResponse.ok(SubscriptionDto.from(service.deactivate(namespace, name)));
+    }
+
+    /** 启用订阅（status → ACTIVE；下次热加载 ≤30s 重新进 registry 生效）。 */
+    @PostMapping("/namespaces/{namespace}/subscriptions/{name}/activate")
+    public ApiResponse<SubscriptionDto> activate(
+            @PathVariable final String namespace, @PathVariable final String name) {
+        return ApiResponse.ok(SubscriptionDto.from(service.activate(namespace, name)));
+    }
+
     /** 可编辑的订阅字段（create/update 共用）。 */
     public record SubscriptionFields(
             @NotNull java.util.List<Long> pipelineIds,

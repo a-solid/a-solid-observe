@@ -20,6 +20,7 @@ import com.imsw.observe.config.domain.SubscriptionDefinition;
 import com.imsw.observe.config.infrastructure.ConditionCodec;
 import com.imsw.observe.config.infrastructure.persistence.PipelineDefinitionPo;
 import com.imsw.observe.config.infrastructure.persistence.PipelineDefinitionRepository;
+import com.imsw.observe.config.infrastructure.persistence.SubscriptionPo;
 import com.imsw.observe.config.infrastructure.persistence.SubscriptionRepository;
 import com.imsw.observe.kernel.event.model.SourceType;
 import com.imsw.observe.kernel.util.SnowflakeIdGenerator;
@@ -657,6 +658,69 @@ class SubscriptionCrudServiceTest {
         assertThat(saved.actionType()).isEqualTo(SubscriptionDefinition.ActionType.CANCEL);
         assertThat(saved.scheduleCorrelationKeyPath()).isEqualTo("after.orderId");
         verify(repository).save(any());
+    }
+
+    @Test
+    void deactivateFlipsStatusToInactive() {
+        SubscriptionRepository repository = mock(SubscriptionRepository.class);
+        PipelineDefinitionRepository pipelineDefRepo = mock(PipelineDefinitionRepository.class);
+        ConditionCodec codec = mock(ConditionCodec.class);
+        NamespaceCrudService namespaceCrudService = mock(NamespaceCrudService.class);
+        SnowflakeIdGenerator generator = new SnowflakeIdGenerator(1L, 0L);
+        SubscriptionCrudService service =
+                new SubscriptionCrudService(repository, pipelineDefRepo, codec, generator, namespaceCrudService);
+
+        SubscriptionPo existing = new SubscriptionPo();
+        existing.namespace = "billing";
+        existing.name = "sub-1";
+        existing.status = "ACTIVE";
+        when(repository.findByNamespaceAndName("billing", "sub-1")).thenReturn(java.util.Optional.of(existing));
+        when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        SubscriptionDefinition result = service.deactivate("billing", "sub-1");
+
+        assertThat(existing.status).isEqualTo("INACTIVE");
+        assertThat(result.status()).isEqualTo(SubscriptionDefinition.Status.INACTIVE);
+        verify(repository).save(existing);
+    }
+
+    @Test
+    void activateFlipsStatusToActive() {
+        SubscriptionRepository repository = mock(SubscriptionRepository.class);
+        PipelineDefinitionRepository pipelineDefRepo = mock(PipelineDefinitionRepository.class);
+        ConditionCodec codec = mock(ConditionCodec.class);
+        NamespaceCrudService namespaceCrudService = mock(NamespaceCrudService.class);
+        SnowflakeIdGenerator generator = new SnowflakeIdGenerator(1L, 0L);
+        SubscriptionCrudService service =
+                new SubscriptionCrudService(repository, pipelineDefRepo, codec, generator, namespaceCrudService);
+
+        SubscriptionPo existing = new SubscriptionPo();
+        existing.namespace = "billing";
+        existing.name = "sub-1";
+        existing.status = "INACTIVE";
+        when(repository.findByNamespaceAndName("billing", "sub-1")).thenReturn(java.util.Optional.of(existing));
+        when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        SubscriptionDefinition result = service.activate("billing", "sub-1");
+
+        assertThat(existing.status).isEqualTo("ACTIVE");
+        assertThat(result.status()).isEqualTo(SubscriptionDefinition.Status.ACTIVE);
+    }
+
+    @Test
+    void deactivateUnknownSubscriptionThrows() {
+        SubscriptionRepository repository = mock(SubscriptionRepository.class);
+        PipelineDefinitionRepository pipelineDefRepo = mock(PipelineDefinitionRepository.class);
+        ConditionCodec codec = mock(ConditionCodec.class);
+        NamespaceCrudService namespaceCrudService = mock(NamespaceCrudService.class);
+        SnowflakeIdGenerator generator = new SnowflakeIdGenerator(1L, 0L);
+        SubscriptionCrudService service =
+                new SubscriptionCrudService(repository, pipelineDefRepo, codec, generator, namespaceCrudService);
+        when(repository.findByNamespaceAndName("billing", "ghost")).thenReturn(java.util.Optional.empty());
+
+        assertThatThrownBy(() -> service.deactivate("billing", "ghost"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("subscription not found");
     }
 
     /** 构造一条 CDC 订阅，含可配置 actionType/scheduleDelay/scheduleCorrelationKeyPath（其余为合法默认值）。 */
