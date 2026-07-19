@@ -85,8 +85,9 @@ public final class DefaultSubscriptionMatcher implements SubscriptionMatcher {
     }
 
     private static boolean matchesSource(final Subscription sub, final Event event) {
-        // DelayedEvent：snapshot.subscriptionsFor 已按 subscriptionId 路由到唯一订阅（不依赖 source 字段）。
-        // 直接放行，让 tryMatch 走 pipeline 扇出。
+        // DelayedEvent 已被 snapshot.subscriptionsFor 按 subscriptionId 路由到唯一订阅（不依赖 source 字段），
+        // 直接放行让 tryMatch 走 pipeline 扇出。消费者侧 instanceof 级联（Java 17 无 switch 模式，
+        // 新增子类型需手动在此 + registry.subscriptionsFor 补分支）。
         if (event instanceof DelayedEvent) {
             return true;
         }

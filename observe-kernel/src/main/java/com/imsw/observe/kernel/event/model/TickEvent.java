@@ -10,4 +10,10 @@ import java.time.Instant;
  * @param meta     {@link TickMeta}（含 cron name / cron 表达式 / attributes）
  * @param sourceTs 触发时刻
  */
-public record TickEvent(TickMeta meta, Instant sourceTs) implements Event {}
+public record TickEvent(TickMeta meta, Instant sourceTs) implements Event {
+
+    @Override
+    public SourceType sourceType() {
+        return SourceType.CRON;
+    }
+}

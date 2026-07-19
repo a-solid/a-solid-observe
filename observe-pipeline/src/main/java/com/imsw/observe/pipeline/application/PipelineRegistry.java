@@ -146,6 +146,9 @@ public final class PipelineRegistry {
          * </ul>
          */
         public List<Subscription> subscriptionsFor(final Event event) {
+            // 按 Event 子类型选索引 + 抽 key。sealed Event 在类型层保证 sourceType() 穷尽
+            // （每个子类型必须实现 Event.sourceType()）；此处消费者侧仍是 instanceof 级联——
+            // Java 17 不支持 switch 模式，新增子类型需手动在此 + matcher.matchesSource 补分支。
             if (event instanceof CdcEvent cdc) {
                 return subscriptionsByDbTable.getOrDefault(
                         dbTableKey(cdc.meta().db(), cdc.meta().table()), List.of());

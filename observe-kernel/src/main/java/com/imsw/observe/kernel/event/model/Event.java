@@ -35,4 +35,17 @@ public sealed interface Event permits CdcEvent, TickEvent, ApiEvent, DelayedEven
 
     /** Source 端时间戳（CDC 消息时间 / Cron 触发时间 / Api 接收时间 / Delayed 实际 fire 时间）。 */
     Instant sourceTs();
+
+    /**
+     * 该事件的触发源类型（ADR-0006：sourceType 隐含于子类型，本方法让它成为可复用的领域事实，
+     * 取代散落在 registry/matcher/runner 各处的 instanceof 级联 re-derive）。
+     *
+     * <p>{@link DelayedEvent} 递归取 {@code originalEvent().sourceType()}——延时重放不是独立来源，
+     * 重放 CDC 事件 → sourceType=CDC。其余子类型返回各自固定常量（{@link CdcEvent}→CDC、
+     * {@link TickEvent}→CRON、{@link ApiEvent}→API）。
+     *
+     * <p>方法是 record 之外的派生属性，非 record 组件——不参与 Jackson 序列化（sourceType 由
+     * {@code @type} 标识隐含，见 {@link EventJacksonRoundTripTest}）。
+     */
+    SourceType sourceType();
 }

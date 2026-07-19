@@ -10,4 +10,10 @@ import java.util.Map;
  * @param payload  HTTP body 反序列化后的 Map
  * @param sourceTs 接收时间
  */
-public record ApiEvent(ApiMeta meta, Map<String, Object> payload, Instant sourceTs) implements Event {}
+public record ApiEvent(ApiMeta meta, Map<String, Object> payload, Instant sourceTs) implements Event {
+
+    @Override
+    public SourceType sourceType() {
+        return SourceType.API;
+    }
+}

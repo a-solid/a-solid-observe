@@ -13,4 +13,10 @@ import java.util.Map;
  * @param sourceTs source 端时间戳（CDC message 自带）
  */
 public record CdcEvent(CdcMeta meta, Map<String, Object> before, Map<String, Object> after, CdcOp op, Instant sourceTs)
-        implements Event {}
+        implements Event {
+
+    @Override
+    public SourceType sourceType() {
+        return SourceType.CDC;
+    }
+}

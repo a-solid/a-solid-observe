@@ -15,4 +15,14 @@ import java.time.Instant;
  * @param originalEvent  被延时重放的原始事件
  * @param sourceTs       实际 fire 时间
  */
-public record DelayedEvent(DelayedMeta meta, Event originalEvent, Instant sourceTs) implements Event {}
+public record DelayedEvent(DelayedMeta meta, Event originalEvent, Instant sourceTs) implements Event {
+
+    /**
+     * 延时重放非独立来源——递归取 {@code originalEvent().sourceType()}（重放 CDC → CDC）。
+     * 与 {@code DefaultPipelineRunner} 旧 {@code sourceTypeOf} 的递归语义一致，已上提到类型自身。
+     */
+    @Override
+    public SourceType sourceType() {
+        return originalEvent().sourceType();
+    }
+}
