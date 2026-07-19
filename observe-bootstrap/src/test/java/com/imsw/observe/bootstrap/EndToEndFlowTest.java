@@ -2,6 +2,7 @@ package com.imsw.observe.bootstrap;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -42,6 +43,8 @@ class EndToEndFlowTest {
     private static final String CRON_PIPELINE_NAME = "E2E_CRON";
 
     private static final String CRON_NAME = "e2e-every-second";
+
+    private static final String SCHEDULE_PIPELINE_NAME = "E2E_SCHEDULE";
 
     @Autowired
     private NamespaceCrudService namespaces;
@@ -210,6 +213,103 @@ class EndToEndFlowTest {
         subscriptions.delete(NAMESPACE, "e2e-cron-sub");
         hotReloader.refresh();
         cronScheduler.sync(registry.snapshot());
+    }
+
+    /**
+     * SCHEDULE-only 端到端（delayed-redesign spec D1/D2）：CDC INSERT → schedule delay 500ms →
+     * fire → DelayedEvent 重放 → matcher 绕过、订阅级扇出 → pipeline 跑 → 告警落库。
+     *
+     * <p>覆盖关键链路：
+     * <ul>
+     *   <li>订阅级 action 分发：dispatcher 不在 pipeline 内调 handler。</li>
+     *   <li>namespace 级 key 拼装：fullKey = "e2e:{orderId}"。</li>
+     *   <li>fire 走 relayer → dispatcher.relay → 绕 matcher 直扇出。</li>
+     * </ul>
+     */
+    @Test
+    void scheduleOnlyFiresAfterDelayAndPersistsAlert() throws Exception {
+        evidenceRepository.deleteAll();
+        alertRepository.deleteAll();
+
+        if (namespaces.findByName(NAMESPACE) == null) {
+            namespaces.create(NAMESPACE, "End-to-End smoke");
+        }
+
+        Long pipelineId = pipelines
+                .create(NAMESPACE, SCHEDULE_PIPELINE_NAME, Map.of("team", "team", "app", "app"), "", "tester")
+                .id();
+        Pipeline pipeline = buildSchedulePipeline(pipelineId, 1);
+        versions.saveDraft(NAMESPACE, SCHEDULE_PIPELINE_NAME, pipeline, "tester");
+        versions.publish(NAMESPACE, SCHEDULE_PIPELINE_NAME, 1, "tester");
+
+        // SCHEDULE 订阅：500ms 后 fire，correlationKeyPath=after.orderId。
+        SubscriptionDefinition sub = new SubscriptionDefinition(
+                null,
+                NAMESPACE,
+                java.util.List.of(pipelineId),
+                "mq",
+                "topic",
+                "trade_db",
+                "orders",
+                Set.of(CdcOp.INSERT),
+                SourceType.CDC,
+                null,
+                SubscriptionDefinition.ActionType.SCHEDULE,
+                Duration.ofMillis(500),
+                "after.orderId",
+                "e2e-schedule-sub",
+                null,
+                SubscriptionDefinition.Status.ACTIVE,
+                "tester",
+                null,
+                null,
+                null,
+                null,
+                null);
+        subscriptions.create(sub);
+
+        hotReloader.refresh();
+        assertThat(registry.isLoaded()).isTrue();
+
+        CdcMeta meta = new CdcMeta("mq", "trade_db", "orders", Map.of());
+        Event event = new CdcEvent(meta, Map.of(), Map.of("orderId", "order-sch-1"), CdcOp.INSERT, Instant.now());
+        cdcSource.push(List.of(event));
+
+        AlertPo alert = waitForFirstAlert();
+        assertThat(alert.status).isEqualTo("FIRING");
+        assertThat(alert.namespace).isEqualTo(NAMESPACE);
+        assertThat(evidenceRepository.findAll()).hasSize(1);
+    }
+
+    private static Pipeline buildSchedulePipeline(final Long id, final int version) {
+        // pipeline 跑在 DelayedEvent 上下文里——脚本可无条件 emit（验证 replay 后 pipeline 真被执行）。
+        NodeSpec node = new NodeSpec(
+                "emit-on-fire",
+                """
+                alerts.emit(
+                    com.imsw.observe.kernel.alert.model.Severity.CRITICAL,
+                    java.util.Map.of("entity", "delayed"),
+                    java.util.Map.of("summary", "fired"),
+                    new com.imsw.observe.kernel.alert.model.AlertSignal.EvidenceSpec(
+                        java.util.List.of(), true, true))
+                return true
+                """,
+                ErrorPolicy.FAIL,
+                Set.of(),
+                Set.of());
+        return new Pipeline(
+                id,
+                NAMESPACE,
+                version,
+                "team",
+                "app",
+                Map.of(),
+                SCHEDULE_PIPELINE_NAME,
+                Pipeline.Status.PUBLISHED,
+                List.of(node),
+                Instant.now(),
+                Instant.now(),
+                1.0);
     }
 
     private static Pipeline buildCronPipeline(final Long id, final int version) {

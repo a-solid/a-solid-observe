@@ -56,6 +56,7 @@ public class SubscriptionCrudService {
         }
         validatePipeline(subscription);
         validateCron(subscription);
+        validateAction(subscription);
         SubscriptionPo po = SubscriptionMapper.toPo(subscription, conditionCodec);
         po.id = snowflakeIdGenerator.next();
         Instant now = Instant.now();
@@ -79,6 +80,7 @@ public class SubscriptionCrudService {
                 .orElseThrow(() -> new IllegalArgumentException("subscription not found: " + namespace + "/" + name));
         validatePipeline(subscription);
         validateCron(subscription);
+        validateAction(subscription);
         SubscriptionPo po = SubscriptionMapper.toPo(subscription, conditionCodec);
         po.id = existing.id;
         po.namespace = existing.namespace;
@@ -171,6 +173,65 @@ public class SubscriptionCrudService {
                 && !subscription.cronExpression().isBlank()) {
             throw new IllegalArgumentException("cronExpression must be null when sourceType is "
                     + subscription.sourceType() + " (only CRON subscriptions use cronExpression)");
+        }
+    }
+
+    /**
+     * Action 校验（delayed-redesign spec D1/D2）。
+     *
+     * <p>三种 actionType 平权，订阅选其一。约束：
+     * <ul>
+     *   <li>{@code SCHEDULE}：{@code scheduleDelay} 必填、{@code scheduleCorrelationKeyPath} 必填非空白。</li>
+     *   <li>{@code CANCEL}：{@code scheduleCorrelationKeyPath} 必填非空白（{@code scheduleDelay} 必为 null）。</li>
+     *   <li>{@code RUN}（或 null）：{@code scheduleDelay} 与 {@code scheduleCorrelationKeyPath} 必为 null。</li>
+     * </ul>
+     *
+     * <p>schedule 和 cancel 不强制配对——业务方通过 keyPath 运行期对齐。
+     */
+    private void validateAction(final SubscriptionDefinition subscription) {
+        SubscriptionDefinition.ActionType type = subscription.actionType();
+        if (type == null || type == SubscriptionDefinition.ActionType.RUN) {
+            validateRunAction(subscription);
+        } else if (type == SubscriptionDefinition.ActionType.SCHEDULE) {
+            validateScheduleAction(subscription);
+        } else {
+            validateCancelAction(subscription);
+        }
+    }
+
+    private static void validateRunAction(final SubscriptionDefinition subscription) {
+        if (subscription.scheduleDelay() != null) {
+            throw new IllegalArgumentException("scheduleDelay must be null when actionType is RUN");
+        }
+        if (subscription.scheduleCorrelationKeyPath() != null
+                && !subscription.scheduleCorrelationKeyPath().isBlank()) {
+            throw new IllegalArgumentException("scheduleCorrelationKeyPath must be null when actionType is RUN");
+        }
+    }
+
+    private static void validateScheduleAction(final SubscriptionDefinition subscription) {
+        if (subscription.scheduleDelay() == null) {
+            throw new IllegalArgumentException("scheduleDelay must not be null when actionType is SCHEDULE");
+        }
+        if (subscription.scheduleDelay().isZero()
+                || subscription.scheduleDelay().isNegative()) {
+            throw new IllegalArgumentException("scheduleDelay must be positive when actionType is SCHEDULE");
+        }
+        requireCorrelationKeyPath(subscription, "SCHEDULE");
+    }
+
+    private static void validateCancelAction(final SubscriptionDefinition subscription) {
+        if (subscription.scheduleDelay() != null) {
+            throw new IllegalArgumentException("scheduleDelay must be null when actionType is CANCEL");
+        }
+        requireCorrelationKeyPath(subscription, "CANCEL");
+    }
+
+    private static void requireCorrelationKeyPath(final SubscriptionDefinition subscription, final String actionType) {
+        if (subscription.scheduleCorrelationKeyPath() == null
+                || subscription.scheduleCorrelationKeyPath().isBlank()) {
+            throw new IllegalArgumentException(
+                    "scheduleCorrelationKeyPath must not be blank when actionType is " + actionType);
         }
     }
 }

@@ -84,8 +84,12 @@ public class WorkerConfig {
 
     @Bean
     public com.imsw.observe.pipeline.application.DelayedActionHandler delayedActionHandler(
-            final com.imsw.observe.pipeline.application.DelayedEventStore store, final PipelineRunner runner) {
-        return new com.imsw.observe.pipeline.application.DelayedActionHandler(store, runner);
+            final com.imsw.observe.pipeline.application.DelayedEventStore store) {
+        // relayer 在 sourceDispatcher bean 内通过 setRelayer 注入（避免循环依赖：
+        // dispatcher 持有 handler、handler 持有 relayer=dispatcher）。
+        return new com.imsw.observe.pipeline.application.DelayedActionHandler(store, (sub, e) -> {
+            throw new IllegalStateException("relayer not wired yet");
+        });
     }
 
     /**
@@ -99,19 +103,25 @@ public class WorkerConfig {
     public SourceDispatcher sourceDispatcher(
             final SubscriptionMatcher matcher,
             final PipelineRunner runner,
+            final com.imsw.observe.pipeline.application.PipelineRegistry registry,
             final ThreadPoolExecutor pool,
             final com.imsw.observe.pipeline.application.DelayedActionHandler delayedActionHandler,
             final WorkerProperties props) {
         // runnerPool 在途上限 = 工作队列容量 + 最大线程数；饱和时分发线程阻塞在 Semaphore.acquire。
         int runnerInFlight = props.getRunnerQueue() + props.getRunnerMax();
-        return new SourceDispatcher(
+        SourceDispatcher dispatcher = new SourceDispatcher(
                 matcher,
                 runner,
+                registry,
                 pool,
                 delayedActionHandler,
                 props.getDispatchQueueSize(),
                 props.getDispatchThreads(),
                 runnerInFlight);
+        // 把 dispatcher 自身作为 relayer 注入 handler——延时到点 fire 时 (sub, DelayedEvent) 回灌到 dispatcher
+        // 的 relay，绕过 matcher 直接按订阅扇出（ADR-0006 §9.2）。
+        delayedActionHandler.setRelayer(dispatcher::relay);
+        return dispatcher;
     }
 
     @Bean

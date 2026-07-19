@@ -2,10 +2,12 @@ package com.imsw.observe.pipeline.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -56,10 +58,11 @@ class SourceDispatcherTest {
         RecordingRunner runner = new RecordingRunner();
         pool = new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>());
         DelayedEventStore delayedStore = new NoopDelayedEventStore();
-        DelayedActionHandler delayedHandler = new DelayedActionHandler(delayedStore, runner);
+        DelayedActionHandler delayedHandler = new DelayedActionHandler(delayedStore, (s, e) -> {});
         // queue 容量 8、dispatch 线程 1、runner 在途上限 16（足够大不阻塞测试路径）。
-        dispatcher =
-                new SourceDispatcher(new DefaultSubscriptionMatcher(registry), runner, pool, delayedHandler, 8, 1, 16);
+        dispatcher = new SourceDispatcher(
+                new DefaultSubscriptionMatcher(registry), runner, registry, pool, delayedHandler, 8, 1, 16);
+        delayedHandler.setRelayer(dispatcher::relay);
 
         dispatcher.start();
         dispatcher.onEvent(event("trade_db", "orders", CdcOp.INSERT));
@@ -89,9 +92,10 @@ class SourceDispatcherTest {
 
         RecordingRunner runner = new RecordingRunner();
         pool = new ThreadPoolExecutor(2, 2, 0L, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>());
-        DelayedActionHandler delayedHandler = new DelayedActionHandler(new NoopDelayedEventStore(), runner);
-        dispatcher =
-                new SourceDispatcher(new DefaultSubscriptionMatcher(registry), runner, pool, delayedHandler, 8, 1, 16);
+        DelayedActionHandler delayedHandler = new DelayedActionHandler(new NoopDelayedEventStore(), (s, e) -> {});
+        dispatcher = new SourceDispatcher(
+                new DefaultSubscriptionMatcher(registry), runner, registry, pool, delayedHandler, 8, 1, 16);
+        delayedHandler.setRelayer(dispatcher::relay);
 
         dispatcher.start();
         dispatcher.onEvent(event("trade_db", "orders", CdcOp.INSERT));
@@ -131,6 +135,152 @@ class SourceDispatcherTest {
         return new CdcEvent(meta, Map.of(), Map.of("amount", 1), op, Instant.now());
     }
 
+    /**
+     * 订阅级 action 分发（delayed-redesign spec D2/D6）：SCHEDULE 订阅命中后 dispatcher 在订阅层调
+     * store.schedule 一次（不在内层 pipeline for 内 N 次调用）。
+     */
+    @Test
+    void scheduleActionDispatchedOnceAtSubscriptionLevel() throws Exception {
+        Pipeline p1 = pipeline(1L, 1);
+        Pipeline p2 = pipeline(2L, 1);
+        Subscription sub = new Subscription(
+                10L,
+                "smoke",
+                List.of(1L, 2L),
+                new Subscription.SourceRef(
+                        "mq", "topic", "trade_db", "orders", Set.of(CdcOp.INSERT), SourceType.CDC, null, null, null),
+                null,
+                new Action.Schedule(Duration.ofMinutes(30), "after.orderId"));
+        PipelineRegistry registry = new PipelineRegistry();
+        registry.replace(PipelineRegistry.Snapshot.loaded(Map.of(1L, p1, 2L, p2), List.of(sub)));
+
+        RecordingRunner runner = new RecordingRunner();
+        pool = new ThreadPoolExecutor(2, 2, 0L, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>());
+        RecordingDelayedEventStore store = new RecordingDelayedEventStore();
+        DelayedActionHandler delayedHandler = new DelayedActionHandler(store, (s, e) -> {});
+        dispatcher = new SourceDispatcher(
+                new DefaultSubscriptionMatcher(registry), runner, registry, pool, delayedHandler, 8, 1, 16);
+        delayedHandler.setRelayer(dispatcher::relay);
+
+        dispatcher.start();
+        // CDC INSERT 携带 orderId=order-123，path "after.orderId" 抽出 key="order-123"。
+        CdcMeta meta = new CdcMeta("mq", "trade_db", "orders", Map.of());
+        dispatcher.onEvent(
+                new CdcEvent(meta, Map.of(), Map.of("amount", 1, "orderId", "order-123"), CdcOp.INSERT, Instant.now()));
+
+        awaitScheduleCount(store, 1, 2_000L);
+        // SCHEDULE 在订阅层调一次 store.schedule（不为每个 pipeline 各调一次）。
+        assertThat(store.scheduled).hasSize(1);
+        assertThat(store.scheduled.get(0).key()).isEqualTo("smoke:order-123");
+        assertThat(store.scheduled.get(0).delay()).isEqualTo(Duration.ofMinutes(30));
+        // RUN 路径不应触发（SCHEDULE 已消费）。
+        assertThat(runner.received).isEmpty();
+    }
+
+    /**
+     * 订阅级 action：CANCEL 命中后 dispatcher 在订阅层调 store.cancel 一次，按 namespace 级 key。
+     */
+    @Test
+    void cancelActionDispatchedOnceAtSubscriptionLevelWithNamespaceKey() throws Exception {
+        Subscription sub = new Subscription(
+                11L,
+                "billing",
+                List.of(1L),
+                new Subscription.SourceRef(
+                        "mq", "topic", "trade_db", "orders", Set.of(CdcOp.UPDATE), SourceType.CDC, null, null, null),
+                null,
+                new Action.Cancel("after.orderId"));
+        PipelineRegistry registry = new PipelineRegistry();
+        Pipeline pipeline = pipeline(1L, 1);
+        registry.replace(PipelineRegistry.Snapshot.loaded(Map.of(1L, pipeline), List.of(sub)));
+
+        RecordingRunner runner = new RecordingRunner();
+        pool = new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>());
+        RecordingDelayedEventStore store = new RecordingDelayedEventStore();
+        DelayedActionHandler delayedHandler = new DelayedActionHandler(store, (s, e) -> {});
+        dispatcher = new SourceDispatcher(
+                new DefaultSubscriptionMatcher(registry), runner, registry, pool, delayedHandler, 8, 1, 16);
+        delayedHandler.setRelayer(dispatcher::relay);
+
+        dispatcher.start();
+        CdcMeta meta = new CdcMeta("mq", "trade_db", "orders", Map.of());
+        dispatcher.onEvent(new CdcEvent(meta, Map.of(), Map.of("orderId", "order-456"), CdcOp.UPDATE, Instant.now()));
+
+        awaitCancelCount(store, 1, 2_000L);
+        assertThat(store.cancelled).containsExactly("billing:order-456");
+        // RUN 不触发。
+        assertThat(runner.received).isEmpty();
+    }
+
+    /**
+     * Delayed replay 路径（fire → relay → dispatcher 直扇出）：模拟 handler fire 触发，dispatcher.relay
+     * 应跳过 matcher、按订阅的 pipelineIds 扇出 N 个 pipeline。
+     */
+    @Test
+    void delayedReplayFansOutPipelinesBypassingMatcher() throws Exception {
+        Pipeline p1 = pipeline(1L, 1);
+        Pipeline p2 = pipeline(2L, 1);
+        Subscription sub = new Subscription(
+                12L,
+                "smoke",
+                List.of(1L, 2L),
+                new Subscription.SourceRef(
+                        "mq", "topic", "trade_db", "orders", Set.of(CdcOp.INSERT), SourceType.CDC, null, null, null),
+                null,
+                new Action.Schedule(Duration.ofMillis(50), "after.orderId"));
+        PipelineRegistry registry = new PipelineRegistry();
+        registry.replace(PipelineRegistry.Snapshot.loaded(Map.of(1L, p1, 2L, p2), List.of(sub)));
+
+        RecordingRunner runner = new RecordingRunner();
+        pool = new ThreadPoolExecutor(2, 2, 0L, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>());
+        // 用真实的 InMemoryDelayedEventStore：短 delay（50ms）后真实 fire，验证 replay 路径端到端跑通。
+        java.util.concurrent.ScheduledExecutorService ses =
+                java.util.concurrent.Executors.newScheduledThreadPool(1, r -> {
+                    Thread t = new Thread(r, "delayed-test");
+                    t.setDaemon(true);
+                    return t;
+                });
+        try {
+            com.imsw.observe.pipeline.infrastructure.delayed.InMemoryDelayedEventStore store =
+                    new com.imsw.observe.pipeline.infrastructure.delayed.InMemoryDelayedEventStore(ses);
+            DelayedActionHandler delayedHandler = new DelayedActionHandler(store, (s, e) -> {});
+            dispatcher = new SourceDispatcher(
+                    new DefaultSubscriptionMatcher(registry), runner, registry, pool, delayedHandler, 8, 1, 16);
+            delayedHandler.setRelayer(dispatcher::relay);
+
+            dispatcher.start();
+            CdcMeta meta = new CdcMeta("mq", "trade_db", "orders", Map.of());
+            dispatcher.onEvent(
+                    new CdcEvent(meta, Map.of(), Map.of("orderId", "order-789"), CdcOp.INSERT, Instant.now()));
+
+            // 50ms delay + 调度开销；等两个 pipeline 都被 runner 调用（replay 扇出）。
+            awaitRunnerCount(runner, 2, 2_000L);
+            assertThat(runner.received).hasSize(2);
+            // 调度阶段（首次 onEvent 后）runner 还不应被触发——SCHEDULE 已消费。
+            // 这里只在 fire 后断言计数，初值不验证（avoid flake）。
+        } finally {
+            ses.shutdownNow();
+        }
+    }
+
+    private static void awaitScheduleCount(
+            final RecordingDelayedEventStore store, final int expected, final long timeoutMs)
+            throws InterruptedException {
+        long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMs);
+        while (store.scheduled.size() < expected && System.nanoTime() < deadline) {
+            Thread.sleep(20L);
+        }
+    }
+
+    private static void awaitCancelCount(
+            final RecordingDelayedEventStore store, final int expected, final long timeoutMs)
+            throws InterruptedException {
+        long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMs);
+        while (store.cancelled.size() < expected && System.nanoTime() < deadline) {
+            Thread.sleep(20L);
+        }
+    }
+
     static final class RecordingRunner implements PipelineRunner {
 
         final List<SubscriptionMatcher.MatchedSubscription> received =
@@ -167,5 +317,35 @@ class SourceDispatcherTest {
         public void shutdown() {
             // no-op
         }
+    }
+
+    /** 记录 schedule/cancel 调用的端口实现——用于验证 dispatcher 是否在订阅级调一次。 */
+    static final class RecordingDelayedEventStore implements DelayedEventStore {
+
+        final CopyOnWriteArrayList<ScheduleCall> scheduled = new CopyOnWriteArrayList<>();
+
+        final CopyOnWriteArrayList<String> cancelled = new CopyOnWriteArrayList<>();
+
+        @Override
+        public void schedule(final String correlationKey, final Runnable fireTask, final Duration delay) {
+            scheduled.add(new ScheduleCall(correlationKey, fireTask, delay));
+        }
+
+        @Override
+        public void cancel(final String correlationKey) {
+            cancelled.add(correlationKey);
+        }
+
+        @Override
+        public int pendingCount() {
+            return scheduled.size();
+        }
+
+        @Override
+        public void shutdown() {
+            // no-op
+        }
+
+        record ScheduleCall(String key, Runnable fireTask, Duration delay) {}
     }
 }

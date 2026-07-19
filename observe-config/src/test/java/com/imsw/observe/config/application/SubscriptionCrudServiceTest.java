@@ -9,6 +9,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 
@@ -440,5 +441,254 @@ class SubscriptionCrudServiceTest {
         def.namespace = namespace;
         def.status = "PUBLISHED";
         when(pipelineDefRepo.findById(eq(pipelineId))).thenReturn(Optional.of(def));
+    }
+
+    // ---------- Action 校验（delayed-redesign spec D1/D2）----------
+
+    @Test
+    void createRejectsRunSubscriptionCarryingScheduleDelay() {
+        SubscriptionRepository repository = mock(SubscriptionRepository.class);
+        PipelineDefinitionRepository pipelineDefRepo = mock(PipelineDefinitionRepository.class);
+        ConditionCodec codec = mock(ConditionCodec.class);
+        NamespaceCrudService namespaceCrudService = mock(NamespaceCrudService.class);
+        SnowflakeIdGenerator generator = new SnowflakeIdGenerator(1L, 0L);
+        stubValidPipeline(namespaceCrudService, pipelineDefRepo, "billing", 100L);
+        SubscriptionCrudService service =
+                new SubscriptionCrudService(repository, pipelineDefRepo, codec, generator, namespaceCrudService);
+
+        SubscriptionDefinition sub = actionSubscription(
+                "billing", 100L, "run-with-delay", SubscriptionDefinition.ActionType.RUN, Duration.ofMinutes(5), null);
+
+        assertThatThrownBy(() -> service.create(sub))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("scheduleDelay must be null when actionType is RUN");
+
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void createRejectsRunSubscriptionCarryingCorrelationKeyPath() {
+        SubscriptionRepository repository = mock(SubscriptionRepository.class);
+        PipelineDefinitionRepository pipelineDefRepo = mock(PipelineDefinitionRepository.class);
+        ConditionCodec codec = mock(ConditionCodec.class);
+        NamespaceCrudService namespaceCrudService = mock(NamespaceCrudService.class);
+        SnowflakeIdGenerator generator = new SnowflakeIdGenerator(1L, 0L);
+        stubValidPipeline(namespaceCrudService, pipelineDefRepo, "billing", 100L);
+        SubscriptionCrudService service =
+                new SubscriptionCrudService(repository, pipelineDefRepo, codec, generator, namespaceCrudService);
+
+        SubscriptionDefinition sub = actionSubscription(
+                "billing", 100L, "run-with-key", SubscriptionDefinition.ActionType.RUN, null, "after.orderId");
+
+        assertThatThrownBy(() -> service.create(sub))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("scheduleCorrelationKeyPath must be null when actionType is RUN");
+
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void createRejectsScheduleSubscriptionWithoutDelay() {
+        SubscriptionRepository repository = mock(SubscriptionRepository.class);
+        PipelineDefinitionRepository pipelineDefRepo = mock(PipelineDefinitionRepository.class);
+        ConditionCodec codec = mock(ConditionCodec.class);
+        NamespaceCrudService namespaceCrudService = mock(NamespaceCrudService.class);
+        SnowflakeIdGenerator generator = new SnowflakeIdGenerator(1L, 0L);
+        stubValidPipeline(namespaceCrudService, pipelineDefRepo, "billing", 100L);
+        SubscriptionCrudService service =
+                new SubscriptionCrudService(repository, pipelineDefRepo, codec, generator, namespaceCrudService);
+
+        SubscriptionDefinition sub = actionSubscription(
+                "billing",
+                100L,
+                "schedule-no-delay",
+                SubscriptionDefinition.ActionType.SCHEDULE,
+                null,
+                "after.orderId");
+
+        assertThatThrownBy(() -> service.create(sub))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("scheduleDelay must not be null when actionType is SCHEDULE");
+
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void createRejectsScheduleSubscriptionWithZeroDelay() {
+        SubscriptionRepository repository = mock(SubscriptionRepository.class);
+        PipelineDefinitionRepository pipelineDefRepo = mock(PipelineDefinitionRepository.class);
+        ConditionCodec codec = mock(ConditionCodec.class);
+        NamespaceCrudService namespaceCrudService = mock(NamespaceCrudService.class);
+        SnowflakeIdGenerator generator = new SnowflakeIdGenerator(1L, 0L);
+        stubValidPipeline(namespaceCrudService, pipelineDefRepo, "billing", 100L);
+        SubscriptionCrudService service =
+                new SubscriptionCrudService(repository, pipelineDefRepo, codec, generator, namespaceCrudService);
+
+        SubscriptionDefinition sub = actionSubscription(
+                "billing",
+                100L,
+                "schedule-zero-delay",
+                SubscriptionDefinition.ActionType.SCHEDULE,
+                Duration.ZERO,
+                "after.orderId");
+
+        assertThatThrownBy(() -> service.create(sub))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("scheduleDelay must be positive");
+
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void createRejectsScheduleSubscriptionWithoutCorrelationKeyPath() {
+        SubscriptionRepository repository = mock(SubscriptionRepository.class);
+        PipelineDefinitionRepository pipelineDefRepo = mock(PipelineDefinitionRepository.class);
+        ConditionCodec codec = mock(ConditionCodec.class);
+        NamespaceCrudService namespaceCrudService = mock(NamespaceCrudService.class);
+        SnowflakeIdGenerator generator = new SnowflakeIdGenerator(1L, 0L);
+        stubValidPipeline(namespaceCrudService, pipelineDefRepo, "billing", 100L);
+        SubscriptionCrudService service =
+                new SubscriptionCrudService(repository, pipelineDefRepo, codec, generator, namespaceCrudService);
+
+        SubscriptionDefinition sub = actionSubscription(
+                "billing",
+                100L,
+                "schedule-no-key",
+                SubscriptionDefinition.ActionType.SCHEDULE,
+                Duration.ofMinutes(5),
+                null);
+
+        assertThatThrownBy(() -> service.create(sub))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("scheduleCorrelationKeyPath must not be blank when actionType is SCHEDULE");
+
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void createRejectsCancelSubscriptionWithoutCorrelationKeyPath() {
+        SubscriptionRepository repository = mock(SubscriptionRepository.class);
+        PipelineDefinitionRepository pipelineDefRepo = mock(PipelineDefinitionRepository.class);
+        ConditionCodec codec = mock(ConditionCodec.class);
+        NamespaceCrudService namespaceCrudService = mock(NamespaceCrudService.class);
+        SnowflakeIdGenerator generator = new SnowflakeIdGenerator(1L, 0L);
+        stubValidPipeline(namespaceCrudService, pipelineDefRepo, "billing", 100L);
+        SubscriptionCrudService service =
+                new SubscriptionCrudService(repository, pipelineDefRepo, codec, generator, namespaceCrudService);
+
+        SubscriptionDefinition sub = actionSubscription(
+                "billing", 100L, "cancel-no-key", SubscriptionDefinition.ActionType.CANCEL, null, null);
+
+        assertThatThrownBy(() -> service.create(sub))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("scheduleCorrelationKeyPath must not be blank when actionType is CANCEL");
+
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void createRejectsCancelSubscriptionCarryingScheduleDelay() {
+        SubscriptionRepository repository = mock(SubscriptionRepository.class);
+        PipelineDefinitionRepository pipelineDefRepo = mock(PipelineDefinitionRepository.class);
+        ConditionCodec codec = mock(ConditionCodec.class);
+        NamespaceCrudService namespaceCrudService = mock(NamespaceCrudService.class);
+        SnowflakeIdGenerator generator = new SnowflakeIdGenerator(1L, 0L);
+        stubValidPipeline(namespaceCrudService, pipelineDefRepo, "billing", 100L);
+        SubscriptionCrudService service =
+                new SubscriptionCrudService(repository, pipelineDefRepo, codec, generator, namespaceCrudService);
+
+        SubscriptionDefinition sub = actionSubscription(
+                "billing",
+                100L,
+                "cancel-with-delay",
+                SubscriptionDefinition.ActionType.CANCEL,
+                Duration.ofMinutes(5),
+                "after.orderId");
+
+        assertThatThrownBy(() -> service.create(sub))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("scheduleDelay must be null when actionType is CANCEL");
+
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void createAcceptsScheduleSubscriptionWithValidConfig() {
+        SubscriptionRepository repository = mock(SubscriptionRepository.class);
+        PipelineDefinitionRepository pipelineDefRepo = mock(PipelineDefinitionRepository.class);
+        ConditionCodec codec = mock(ConditionCodec.class);
+        NamespaceCrudService namespaceCrudService = mock(NamespaceCrudService.class);
+        SnowflakeIdGenerator generator = new SnowflakeIdGenerator(1L, 0L);
+        stubValidPipeline(namespaceCrudService, pipelineDefRepo, "billing", 100L);
+        when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        SubscriptionCrudService service =
+                new SubscriptionCrudService(repository, pipelineDefRepo, codec, generator, namespaceCrudService);
+
+        SubscriptionDefinition sub = actionSubscription(
+                "billing",
+                100L,
+                "schedule-ok",
+                SubscriptionDefinition.ActionType.SCHEDULE,
+                Duration.ofMinutes(30),
+                "after.orderId");
+
+        SubscriptionDefinition saved = service.create(sub);
+        assertThat(saved.scheduleDelay()).isEqualTo(Duration.ofMinutes(30));
+        assertThat(saved.scheduleCorrelationKeyPath()).isEqualTo("after.orderId");
+        verify(repository).save(any());
+    }
+
+    @Test
+    void createAcceptsCancelSubscriptionWithValidConfig() {
+        SubscriptionRepository repository = mock(SubscriptionRepository.class);
+        PipelineDefinitionRepository pipelineDefRepo = mock(PipelineDefinitionRepository.class);
+        ConditionCodec codec = mock(ConditionCodec.class);
+        NamespaceCrudService namespaceCrudService = mock(NamespaceCrudService.class);
+        SnowflakeIdGenerator generator = new SnowflakeIdGenerator(1L, 0L);
+        stubValidPipeline(namespaceCrudService, pipelineDefRepo, "billing", 100L);
+        when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        SubscriptionCrudService service =
+                new SubscriptionCrudService(repository, pipelineDefRepo, codec, generator, namespaceCrudService);
+
+        SubscriptionDefinition sub = actionSubscription(
+                "billing", 100L, "cancel-ok", SubscriptionDefinition.ActionType.CANCEL, null, "after.orderId");
+
+        SubscriptionDefinition saved = service.create(sub);
+        assertThat(saved.actionType()).isEqualTo(SubscriptionDefinition.ActionType.CANCEL);
+        assertThat(saved.scheduleCorrelationKeyPath()).isEqualTo("after.orderId");
+        verify(repository).save(any());
+    }
+
+    /** 构造一条 CDC 订阅，含可配置 actionType/scheduleDelay/scheduleCorrelationKeyPath（其余为合法默认值）。 */
+    private static SubscriptionDefinition actionSubscription(
+            final String namespace,
+            final Long pipelineId,
+            final String name,
+            final SubscriptionDefinition.ActionType actionType,
+            final Duration scheduleDelay,
+            final String correlationKeyPath) {
+        return new SubscriptionDefinition(
+                null,
+                namespace,
+                List.of(pipelineId),
+                "mq",
+                "topic",
+                "db",
+                "orders",
+                null,
+                SourceType.CDC,
+                null,
+                actionType,
+                scheduleDelay,
+                correlationKeyPath,
+                name,
+                "desc",
+                SubscriptionDefinition.Status.ACTIVE,
+                "alice",
+                null,
+                null,
+                null,
+                null,
+                null);
     }
 }

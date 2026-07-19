@@ -33,7 +33,7 @@ import com.imsw.observe.pipeline.domain.Pipeline;
  * <p><b>at-least-once</b>：事件一旦 {@code onEvent} 入队成功，保证最终被 match + 提交执行；
  * runnerPool 饱和靠阻塞反压，不靠拒绝丢弃。下游 pipeline 异步失败不回 MQ（沿用现状）。
  */
-public final class SourceDispatcher implements EventListener {
+public final class SourceDispatcher implements EventListener, DelayedEventRelayer {
 
     private static final Logger LOG = LoggerFactory.getLogger(SourceDispatcher.class);
 
@@ -41,11 +41,13 @@ public final class SourceDispatcher implements EventListener {
 
     private final PipelineRunner runner;
 
+    private final PipelineRegistry registry;
+
     private final ThreadPoolExecutor runnerPool;
 
     private final DelayedActionHandler delayedActionHandler;
 
-    private final BlockingQueue<Event> queue;
+    private final BlockingQueue<Object> queue;
 
     private final int dispatchThreads;
 
@@ -70,6 +72,7 @@ public final class SourceDispatcher implements EventListener {
     public SourceDispatcher(
             final SubscriptionMatcher matcher,
             final PipelineRunner runner,
+            final PipelineRegistry registry,
             final ThreadPoolExecutor runnerPool,
             final DelayedActionHandler delayedActionHandler,
             final int queueCapacity,
@@ -77,6 +80,7 @@ public final class SourceDispatcher implements EventListener {
             final int runnerInFlight) {
         this.matcher = matcher;
         this.runner = runner;
+        this.registry = registry;
         this.runnerPool = runnerPool;
         this.delayedActionHandler = delayedActionHandler;
         this.queue = new ArrayBlockingQueue<>(Math.max(1, queueCapacity));
@@ -171,15 +175,19 @@ public final class SourceDispatcher implements EventListener {
         }
     }
 
-    /** 分发线程主循环：take → match → 阻塞提交 runnerPool。 */
+    /** 分发线程主循环：take → 分流（普通事件走 matcher；delayed replay 跳过 matcher 直扇出）。 */
     private void dispatchLoop() {
         while (running.get() || !queue.isEmpty()) {
             try {
-                Event event = queue.poll(100L, TimeUnit.MILLISECONDS);
-                if (event == null) {
+                Object item = queue.poll(100L, TimeUnit.MILLISECONDS);
+                if (item == null) {
                     continue;
                 }
-                dispatch(event);
+                if (item instanceof DelayedReplay replay) {
+                    dispatchDelayedReplay(replay);
+                } else if (item instanceof Event event) {
+                    dispatch(event);
+                }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 return;
@@ -189,17 +197,51 @@ public final class SourceDispatcher implements EventListener {
         }
     }
 
+    private void dispatchDelayedReplay(final DelayedReplay replay) throws InterruptedException {
+        // DelayedEvent 绕过 matcher（见 DefaultSubscriptionMatcher 注释 + ADR-0006 §9.2），订阅已在 schedule
+        // 时匹配过；这里直接从 registry.snapshot 按 sub.pipelineIds 找 pipeline 扇出。
+        PipelineRegistry.Snapshot snapshot = registry.snapshot();
+        for (Long pipelineId : replay.subscription().pipelineIds()) {
+            Pipeline pipeline = snapshot.pipelineById(pipelineId);
+            if (pipeline == null) {
+                continue;
+            }
+            submitMatched(replay.subscription(), pipeline, replay.event());
+        }
+    }
+
     private void dispatch(final Event event) throws InterruptedException {
         List<SubscriptionMatcher.MatchedSubscription> matched = matcher.match(event);
         if (matched.isEmpty()) {
             return;
         }
         for (SubscriptionMatcher.MatchedSubscription m : matched) {
-            // 扇出：subscription 维度外层 for，pipeline 维度内层 for。
+            // 订阅级 action（delayed-redesign spec D2/D6）：SCHEDULE/CANCEL 在订阅层消费一次，
+            // 不进入内层 pipeline for——避免 N 个 pipeline 各调一次 store.schedule/cancel。
+            if (delayedActionHandler.handle(m.subscription(), event)) {
+                continue;
+            }
+            // RUN：扇出（subscription 维度外层 for，pipeline 维度内层 for）。
             // 顺序提交、并发执行（runnerPool 多线程）；每个 (sub,pipeline) 独立 inFlight permit + 失败隔离。
             for (Pipeline pipeline : m.pipelines()) {
                 submitMatched(m.subscription(), pipeline, event);
             }
+        }
+    }
+
+    @Override
+    public void relay(
+            final com.imsw.observe.pipeline.domain.subscription.Subscription subscription, final Event delayedEvent) {
+        // DelayedEvent 重放：绕过 matcher（匹配在 schedule 时已做过，避免重复匹配 + 与 ADR-0006 §9.2
+        // "DelayedEvent 绕过 matcher 直调 runner" 语义一致），直接按订阅扇出 N 个 pipeline。
+        // 走 onEvent 路径会撞上 DefaultSubscriptionMatcher 第 40 行——matcher 显式跳过 DelayedEvent 返回空，
+        // 故必须经此专用入口直接 fanout。
+        // 经队列反压：把 (sub, event) 灌进 queue，分发线程消费后扇出（与 RUN 一致的反压链）。
+        try {
+            queue.put(new DelayedReplay(subscription, delayedEvent));
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("interrupted enqueuing delayed replay", e);
         }
     }
 
@@ -209,10 +251,6 @@ public final class SourceDispatcher implements EventListener {
             final Event event)
             throws InterruptedException {
         Long subscriptionId = subscription.id();
-        // 延时 handler 保留现状（延时 spec 处理）；扇出后每个 (sub,pipeline) 各调一次。
-        if (delayedActionHandler.handle(subscription, event, pipeline)) {
-            return;
-        }
         // 阻塞提交：runnerPool 饱和时分发线程在此阻塞（acquire），不丢弃事件。
         inFlight.acquire();
         try {
@@ -233,4 +271,8 @@ public final class SourceDispatcher implements EventListener {
             inFlight.release();
         }
     }
+
+    /** 队列元素之一：delayed replay（订阅 + 包装后事件），绕过 matcher 直接扇出。 */
+    private record DelayedReplay(
+            com.imsw.observe.pipeline.domain.subscription.Subscription subscription, Event event) {}
 }
