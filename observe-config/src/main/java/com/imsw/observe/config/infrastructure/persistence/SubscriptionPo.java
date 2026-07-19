@@ -1,6 +1,8 @@
 package com.imsw.observe.config.infrastructure.persistence;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Set;
 
 import jakarta.persistence.Column;
@@ -20,11 +22,9 @@ public class SubscriptionPo {
     @Column(name = "namespace", nullable = false)
     public String namespace;
 
-    @Column(name = "pipeline_id", nullable = false)
-    public Long pipelineId;
-
-    @Column(name = "pipeline_version", nullable = false)
-    public Integer pipelineVersion;
+    @Column(name = "pipeline_ids", nullable = false, length = 4096)
+    @Convert(converter = LongListToJsonConverter.class)
+    public List<Long> pipelineIds = new ArrayList<>();
 
     @Column(name = "mq")
     public String mq;

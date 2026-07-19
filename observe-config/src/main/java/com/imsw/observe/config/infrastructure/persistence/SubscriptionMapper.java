@@ -2,6 +2,7 @@ package com.imsw.observe.config.infrastructure.persistence;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -21,8 +22,7 @@ public final class SubscriptionMapper {
         return new SubscriptionDefinition(
                 po.id,
                 po.namespace,
-                po.pipelineId,
-                nullSafeInt(po.pipelineVersion),
+                po.pipelineIds,
                 po.mq,
                 po.topic,
                 po.db,
@@ -51,8 +51,7 @@ public final class SubscriptionMapper {
         SubscriptionPo po = new SubscriptionPo();
         po.id = entity.id();
         po.namespace = entity.namespace();
-        po.pipelineId = entity.pipelineId();
-        po.pipelineVersion = entity.pipelineVersion();
+        po.pipelineIds = entity.pipelineIds() == null ? new ArrayList<>() : new ArrayList<>(entity.pipelineIds());
         po.mq = entity.mq();
         po.topic = entity.topic();
         po.db = entity.db();
@@ -73,10 +72,6 @@ public final class SubscriptionMapper {
         po.createdAt = nullSafeNow(entity.createdAt());
         po.updatedAt = nullSafeNow(entity.updatedAt());
         return po;
-    }
-
-    private static int nullSafeInt(final Integer value) {
-        return value == null ? 0 : value;
     }
 
     private static Instant nullSafeNow(final Instant value) {
