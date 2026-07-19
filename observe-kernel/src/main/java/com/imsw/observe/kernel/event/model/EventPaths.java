@@ -3,16 +3,16 @@ package com.imsw.observe.kernel.event.model;
 import java.util.Map;
 
 /**
- * 事件字段路径解析（适配 sealed Event，ADR-0006）。
+ * 事件字段路径解析（适配 sealed Event，ADR-0006 + ADR-0007 addendum）。
  *
  * <p>按 Event 子类型分发：
  * <ul>
  *   <li>{@link CdcEvent}：{@code op} / {@code before.<x>} / {@code after.<x>} /
  *       {@code meta.db} / {@code meta.table} / {@code meta.source} / {@code meta.attributes.<x>}</li>
- *   <li>{@link ApiEvent}：{@code payload.<x>} / {@code meta.apiName} /
- *       {@code meta.source} / {@code meta.attributes.<x>}</li>
- *   <li>{@link TickEvent}：{@code meta.cronName} / {@code meta.cronExpression} /
- *       {@code meta.source} / {@code meta.attributes.<x>}</li>
+ *   <li>{@link ApiEvent}：{@code payload.<x>} / {@code meta.subscriptionId} /
+ *       {@code meta.attributes.<x>}</li>
+ *   <li>{@link TickEvent}：{@code meta.subscriptionId} / {@code meta.cronExpression} /
+ *       {@code meta.firedAt} / {@code meta.attributes.<x>}</li>
  *   <li>{@link DelayedEvent}：{@code meta.subscriptionId} / {@code meta.correlationKey}
  *       （原事件字段请由调用方在包装前从 originalEvent 提取）</li>
  * </ul>
@@ -90,11 +90,8 @@ public final class EventPaths {
         if (meta == null) {
             return null;
         }
-        if ("apiName".equals(rest)) {
-            return meta.apiName();
-        }
-        if ("source".equals(rest)) {
-            return meta.source();
+        if ("subscriptionId".equals(rest)) {
+            return meta.subscriptionId();
         }
         return resolveAttributes(meta.attributes(), rest);
     }
@@ -110,14 +107,14 @@ public final class EventPaths {
         if (meta == null) {
             return null;
         }
-        if ("cronName".equals(rest)) {
-            return meta.cronName();
+        if ("subscriptionId".equals(rest)) {
+            return meta.subscriptionId();
         }
         if ("cronExpression".equals(rest)) {
             return meta.cronExpression();
         }
-        if ("source".equals(rest)) {
-            return meta.source();
+        if ("firedAt".equals(rest)) {
+            return meta.firedAt();
         }
         return resolveAttributes(meta.attributes(), rest);
     }

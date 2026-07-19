@@ -74,40 +74,37 @@ public final class PipelineRegistry {
         /**
          * CDC 订阅索引：key = {@code db|table}（{@link #dbTableKey}）。
          *
-         * <p>仅收 {@code sourceType == CDC} 且 db/table 非空的订阅。
+         * <p>仅收 {@code sourceType == CDC} 且 db/table 非空的订阅。CDC 是唯一走"内容路由"的事件
+         * （CDC 消息无订阅信息，按 db/table 匹配，可能一对多）。
          */
         final Map<String, List<Subscription>> subscriptionsByDbTable;
 
         /**
-         * Cron/Api 订阅索引：key = source name（{@link Subscription.SourceRef#mq()} 复用为 source 名槽）。
+         * 全订阅索引 by id：key = {@code subscription.id()}。每条订阅无条件入索引（不依赖 sourceType）。
          *
-         * <p>仅收 {@code sourceType == CRON} 或 {@code sourceType == API} 且 source name 非空的订阅。
-         * source name 存在 SourceRef.mq 字段（Cron/Api 不用 mq 队列语义，复用为 source 标识，
-         * 与 {@link TickMeta#source()} / {@link ApiMeta#source()} 对齐——见 ADR-0006 §3.3）。
-         */
-        final Map<String, List<Subscription>> subscriptionsBySource;
-
-        /**
-         * DelayedEvent 订阅索引：key = {@code subscription.id()}。
-         *
-         * <p>每条订阅无条件入索引（sub.id 不依赖 sourceType）。DelayedEvent fire 到点经
-         * {@code SourceDispatcher.onEvent} 回流 → matcher 路由 → 本索引按 subscriptionId 直查唯一订阅
-         * （与 CdcMeta 的 db/table、TickMeta/ApiMeta 的 source 对称）。
+         * <p>三种事件类型共用此索引：TickEvent / ApiEvent / DelayedEvent（它们的 meta 都带 subscriptionId 一等字段，
+         * 见 ADR-0007 addendum）。matcher 按此路由——直查唯一订阅，与 CDC 的"内容路由"形成对称。
          */
         final Map<Long, Subscription> subscriptionsById;
+
+        /**
+         * (namespace, name) → Subscription 索引：仅 ApiSource HTTP 入口用（按 path 参数 (ns,name) 查订阅得 id，
+         * wrap ApiEvent）。matcher 不用——matcher 拿到的 ApiEvent 已带 subscriptionId（HTTP 入口填好）。
+         */
+        final Map<String, Subscription> subscriptionsByNamespaceAndName;
 
         final boolean loaded;
 
         private Snapshot(
                 final Map<Long, Pipeline> pipelinesById,
                 final Map<String, List<Subscription>> subscriptionsByDbTable,
-                final Map<String, List<Subscription>> subscriptionsBySource,
                 final Map<Long, Subscription> subscriptionsById,
+                final Map<String, Subscription> subscriptionsByNamespaceAndName,
                 final boolean loaded) {
             this.pipelinesById = pipelinesById;
             this.subscriptionsByDbTable = subscriptionsByDbTable;
-            this.subscriptionsBySource = subscriptionsBySource;
             this.subscriptionsById = subscriptionsById;
+            this.subscriptionsByNamespaceAndName = subscriptionsByNamespaceAndName;
             this.loaded = loaded;
         }
 
@@ -116,26 +113,27 @@ public final class PipelineRegistry {
         }
 
         /**
-         * 构建 loaded 快照，同时填充 CDC（db/table）和 Cron/Api（source name）两个索引。
+         * 构建 loaded 快照，同时填充三个索引：CDC（db/table）、byId（全订阅）、byNamespaceAndName（API HTTP 入口用）。
          *
-         * <p>一条订阅按其 {@code sourceType} 路由到对应索引：
+         * <p>每条订阅无条件入 byId 与 byNamespaceAndName（key 用 (ns,name) 拼装）；按 sourceType 决定是否入 CDC 索引：
          * <ul>
          *   <li>{@code CDC}：按 {@link Subscription.SourceRef#db()} / {@link Subscription.SourceRef#table()}
          *       入 subscriptionsByDbTable（同 key 可多条）。</li>
-         *   <li>{@code CRON} / {@code API}：按 {@link Subscription.SourceRef#mq()}（复用为 source name）
-         *       入 subscriptionsBySource。</li>
-         *   <li>{@code null} source 或无法定位 key：跳过。</li>
          * </ul>
          */
         public static Snapshot loaded(final Map<Long, Pipeline> pipelines, final List<Subscription> subscriptions) {
             Map<Long, Pipeline> pipelineCopy = Map.copyOf(pipelines);
             Map<String, List<Subscription>> cdcIndex = new HashMap<>();
-            Map<String, List<Subscription>> sourceIndex = new HashMap<>();
             Map<Long, Subscription> byId = new HashMap<>();
+            Map<String, Subscription> byNsName = new HashMap<>();
             for (Subscription sub : subscriptions) {
-                // subscriptionsById 无条件收——DelayedEvent fire 回流时按 subscriptionId 直查（不依赖 sourceType）。
                 if (sub.id() != null) {
                     byId.put(sub.id(), sub);
+                }
+                // byNamespaceAndName：所有订阅都入——HTTP 入口可能 hit 任意 (ns,name) 组合（不止 API）。
+                // 真正"是否接受 ApiEvent"由 matcher 的 sourceType 校验决定。
+                if (sub.namespace() != null && sub.name() != null) {
+                    byNsName.put(nsNameKey(sub.namespace(), sub.name()), sub);
                 }
                 if (sub.source() == null) {
                     continue;
@@ -144,23 +142,14 @@ public final class PipelineRegistry {
                 if (type == SourceType.CDC) {
                     String key = dbTableKey(sub.source().db(), sub.source().table());
                     cdcIndex.computeIfAbsent(key, k -> new ArrayList<>()).add(sub);
-                } else if (type == SourceType.CRON || type == SourceType.API) {
-                    String sourceName = sub.source().mq();
-                    if (sourceName == null || sourceName.isBlank()) {
-                        continue;
-                    }
-                    sourceIndex
-                            .computeIfAbsent(sourceName, k -> new ArrayList<>())
-                            .add(sub);
                 }
             }
             Map<String, List<Subscription>> immutableCdc = freeze(cdcIndex);
-            Map<String, List<Subscription>> immutableSource = freeze(sourceIndex);
             return new Snapshot(
                     Collections.unmodifiableMap(pipelineCopy),
                     Collections.unmodifiableMap(immutableCdc),
-                    Collections.unmodifiableMap(immutableSource),
                     Collections.unmodifiableMap(byId),
+                    Collections.unmodifiableMap(byNsName),
                     true);
         }
 
@@ -171,14 +160,13 @@ public final class PipelineRegistry {
         }
 
         /**
-         * 按 Event 子类型分发到对应索引（ADR-0006 §3.3 / §4）。
+         * 按 Event 子类型分发到对应索引（ADR-0006 §3.3 / §4 + ADR-0007 addendum）。
          *
          * <ul>
-         *   <li>{@link CdcEvent} → subscriptionsByDbTable（key = {@link CdcMeta#db()}|{@link CdcMeta#table()}）。</li>
-         *   <li>{@link TickEvent} / {@link ApiEvent} → subscriptionsBySource（key = {@code meta().source()}）。</li>
-         *   <li>{@link DelayedEvent} → subscriptionsById（key = {@link DelayedMeta#subscriptionId()}）——
-         *       fire 到点经 {@code SourceDispatcher.onEvent} 回流，按 subscriptionId 直查唯一订阅。
-         *       历史"绕过 matcher"语义（ADR-0006 §9.2）已被取代，见 ADR-0006 addendum。</li>
+         *   <li>{@link CdcEvent} → subscriptionsByDbTable（key = {@link CdcMeta#db()}|{@link CdcMeta#table()}）。
+         *       内容路由——一条 CDC 可能匹配多个订阅。</li>
+         *   <li>{@link TickEvent} / {@link ApiEvent} / {@link DelayedEvent} → subscriptionsById
+         *       （key = {@code meta().subscriptionId()}）。三种事件全对称——直查唯一订阅。</li>
          * </ul>
          */
         public List<Subscription> subscriptionsFor(final Event event) {
@@ -189,17 +177,34 @@ public final class PipelineRegistry {
                 return subscriptionsByDbTable.getOrDefault(
                         dbTableKey(cdc.meta().db(), cdc.meta().table()), List.of());
             }
+            Long subId = subscriptionIdOf(event);
+            if (subId == null) {
+                return List.of();
+            }
+            Subscription sub = subscriptionsById.get(subId);
+            return sub == null ? List.of() : List.of(sub);
+        }
+
+        /** ApiSource HTTP 入口专用：按 (namespace, name) 直查订阅（找不到返回 null）。 */
+        public Subscription subscriptionByNamespaceAndName(final String namespace, final String name) {
+            if (namespace == null || name == null) {
+                return null;
+            }
+            return subscriptionsByNamespaceAndName.get(nsNameKey(namespace, name));
+        }
+
+        /** Tick/Api/Delayed 三种事件的 subscriptionId 提取（meta 都带此字段）。 */
+        private static Long subscriptionIdOf(final Event event) {
             if (event instanceof TickEvent tick) {
-                return subscriptionsBySource.getOrDefault(tick.meta().source(), List.of());
+                return tick.meta().subscriptionId();
             }
             if (event instanceof ApiEvent api) {
-                return subscriptionsBySource.getOrDefault(api.meta().source(), List.of());
+                return api.meta().subscriptionId();
             }
             if (event instanceof DelayedEvent delayed) {
-                Subscription sub = subscriptionsById.get(delayed.meta().subscriptionId());
-                return sub == null ? List.of() : List.of(sub);
+                return delayed.meta().subscriptionId();
             }
-            return List.of();
+            return null;
         }
 
         public Pipeline pipelineById(final Long pipelineId) {
@@ -208,6 +213,10 @@ public final class PipelineRegistry {
 
         static String dbTableKey(final String db, final String table) {
             return (db == null ? "" : db) + "|" + (table == null ? "" : table);
+        }
+
+        static String nsNameKey(final String namespace, final String name) {
+            return namespace + "|" + name;
         }
     }
 }

@@ -114,16 +114,20 @@ public final class PipelineRegistryLoader {
         com.imsw.observe.config.domain.SubscriptionDefinition entity =
                 com.imsw.observe.config.infrastructure.persistence.SubscriptionMapper.toEntity(po, conditionCodec);
         Subscription.SourceRef source = new Subscription.SourceRef(
-                entity.mq(),
                 entity.db(),
                 entity.table(),
                 entity.opTypes(),
                 entity.sourceType(),
                 entity.cronExpression(),
-                entity.cronName(),
                 toSourceConcurrent(entity.concurrent()));
         return new Subscription(
-                entity.id(), entity.namespace(), entity.pipelineIds(), source, entity.fieldFilter(), toAction(entity));
+                entity.id(),
+                entity.namespace(),
+                entity.name(),
+                entity.pipelineIds(),
+                source,
+                entity.fieldFilter(),
+                toAction(entity));
     }
 
     private static Subscription.SourceRef.Concurrent toSourceConcurrent(

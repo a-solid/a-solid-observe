@@ -11,7 +11,6 @@ public record SubscriptionDefinition(
         Long id,
         String namespace,
         java.util.List<Long> pipelineIds,
-        String mq,
         String db,
         String table,
         Set<CdcOp> opTypes,
@@ -26,11 +25,11 @@ public record SubscriptionDefinition(
         String createdBy,
         java.time.Instant createdAt,
         java.time.Instant updatedAt,
-        // Cron per-subscription scheduling (B4, ADR-0007)。
+        // Cron per-subscription scheduling (B4, ADR-0007 + addendum)。
         // 仅 sourceType == CRON 时有意义：cronExpression 必填且必须可被 Spring CronExpression 解析；
-        // cronName 为订阅逻辑名（可选）；concurrent 控制重叠触发策略，null → SKIP。
+        // concurrent 控制重叠触发策略，null → SKIP。Cron/Api 路由改用订阅自己的 (namespace, name) 或
+        // subscriptionId——不再需要 mq/cronName 字段（见 ADR-0007 addendum）。
         String cronExpression,
-        String cronName,
         Concurrent concurrent) {
 
     public enum ActionType {

@@ -5,7 +5,7 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.temporal.Temporal;
-import java.util.List;
+import java.util.Collection;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -30,7 +30,7 @@ import com.imsw.observe.pipeline.domain.subscription.Subscription.SourceRef.Conc
  * Cron per-subscription 调度源（B4 ADR-0007 + B9 §4 对齐 {@link Source} 契约）。
  *
  * <p>有状态组件：作为 {@link PipelineRegistry} 的观察者。每次 {@link #sync(Snapshot)} 与当前跟踪的
- * CRON 订阅做 diff——新增/变更（{@code cronExpression}/{@code cronName}/{@code concurrent} 变化）→
+ * CRON 订阅做 diff——新增/变更（{@code cronExpression}/{@code concurrent} 变化）→
  * 取消旧句柄 + 起新调度；删除（订阅消失或不再 CRON）→ 取消。每条 CRON 订阅一个调度句柄
  * （调度单元 = 订阅；相同表达式也是独立调度）。
  *
@@ -43,10 +43,10 @@ import com.imsw.observe.pipeline.domain.subscription.Subscription.SourceRef.Conc
  * 失败即跳过本次（串行不堆积）；ALLOW 时跳过 CAS 直接投递。{@code concurrent == null} 视为 SKIP
  * （Task 1 推迟默认）。
  *
- * <p>到点产出 {@link TickEvent}（{@link TickMeta#source()} = 订阅的索引键 = {@code sub.source().mq()}，
- * 与 {@code Snapshot.subscriptionsBySource} 的 key 同源；{@code cronName} 作为元数据透传不参与路由）
- * 投给 {@link EventListener#onEvent(Event)}（运行时 = {@code SourceDispatcher::onEvent}），
- * 由 matcher 按 source（= mq）路由到订阅了该 cron 的 pipeline。
+ * <p>到点产出 {@link TickEvent}（{@link TickMeta#subscriptionId()} = 订阅 id；matcher 按
+ * {@code Snapshot.subscriptionsById} 直查路由）投给 {@link EventListener#onEvent(Event)}
+ * （运行时 = {@code SourceDispatcher::onEvent}）。见 ADR-0007 addendum——Cron 不再走"内容路由"
+ * （source 名索引），改为按 subscriptionId 直查（与 Api/Delayed 对称）。
  *
  * <p><b>生命周期（B9 §4）</b>：本类 {@code implements Source}，与其他 Source（IbmMqCdcSource / ApiSource /
  * InMemoryCdcSource）统一由 {@code WorkerShutdown} 收集到的 {@code List<Source>} 起停。
@@ -107,9 +107,8 @@ public final class CronSource implements Source, SnapshotListener {
     /**
      * 与快照对齐 CRON 订阅调度。幂等：相同快照重复调用为 no-op。
      *
-     * <p>遍历快照的 {@code Snapshot.subscriptionsBySource}（按 source name 索引，含 CRON + API），
-     * 过滤出 {@code sourceType == CRON} 的订阅。对每条 CRON 订阅：新（id 未跟踪）或变更
-     * （{@code cronExpression}/{@code cronName}/{@code concurrent}/{@code source} 与跟踪值不同）→
+     * <p>遍历快照的 {@code Snapshot.subscriptionsById.values()}，过滤出 {@code sourceType == CRON} 的订阅。
+     * 对每条 CRON 订阅：新（id 未跟踪）或变更（{@code cronExpression}/{@code concurrent} 与跟踪值不同）→
      * cancel 旧句柄 + schedule 新。对已跟踪但快照中不再出现的（删除或转非 CRON）→ cancel + 清理。
      */
     public void sync(final Snapshot snapshot) {
@@ -135,19 +134,18 @@ public final class CronSource implements Source, SnapshotListener {
     /** 收集快照中全部 {@code sourceType == CRON} 且表达式非空的订阅，key by id。 */
     private Map<Long, CronSub> collectCronSubs(final Snapshot snap) {
         Map<Long, CronSub> nextById = new java.util.HashMap<>();
-        for (List<Subscription> group : snap.subscriptionsBySource.values()) {
-            for (Subscription sub : group) {
-                if (!isCron(sub)) {
-                    continue;
-                }
-                CronSub cronSub = CronSub.from(sub);
-                if (cronSub.cronExpression == null || cronSub.cronExpression.isBlank()) {
-                    // 无表达式的 CRON 订阅无法调度——保护性跳过（加载层应已校验，此处兜底）。
-                    LOG.warn("skip CRON subscription {}: blank cronExpression", sub.id());
-                    continue;
-                }
-                nextById.put(sub.id(), cronSub);
+        Collection<Subscription> all = snap.subscriptionsById.values();
+        for (Subscription sub : all) {
+            if (!isCron(sub)) {
+                continue;
             }
+            CronSub cronSub = CronSub.from(sub);
+            if (cronSub.cronExpression == null || cronSub.cronExpression.isBlank()) {
+                // 无表达式的 CRON 订阅无法调度——保护性跳过（加载层应已校验，此处兜底）。
+                LOG.warn("skip CRON subscription {}: blank cronExpression", sub.id());
+                continue;
+            }
+            nextById.put(sub.id(), cronSub);
         }
         return nextById;
     }
@@ -185,12 +183,7 @@ public final class CronSource implements Source, SnapshotListener {
         runningFlags.put(id, new AtomicBoolean(false));
         tracked.put(id, sub);
         scheduleNext(id, sub);
-        LOG.info(
-                "CRON subscription {} scheduled: expr='{}', name='{}', concurrent={}",
-                id,
-                sub.cronExpression,
-                sub.cronName,
-                sub.concurrent);
+        LOG.info("CRON subscription {} scheduled: expr='{}', concurrent={}", id, sub.cronExpression, sub.concurrent);
     }
 
     /**
@@ -273,15 +266,11 @@ public final class CronSource implements Source, SnapshotListener {
             LOG.warn("CRON subscription {} fire skipped: CronSource not started (listener null)", id);
             return;
         }
-        // TickMeta.source 必须等于订阅在 Snapshot.subscriptionsBySource 的索引键——该索引键就是
-        // sub.source().mq()（见 PipelineRegistry.Snapshot.loaded），与 CronSub.source 同源（from() 直接取
-        // s.mq()）。因此 source 取 sub.source 本身即可，不再优先 cronName：cronName 仅作为 TickMeta 元数据
-        // （便于脚本/索引/可观测），不参与路由。这样彻底消除"mq vs cronName"二义性导致的路由失败（B4-T3
-        // review Finding #1 的防御层；SubscriptionCrudService.validateCron 已在上游拦住二者不一致的创建）。
-        // 历史 bug：曾用 "cron:" 前缀，导致 TickEvent 永不路由；又曾用 cronName 优先而 mq 与 cronName 不一致时
-        // 仍会路由失败——本实现以索引键（mq）为唯一路由源。
-        TickMeta meta = new TickMeta(sub.source, sub.cronName, sub.cronExpression, Map.of());
-        Event event = new TickEvent(meta, Instant.now());
+        // TickMeta.subscriptionId 为 matcher 路由键——按 Snapshot.subscriptionsById 直查（与 Api/Delayed 对称，
+        // 见 ADR-0007 addendum）。Cron 不再用 source 名/mq/cronName 字段路由。
+        Instant firedAt = Instant.now();
+        TickMeta meta = new TickMeta(id, sub.cronExpression, firedAt, Map.of());
+        Event event = new TickEvent(meta, firedAt);
         try {
             // B9：单事件契约（onBatch 已下线）。onEvent 阻塞入队——队列满时反压到 cron fire（轻微延后）。
             sink.onEvent(event);
@@ -339,31 +328,23 @@ public final class CronSource implements Source, SnapshotListener {
     }
 
     /**
-     * Cron 订阅的可比较快照（diff 依据）。{@code source}（= {@code sub.source().mq()}，索引键）
-     * 直接用作 {@link TickMeta#source()} 的路由键；{@code cronName} 仅作为元数据透传，不参与路由
-     * （见 {@link #dispatch} 的不变性说明）。
+     * Cron 订阅的可比较快照（diff 依据）。{@code cronExpression}/{@code concurrent} 变化触发 reschedule。
+     * 路由键不再字段化——subscriptionId 由 CronSource 外部跟踪（map key），不入 CronSub。
      */
     static final class CronSub {
-
-        final String source;
-
-        final String cronName;
 
         final String cronExpression;
 
         final Concurrent concurrent;
 
-        private CronSub(
-                final String source, final String cronName, final String cronExpression, final Concurrent concurrent) {
-            this.source = source;
-            this.cronName = cronName;
+        private CronSub(final String cronExpression, final Concurrent concurrent) {
             this.cronExpression = cronExpression;
             this.concurrent = concurrent;
         }
 
         static CronSub from(final Subscription sub) {
             Subscription.SourceRef s = sub.source();
-            return new CronSub(s.mq(), s.cronName(), s.cronExpression(), s.concurrent());
+            return new CronSub(s.cronExpression(), s.concurrent());
         }
 
         @Override
@@ -374,22 +355,17 @@ public final class CronSource implements Source, SnapshotListener {
             if (!(o instanceof CronSub other)) {
                 return false;
             }
-            return java.util.Objects.equals(source, other.source)
-                    && java.util.Objects.equals(cronName, other.cronName)
-                    && java.util.Objects.equals(cronExpression, other.cronExpression)
-                    && concurrent == other.concurrent;
+            return java.util.Objects.equals(cronExpression, other.cronExpression) && concurrent == other.concurrent;
         }
 
         @Override
         public int hashCode() {
-            return java.util.Objects.hash(source, cronName, cronExpression, concurrent);
+            return java.util.Objects.hash(cronExpression, concurrent);
         }
 
         @Override
         public String toString() {
-            return "CronSub{source='"
-                    + source + "', cronName='" + cronName + "', expr='" + cronExpression
-                    + "', concurrent=" + concurrent + '}';
+            return "CronSub{expr='" + cronExpression + "', concurrent=" + concurrent + '}';
         }
     }
 }

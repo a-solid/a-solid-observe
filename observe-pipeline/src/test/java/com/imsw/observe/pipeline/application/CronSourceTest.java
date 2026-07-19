@@ -120,9 +120,9 @@ class CronSourceTest {
         Subscription apiSub = new Subscription(
                 1L,
                 "ns",
+                "every-second",
                 List.of(100L),
-                new Subscription.SourceRef(
-                        "every-second", null, null, Set.of(), SourceType.API, null, null, Concurrent.SKIP),
+                new Subscription.SourceRef(null, null, Set.of(), SourceType.API, null, Concurrent.SKIP),
                 null,
                 null);
         scheduler.sync(snapshot(apiSub));
@@ -130,7 +130,7 @@ class CronSourceTest {
     }
 
     @Test
-    void fireProducesTickEventWithCorrectMeta() throws Exception {
+    void fireProducesTickEventWithSubscriptionId() throws Exception {
         Subscription sub = cronSub(7L, "nightly-9pm", "* * * * * ?", Concurrent.SKIP);
         scheduler.sync(snapshot(sub));
 
@@ -138,10 +138,8 @@ class CronSourceTest {
                 ? listener.received.get(listener.received.size() - 1)
                 : null;
         assertThat(tick).isNotNull();
-        // source 必须等于订阅在 subscriptionsBySource 索引的键（= mq = cronName），不加 "cron:" 前缀——
-        // 否则 DefaultSubscriptionMatcher.matchesNamed 查不到。P3 路由 bug 修正点。
-        assertThat(tick.meta().source()).isEqualTo("nightly-9pm");
-        assertThat(tick.meta().cronName()).isEqualTo("nightly-9pm");
+        // TickMeta.subscriptionId 必须等于订阅 id（matcher 按此直查，见 ADR-0007 addendum）。
+        assertThat(tick.meta().subscriptionId()).isEqualTo(7L);
         assertThat(tick.meta().cronExpression()).isEqualTo("* * * * * ?");
         assertThat(tick.sourceTs()).isNotNull();
     }
@@ -257,9 +255,6 @@ class CronSourceTest {
         // stop 后再 sync 不应起任何句柄（shutdown 标志拦截）。
         scheduler.sync(snapshot(sub));
         assertThat(scheduler.trackedCount()).isZero();
-
-        // 标记 scheduler 已停，避免 @AfterEach 再调 stop 抛 SES 已关异常——tearDown 调 stop 仍幂等。
-        // （ScheduledExecutorService.shutdown 后再 shutdown 是 no-op，不抛；此处仅为可读性。）
     }
 
     /**
@@ -268,59 +263,6 @@ class CronSourceTest {
     @Test
     void cronSourceImplementsSourceContract() {
         assertThat(scheduler).isInstanceOf(Source.class);
-    }
-
-    /**
-     * P3 路由契约：CronSource 产出的 TickEvent.meta().source() 必须等于该订阅在
-     * Snapshot.subscriptionsBySource 索引里的键（= sub.source().mq()）——否则
-     * DefaultSubscriptionMatcher.matchesNamed 查不到对应订阅，TickEvent 永远不路由。
-     *
-     * <p>B4-T3 review Fix #1：dispatch 必须用索引键（mq）作路由键，不优先 cronName。此测试让 mq
-     * 与 cronName 真正不同（绕过 service 直接构造 SourceRef，模拟历史脏数据），断言 source 仍走 mq
-     * （与索引键严格相等），cronName 仅作为元数据透传。 SubscriptionCrudService.validateCron 已在上游
-     * 拒绝创建 mq != cronName 的 CRON 订阅，此处是对路由层的防御性验证（defense in depth）。
-     *
-     * <p>此测试不依赖真实 fire 时序（用包可见 fire 同步驱动），断言 source 与索引键相等。
-     */
-    @Test
-    void tickSourceMatchesIndexKeyForRouting() {
-        // mq（索引键来源 = "idx-key"）与 cronName（逻辑名 = "logical-name"）真正取不同值——验证 dispatch
-        // 用 mq 作路由键，不被 cronName 干扰。常规路径下 mq == cronName（service 层强制），本测试故意
-        // 构造脏数据验证路由层防御。
-        Subscription sub = new Subscription(
-                5L,
-                "ns",
-                List.of(100L),
-                new Subscription.SourceRef(
-                        "idx-key",
-                        null,
-                        null,
-                        Set.of(),
-                        SourceType.CRON,
-                        "* * * * * ?",
-                        "logical-name",
-                        Concurrent.SKIP),
-                null,
-                null);
-        Snapshot snap = snapshot(sub);
-        scheduler.sync(snap);
-
-        // 同步触发一次 fire（避开 SES 时序，确定性断言）。
-        CronSource.CronSub cronSub = CronSource.CronSub.from(sub);
-        scheduler.fire(5L, cronSub);
-
-        assertThat(listener.received).hasSize(1);
-        TickEvent tick = listener.received.get(0);
-        // 索引键 = 该订阅在 subscriptionsBySource 的 key（loader 用 sub.source().mq()，本测试同包可直接读字段）。
-        String indexKey = snap.subscriptionsBySource.keySet().iterator().next();
-        assertThat(indexKey).isEqualTo("idx-key");
-        assertThat(tick.meta().source()).isEqualTo(indexKey);
-        // source 必须等于 mq（idx-key），不能走 cronName（logical-name）——路由键严格来自索引键。
-        assertThat(tick.meta().source()).isEqualTo("idx-key");
-        assertThat(tick.meta().source()).doesNotStartWith("cron:");
-        // cronName 仍作为元数据透传（不丢失逻辑名，便于可观测/脚本）。
-        assertThat(tick.meta().cronName()).isEqualTo("logical-name");
-        listener.release();
     }
 
     private static Snapshot snapshot(final Subscription sub) {
@@ -332,8 +274,9 @@ class CronSourceTest {
         return new Subscription(
                 id,
                 "ns",
+                name,
                 List.of(100L),
-                new Subscription.SourceRef(name, null, null, Set.of(), SourceType.CRON, expr, name, concurrent),
+                new Subscription.SourceRef(null, null, Set.of(), SourceType.CRON, expr, concurrent),
                 null,
                 null);
     }

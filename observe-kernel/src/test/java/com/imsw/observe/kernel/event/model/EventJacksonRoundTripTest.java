@@ -44,7 +44,8 @@ class EventJacksonRoundTripTest {
     @Test
     void tickEventRoundTrips() {
         TickEvent original = new TickEvent(
-                new TickMeta("cron:orders-tick", "orders-tick", "0 */5 * * * *", Map.of()), Instant.now());
+                new TickMeta(7L, "0 */5 * * * *", Instant.parse("2026-07-18T10:00:00Z"), Map.of()),
+                Instant.parse("2026-07-18T10:00:00Z"));
 
         String json = JsonUtil.toJson(original);
         assertThat(json).contains("\"@type\":\"TickEvent\"");
@@ -56,7 +57,7 @@ class EventJacksonRoundTripTest {
     @Test
     void apiEventRoundTrips() {
         ApiEvent original = new ApiEvent(
-                new ApiMeta("http://api/orders", "orders", Map.of("header", "X")),
+                new ApiMeta(9L, Map.of("header", "X")),
                 Map.of("orderId", 42L, "action", "submit"),
                 Instant.parse("2026-07-18T11:00:00Z"));
 
@@ -96,10 +97,8 @@ class EventJacksonRoundTripTest {
     @Test
     void delayedEventRoundTripsWithNestedApiEvent() {
         // 嵌套非 CDC 子类型同样要 round-trip（覆盖 @JsonSubTypes 全部条目）
-        ApiEvent nested = new ApiEvent(
-                new ApiMeta("http://api/orders", "orders", Map.of()),
-                Map.of("orderId", 11L),
-                Instant.parse("2026-07-18T12:00:00Z"));
+        ApiEvent nested =
+                new ApiEvent(new ApiMeta(11L, Map.of()), Map.of("orderId", 11L), Instant.parse("2026-07-18T12:00:00Z"));
         DelayedEvent original = new DelayedEvent(new DelayedMeta(11L, null), nested, Instant.now());
 
         String json = JsonUtil.toJson(original);

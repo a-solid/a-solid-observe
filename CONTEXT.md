@@ -103,11 +103,11 @@ _Avoid_: 单一 Event record + 可空字段（旧设计，已废弃——非 CDC
 CDC 数据变更事件，含 `before`/`after` 快照 + `CdcOp`（INSERT/UPDATE/DELETE）。由 `IbmMqCdcSource` 产出。
 
 **TickEvent**:
-Cron 定时触发事件，**无 payload**（纯触发信号），含 `TickMeta`（cron name / cron 表达式 / 触发时刻）。pipeline 脚本在节点里 `db.queryOne` 主动查 DB。由 `CronSource` 产出。
+Cron 定时触发事件，**无 payload**（纯触发信号），含 `TickMeta`（subscriptionId 路由键 / cron 表达式 / 触发时刻）。pipeline 脚本在节点里 `db.queryOne` 主动查 DB。由 `CronSource` 产出。
 _Avoid_: 给 TickEvent 塞 before/after（cron 无数据变更语义）
 
 **ApiEvent**:
-HTTP 触发事件，含 `payload`（HTTP POST body 反序列化的 Map）+ `ApiMeta`（api name）。由 `ApiSource` 产出。
+HTTP 触发事件，含 `payload`（HTTP POST body 反序列化的 Map）+ `ApiMeta`（subscriptionId 路由键）。由 `ApiSource` 产出（HTTP 入口按 (namespace, name) 查订阅得 subscriptionId 后 wrap）。
 
 **DelayedEvent**:
 延时触发事件，**嵌套原始 Event**（`originalEvent`，通常是 CdcEvent）+ `DelayedMeta`（subscriptionId 路由键 + correlationKey 业务键）。语义：延时 = 延迟重放原始事件。由 `DelayedActionHandler.fire` 到点构造，经 `SourceDispatcher.onEvent` 回流——与其它 Event 子类型一样走 matcher，按 subscriptionId 路由回原订阅扇出（见 ADR-0006 addendum）。
@@ -125,10 +125,16 @@ _Avoid_: 与旧 `Op` 枚举混——旧 `Op` 把数据变更语义（INSERT/UPDA
 ## Scheduling (Cron)
 
 **Cron 订阅**:
-`sourceType=CRON` 的订阅，带 `cronExpression`（Spring `CronExpression` 6 字段：秒 分 时 日 月 周）+ 可选 `cron name` + `concurrent`（默认 SKIP）。配在 SubscriptionDefinition（与 CDC 订阅配 db/table 对称）。
+`sourceType=CRON` 的订阅，带 `cronExpression`（Spring `CronExpression` 6 字段：秒 分 时 日 月 周）+ `concurrent`（默认 SKIP）。配在 SubscriptionDefinition（与 CDC 订阅配 db/table 对称）。Cron 订阅的路由键是订阅自己的 `subscriptionId`——不再有 source 名 / mq / cronName 字段（见 ADR-0007 addendum）。
 
 **CronSource**:
-有状态组件（B9 §4 起对齐 `Source` 契约，旧名 `CronScheduler`），作为 PipelineRegistry 的观察者。热加载（registry.replace）时 diff 新旧快照的 Cron 订阅，为新增/变更的 Cron 订阅起一个调度句柄，删除的取消。每 Cron 订阅一个调度句柄（调度单元 = 订阅，相同表达式也是独立调度）。生命周期与其他 Source 一致：`start(listener)` 注入 dispatcher listener、`stop()` 取消句柄 + 关闭调度线程池；`sync(snapshot)` 不进 Source 接口，仍由 HotReloader 显式调。到点产出 `TickEvent` 投给 SourceDispatcher，由 matcher 按 source（= mq）/ subscriptionId 路由到订阅了该 cron 的 pipeline。
+有状态组件（B9 §4 起对齐 `Source` 契约，旧名 `CronScheduler`），作为 PipelineRegistry 的观察者。热加载（registry.replace）时 diff 新旧快照的 Cron 订阅，为新增/变更的 Cron 订阅起一个调度句柄，删除的取消。每 Cron 订阅一个调度句柄（调度单元 = 订阅，相同表达式也是独立调度）。生命周期与其他 Source 一致：`start(listener)` 注入 dispatcher listener、`stop()` 取消句柄 + 关闭调度线程池；`sync(snapshot)` 不进 Source 接口，仍由 HotReloader 显式调。到点产出 `TickEvent` 投给 SourceDispatcher，由 matcher 按 subscriptionId 直查唯一订阅（与 Api/Delayed 对称，见 ADR-0007 addendum）。
+
+**HTTP 触发入口**:
+外部 HTTP 调用按 (namespace, name) 寻址订阅：`POST /api/v1/events/api/{namespace}/{name}`。ApiSource 内部按 (ns,name) 在 registry snapshot 查订阅得 subscriptionId，wrap ApiEvent（subscriptionId 一等）入 dispatcher 队列，返回 202 Accepted；找不到订阅或订阅 INACTIVE 返回 404。异步：HTTP 入口只入队即返回，pipeline 后台执行（与 CDC/Cron 入队语义一致）。
+
+**事件路由模型**:
+四种事件类型走两种索引：CdcEvent 按 (db, table) 内容路由（CDC 消息无订阅信息、可能一对多）；TickEvent/ApiEvent/DelayedEvent 三种事件全对称——按 `meta.subscriptionId` 在 `Snapshot.subscriptionsById` 直查唯一订阅。ApiSource HTTP 入口还需要第三个索引 `Snapshot.subscriptionsByNamespaceAndName` 用于按 (ns,name) 反查订阅得 subscriptionId（matcher 不用，matcher 拿到的 ApiEvent 已带 subscriptionId）。详见 ADR-0007 addendum。
 
 **Cron misfire（M1 忽略）**:
 worker 重启错过的 cron 调度不补跑，只看未来调度。与一期延时任务"重启丢失"风格一致。cron 无外部重发源（不像 CDC 有 MQ 重投），漏检靠业务容忍。

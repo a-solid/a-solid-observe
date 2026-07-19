@@ -44,9 +44,9 @@ class DefaultSubscriptionMatcherTest {
         Subscription sub = new Subscription(
                 10L,
                 "smoke",
+                "cdc-orders",
                 java.util.List.of(1L),
-                new Subscription.SourceRef(
-                        "mq", "trade_db", "orders", Set.of(CdcOp.INSERT), SourceType.CDC, null, null, null),
+                new Subscription.SourceRef("trade_db", "orders", Set.of(CdcOp.INSERT), SourceType.CDC, null, null),
                 new Condition.Compare("after.status", Condition.Compare.Op.EQ, "PAID"),
                 new Action.Run());
         PipelineRegistry registry = new PipelineRegistry();
@@ -65,15 +65,20 @@ class DefaultSubscriptionMatcherTest {
         assertThat(matcher.match(wrongTable)).isEmpty();
     }
 
+    /**
+     * Tick 按 subscriptionId 路由（ADR-0007 addendum）。Cron 不再用 source 名匹配——
+     * TickMeta.subscriptionId 直查 subscriptionsById。
+     */
     @Test
-    void matchesTickBySourceName() {
+    void matchesTickBySubscriptionId() {
         Pipeline pipeline = pipeline(1L, 1);
-        // Cron 订阅：source name "nightly-sync" 复用 SourceRef.mq 槽（见 PipelineRegistry.Snapshot 注释）。
+        // sub.id = 11；sourceType=CRON 但路由键是 subscriptionId 而非 source 字段。
         Subscription sub = new Subscription(
                 11L,
                 "smoke",
+                "nightly-sync",
                 java.util.List.of(1L),
-                new Subscription.SourceRef("nightly-sync", null, null, Set.of(), SourceType.CRON, null, null, null),
+                new Subscription.SourceRef(null, null, Set.of(), SourceType.CRON, null, null),
                 null,
                 new Action.Run());
         PipelineRegistry registry = new PipelineRegistry();
@@ -81,22 +86,27 @@ class DefaultSubscriptionMatcherTest {
 
         SubscriptionMatcher matcher = new DefaultSubscriptionMatcher(registry);
 
-        TickEvent hit = new TickEvent(new TickMeta("nightly-sync", "nightly-sync", null, Map.of()), Instant.now());
-        TickEvent wrongName = new TickEvent(new TickMeta("hourly-sync", "hourly-sync", null, Map.of()), Instant.now());
+        TickEvent hit = new TickEvent(new TickMeta(11L, "0 0 * * * *", Instant.now(), Map.of()), Instant.now());
+        TickEvent wrongId = new TickEvent(new TickMeta(99L, "0 0 * * * *", Instant.now(), Map.of()), Instant.now());
 
         assertThat(matcher.match(hit)).hasSize(1);
-        assertThat(matcher.match(wrongName)).isEmpty();
+        assertThat(matcher.match(wrongId)).isEmpty();
     }
 
+    /**
+     * Api 按 subscriptionId 路由（ADR-0007 addendum）。ApiSource HTTP 入口先按 (ns,name) 查订阅得
+     * subscriptionId 填入 ApiMeta——matcher 拿到的 ApiEvent 已带 subscriptionId。
+     */
     @Test
-    void matchesApiBySourceName() {
+    void matchesApiBySubscriptionId() {
         Pipeline pipeline = pipeline(1L, 1);
-        // Api 订阅：source name "order-webhook" 复用 SourceRef.mq 槽。
+        // sub.id = 12；HTTP 入口按 (ns,name) 查得此 sub，wrap 时填 subscriptionId=12。
         Subscription sub = new Subscription(
                 12L,
                 "smoke",
+                "order-webhook",
                 java.util.List.of(1L),
-                new Subscription.SourceRef("order-webhook", null, null, Set.of(), SourceType.API, null, null, null),
+                new Subscription.SourceRef(null, null, Set.of(), SourceType.API, null, null),
                 null,
                 new Action.Run());
         PipelineRegistry registry = new PipelineRegistry();
@@ -104,13 +114,11 @@ class DefaultSubscriptionMatcherTest {
 
         SubscriptionMatcher matcher = new DefaultSubscriptionMatcher(registry);
 
-        ApiEvent hit = new ApiEvent(
-                new ApiMeta("order-webhook", "order-webhook", Map.of()), Map.of("amt", 100), Instant.now());
-        ApiEvent wrongName =
-                new ApiEvent(new ApiMeta("refund-webhook", "refund-webhook", Map.of()), Map.of(), Instant.now());
+        ApiEvent hit = new ApiEvent(new ApiMeta(12L, Map.of()), Map.of("amt", 100), Instant.now());
+        ApiEvent wrongId = new ApiEvent(new ApiMeta(99L, Map.of()), Map.of(), Instant.now());
 
         assertThat(matcher.match(hit)).hasSize(1);
-        assertThat(matcher.match(wrongName)).isEmpty();
+        assertThat(matcher.match(wrongId)).isEmpty();
     }
 
     @Test
@@ -120,8 +128,9 @@ class DefaultSubscriptionMatcherTest {
         Subscription sub = new Subscription(
                 10L,
                 "smoke",
+                "cdc-orders",
                 java.util.List.of(1L, 2L),
-                new Subscription.SourceRef(null, "trade_db", "orders", Set.of(), SourceType.CDC, null, null, null),
+                new Subscription.SourceRef("trade_db", "orders", Set.of(), SourceType.CDC, null, null),
                 null,
                 new Action.Run());
         PipelineRegistry registry = new PipelineRegistry();
@@ -140,8 +149,9 @@ class DefaultSubscriptionMatcherTest {
         Subscription sub = new Subscription(
                 10L,
                 "smoke",
+                "cdc-orders",
                 java.util.List.of(99L),
-                new Subscription.SourceRef(null, "trade_db", "orders", Set.of(), SourceType.CDC, null, null, null),
+                new Subscription.SourceRef("trade_db", "orders", Set.of(), SourceType.CDC, null, null),
                 null,
                 new Action.Run());
         PipelineRegistry registry = new PipelineRegistry();
@@ -163,9 +173,9 @@ class DefaultSubscriptionMatcherTest {
         Subscription sub = new Subscription(
                 42L,
                 "smoke",
+                "cdc-orders",
                 List.of(1L, 2L),
-                new Subscription.SourceRef(
-                        "mq", "trade_db", "orders", Set.of(CdcOp.INSERT), SourceType.CDC, null, null, null),
+                new Subscription.SourceRef("trade_db", "orders", Set.of(CdcOp.INSERT), SourceType.CDC, null, null),
                 null,
                 new Action.Run());
         PipelineRegistry registry = new PipelineRegistry();

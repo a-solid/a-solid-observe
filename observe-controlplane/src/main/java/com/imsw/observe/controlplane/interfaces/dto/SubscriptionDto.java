@@ -12,7 +12,6 @@ public record SubscriptionDto(
         Long id,
         String namespace,
         java.util.List<Long> pipelineIds,
-        String mq,
         String db,
         String table,
         Set<CdcOp> opTypes,
@@ -25,7 +24,6 @@ public record SubscriptionDto(
         String description,
         String status,
         String cronExpression,
-        String cronName,
         String concurrent) {
 
     public static SubscriptionDto from(final SubscriptionDefinition s) {
@@ -34,7 +32,6 @@ public record SubscriptionDto(
                 s.id(),
                 s.namespace(),
                 s.pipelineIds(),
-                s.mq(),
                 s.db(),
                 s.table(),
                 s.opTypes(),
@@ -47,7 +44,6 @@ public record SubscriptionDto(
                 s.description(),
                 s.status() == null ? null : s.status().name(),
                 s.cronExpression(),
-                s.cronName(),
                 s.concurrent() == null ? null : s.concurrent().name());
     }
 }

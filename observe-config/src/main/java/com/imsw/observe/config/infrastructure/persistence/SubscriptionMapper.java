@@ -23,7 +23,6 @@ public final class SubscriptionMapper {
                 po.id,
                 po.namespace,
                 po.pipelineIds,
-                po.mq,
                 po.db,
                 po.tableName,
                 toOpSet(po.opTypes),
@@ -39,7 +38,6 @@ public final class SubscriptionMapper {
                 po.createdAt,
                 po.updatedAt,
                 po.cronExpression,
-                po.cronName,
                 toConcurrent(po.concurrent));
     }
 
@@ -51,7 +49,10 @@ public final class SubscriptionMapper {
         po.id = entity.id();
         po.namespace = entity.namespace();
         po.pipelineIds = entity.pipelineIds() == null ? new ArrayList<>() : new ArrayList<>(entity.pipelineIds());
-        po.mq = entity.mq();
+        // mq/cronName：DDL 列残留策略（ADR-0007 addendum）——Po 字段保留映射旧列，写入置 null。
+        // 业务代码不再读写这两个字段。后续若决定 drop 列，移除 Po 字段 + 加 ALTER TABLE 迁移。
+        po.mq = null;
+        po.cronName = null;
         po.db = entity.db();
         po.tableName = entity.table();
         po.opTypes = fromOpSet(entity.opTypes());
@@ -61,7 +62,6 @@ public final class SubscriptionMapper {
         po.scheduleDelayMs = fromDuration(entity.scheduleDelay());
         po.scheduleCorrelationKeyPath = entity.scheduleCorrelationKeyPath();
         po.cronExpression = entity.cronExpression();
-        po.cronName = entity.cronName();
         po.concurrent = fromConcurrent(entity.concurrent());
         po.name = entity.name();
         po.description = entity.description();

@@ -15,17 +15,16 @@ import com.imsw.observe.pipeline.domain.Pipeline;
 import com.imsw.observe.pipeline.domain.subscription.Subscription;
 
 /**
- * 订阅匹配器（按 Event 子类型分发，ADR-0006 §4）。
+ * 订阅匹配器（按 Event 子类型分发，ADR-0006 §4 + ADR-0007 addendum）。
  *
- * <p>{@link #match(Event)} 用 pattern match 按 {@link Event} 子类型选索引：
+ * <p>{@link #match(Event)} 走两类索引：
  * <ul>
- *   <li>{@link CdcEvent} → Snapshot 的 CDC（db/table）索引；额外校验 sourceType==CDC、opTypes 含 {@code cdc.op()}、fieldFilter。</li>
- *   <li>{@link TickEvent} → Snapshot 的 source 索引（cron name）；校验 sourceType==CRON。非 CDC 子类型不跑 opTypes/fieldFilter
- *       （fieldFilter 主要面向 CDC 的 before/after 路径；Cron/Api 订阅语义靠 sourceType + source 名硬匹配）。</li>
- *   <li>{@link ApiEvent} → Snapshot 的 source 索引（api name）；校验 sourceType==API。</li>
- *   <li>{@link DelayedEvent} → Snapshot 的 subscriptionsById 索引（按 {@link DelayedMeta#subscriptionId()}
- *       直查回原订阅）——fire 到点经 {@code SourceDispatcher.onEvent} 回流，matcher 按 subscriptionId 路由后扇出
- *       N 个 pipeline（旧"绕过 matcher"语义已被取代，见 ADR-0006 addendum）。</li>
+ *   <li>{@link CdcEvent} → subscriptionsByDbTable（内容路由，一对多）。额外校验 sourceType==CDC、
+ *       opTypes 含 {@code cdc.op()}、fieldFilter。</li>
+ *   <li>{@link TickEvent} / {@link ApiEvent} / {@link DelayedEvent} → subscriptionsById（按
+ *       {@code meta().subscriptionId()} 直查唯一订阅）。三种事件全对称——Snapshot 已路由到唯一订阅，
+ *       matcher 不再校验 source/opTypes（这些事件的路由键是 subscriptionId，不再走"source 名匹配"）。
+ *       fieldFilter 对非 CDC 事件返回 true（fieldFilter 主要面向 CDC 的 before/after 路径）。</li>
  * </ul>
  */
 public final class DefaultSubscriptionMatcher implements SubscriptionMatcher {
@@ -85,10 +84,9 @@ public final class DefaultSubscriptionMatcher implements SubscriptionMatcher {
     }
 
     private static boolean matchesSource(final Subscription sub, final Event event) {
-        // DelayedEvent 已被 snapshot.subscriptionsFor 按 subscriptionId 路由到唯一订阅（不依赖 source 字段），
-        // 直接放行让 tryMatch 走 pipeline 扇出。消费者侧 instanceof 级联（Java 17 无 switch 模式，
-        // 新增子类型需手动在此 + registry.subscriptionsFor 补分支）。
-        if (event instanceof DelayedEvent) {
+        // Tick/Api/Delayed：snapshot 已按 subscriptionId 路由到唯一订阅，无需再校验 source/opTypes。
+        // 消费者侧 instanceof 级联（Java 17 无 switch 模式，新增子类型需手动在此 + registry.subscriptionsFor 补分支）。
+        if (event instanceof TickEvent || event instanceof ApiEvent || event instanceof DelayedEvent) {
             return true;
         }
         if (sub.source() == null) {
@@ -96,12 +94,6 @@ public final class DefaultSubscriptionMatcher implements SubscriptionMatcher {
         }
         if (event instanceof CdcEvent cdc) {
             return matchesCdc(sub, cdc);
-        }
-        if (event instanceof TickEvent tick) {
-            return matchesNamed(sub, SourceType.CRON, tick.meta().source());
-        }
-        if (event instanceof ApiEvent api) {
-            return matchesNamed(sub, SourceType.API, api.meta().source());
         }
         return false;
     }
@@ -115,20 +107,5 @@ public final class DefaultSubscriptionMatcher implements SubscriptionMatcher {
         return sub.source().opTypes() == null
                 || sub.source().opTypes().isEmpty()
                 || sub.source().opTypes().contains(cdc.op());
-    }
-
-    /**
-     * Cron/Api 订阅按 sourceType + source name 硬匹配。
-     *
-     * <p>订阅的 source name 存在 SourceRef.mq 槽（见 {@link PipelineRegistry.Snapshot} 注释）。
-     */
-    private static boolean matchesNamed(
-            final Subscription sub, final SourceType expected, final String eventSourceName) {
-        SourceType type = sub.source().sourceType();
-        if (type != null && type != expected) {
-            return false;
-        }
-        String subSourceName = sub.source().mq();
-        return subSourceName != null && !subSourceName.isBlank() && subSourceName.equals(eventSourceName);
     }
 }

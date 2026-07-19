@@ -59,7 +59,6 @@ class SubscriptionCrudServiceTest {
                 null,
                 null,
                 null,
-                null,
                 SubscriptionDefinition.ActionType.RUN,
                 null,
                 null,
@@ -67,7 +66,6 @@ class SubscriptionCrudServiceTest {
                 "desc",
                 SubscriptionDefinition.Status.ACTIVE,
                 "alice",
-                null,
                 null,
                 null,
                 null,
@@ -106,7 +104,6 @@ class SubscriptionCrudServiceTest {
                 null,
                 null,
                 null,
-                null,
                 SubscriptionDefinition.ActionType.RUN,
                 null,
                 null,
@@ -114,7 +111,6 @@ class SubscriptionCrudServiceTest {
                 "desc",
                 SubscriptionDefinition.Status.ACTIVE,
                 "alice",
-                null,
                 null,
                 null,
                 null,
@@ -151,7 +147,6 @@ class SubscriptionCrudServiceTest {
                 null,
                 null,
                 null,
-                null,
                 SubscriptionDefinition.ActionType.RUN,
                 null,
                 null,
@@ -159,7 +154,6 @@ class SubscriptionCrudServiceTest {
                 "desc",
                 SubscriptionDefinition.Status.ACTIVE,
                 "alice",
-                null,
                 null,
                 null,
                 null,
@@ -197,7 +191,6 @@ class SubscriptionCrudServiceTest {
                 null,
                 null,
                 null,
-                null,
                 SubscriptionDefinition.ActionType.RUN,
                 null,
                 null,
@@ -205,7 +198,6 @@ class SubscriptionCrudServiceTest {
                 "desc",
                 SubscriptionDefinition.Status.ACTIVE,
                 "alice",
-                null,
                 null,
                 null,
                 null,
@@ -220,7 +212,7 @@ class SubscriptionCrudServiceTest {
 
     @Test
     void createRejectsCronSubscriptionWithoutCronExpression() {
-        // B4：sourceType==CRON 时 cronExpression 必填（ADR-0007）。
+        // B4：sourceType==CRON 时 cronExpression 必填（ADR-0007 + addendum）。
         SubscriptionRepository repository = mock(SubscriptionRepository.class);
         PipelineDefinitionRepository pipelineDefRepo = mock(PipelineDefinitionRepository.class);
         ConditionCodec codec = mock(ConditionCodec.class);
@@ -265,7 +257,7 @@ class SubscriptionCrudServiceTest {
 
     @Test
     void createAcceptsCronSubscriptionWithValidCronExpression() {
-        // B4：合法 cronExpression（6 字段 Spring CronExpression）通过校验并落库。
+        // B4：合法 cronExpression（6 字段 SpringCronExpression）通过校验并落库。
         SubscriptionRepository repository = mock(SubscriptionRepository.class);
         PipelineDefinitionRepository pipelineDefRepo = mock(PipelineDefinitionRepository.class);
         ConditionCodec codec = mock(ConditionCodec.class);
@@ -304,7 +296,6 @@ class SubscriptionCrudServiceTest {
                 null,
                 null,
                 null,
-                null,
                 SourceType.CDC,
                 null,
                 SubscriptionDefinition.ActionType.RUN,
@@ -317,7 +308,6 @@ class SubscriptionCrudServiceTest {
                 null,
                 null,
                 "0 */5 * * * *", // 不该出现在 CDC 订阅上
-                null,
                 null);
 
         assertThatThrownBy(() -> service.create(sub))
@@ -328,73 +318,6 @@ class SubscriptionCrudServiceTest {
         verify(repository, never()).save(any());
     }
 
-    @Test
-    void createRejectsCronSubscriptionWhenMqDivergesFromCronName() {
-        // B4-T3 review Finding #2：CRON 订阅的 mq（Snapshot 索引键 / TickMeta.source 来源）必须等于
-        // cronName（或 cronName == null）。
-        SubscriptionRepository repository = mock(SubscriptionRepository.class);
-        PipelineDefinitionRepository pipelineDefRepo = mock(PipelineDefinitionRepository.class);
-        ConditionCodec codec = mock(ConditionCodec.class);
-        NamespaceCrudService namespaceCrudService = mock(NamespaceCrudService.class);
-        SnowflakeIdGenerator generator = new SnowflakeIdGenerator(1L, 0L);
-
-        stubValidPipeline(namespaceCrudService, pipelineDefRepo, "billing", 100L);
-        SubscriptionCrudService service =
-                new SubscriptionCrudService(repository, pipelineDefRepo, codec, generator, namespaceCrudService);
-
-        SubscriptionDefinition sub = new SubscriptionDefinition(
-                null,
-                "billing",
-                List.of(100L),
-                "idx-key", // mq（索引键）
-                null,
-                null,
-                null,
-                SourceType.CRON,
-                null,
-                SubscriptionDefinition.ActionType.RUN,
-                null,
-                null,
-                "billing-rule",
-                "desc",
-                SubscriptionDefinition.Status.ACTIVE,
-                "alice",
-                null,
-                null,
-                "0 */5 * * * *",
-                "logical-name", // cronName != mq → 拒绝
-                null);
-
-        assertThatThrownBy(() -> service.create(sub))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("CRON subscription mq and cronName must match")
-                .hasMessageContaining("mq=idx-key")
-                .hasMessageContaining("cronName=logical-name");
-
-        verify(repository, never()).save(any());
-    }
-
-    @Test
-    void createAcceptsCronSubscriptionWhenCronNameIsNull() {
-        // B4-T3 review Finding #2 的允许路径：cronName == null 时合法（mq 作为规范名）。
-        SubscriptionRepository repository = mock(SubscriptionRepository.class);
-        PipelineDefinitionRepository pipelineDefRepo = mock(PipelineDefinitionRepository.class);
-        ConditionCodec codec = mock(ConditionCodec.class);
-        NamespaceCrudService namespaceCrudService = mock(NamespaceCrudService.class);
-        SnowflakeIdGenerator generator = new SnowflakeIdGenerator(1L, 0L);
-
-        stubValidPipeline(namespaceCrudService, pipelineDefRepo, "billing", 100L);
-        when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
-        SubscriptionCrudService service =
-                new SubscriptionCrudService(repository, pipelineDefRepo, codec, generator, namespaceCrudService);
-
-        SubscriptionDefinition sub = cronSubscription("billing", 100L, "billing-rule", "0 */5 * * * *");
-
-        SubscriptionDefinition saved = service.create(sub);
-        assertThat(saved.cronExpression()).isEqualTo("0 */5 * * * *");
-        verify(repository).save(any());
-    }
-
     /** 构造一条合法结构（除 cronExpression 外）的 CRON 订阅。 */
     private static SubscriptionDefinition cronSubscription(
             final String namespace, final Long pipelineId, final String name, final String cronExpression) {
@@ -402,7 +325,6 @@ class SubscriptionCrudServiceTest {
                 null,
                 namespace,
                 List.of(pipelineId),
-                "cron-source",
                 null,
                 null,
                 null,
@@ -418,7 +340,6 @@ class SubscriptionCrudServiceTest {
                 null,
                 null,
                 cronExpression,
-                null,
                 null);
     }
 
@@ -728,7 +649,6 @@ class SubscriptionCrudServiceTest {
                 null,
                 namespace,
                 List.of(pipelineId),
-                "mq",
                 "db",
                 "orders",
                 null,
@@ -741,7 +661,6 @@ class SubscriptionCrudServiceTest {
                 "desc",
                 SubscriptionDefinition.Status.ACTIVE,
                 "alice",
-                null,
                 null,
                 null,
                 null,

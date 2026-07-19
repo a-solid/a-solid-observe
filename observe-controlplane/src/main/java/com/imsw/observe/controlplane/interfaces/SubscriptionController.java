@@ -95,7 +95,6 @@ public class SubscriptionController {
     /** 可编辑的订阅字段（create/update 共用）。 */
     public record SubscriptionFields(
             @NotNull java.util.List<Long> pipelineIds,
-            String mq,
             String db,
             String table,
             Set<CdcOp> opTypes,
@@ -108,7 +107,6 @@ public class SubscriptionController {
             String description,
             String status,
             String cronExpression,
-            String cronName,
             String concurrent) {
 
         SubscriptionDefinition toDomain(final String namespace) {
@@ -122,7 +120,6 @@ public class SubscriptionController {
                     null,
                     namespace,
                     pipelineIds,
-                    mq,
                     db,
                     table,
                     opTypes,
@@ -138,7 +135,6 @@ public class SubscriptionController {
                     null,
                     null,
                     cronExpression,
-                    cronName,
                     conc);
         }
     }

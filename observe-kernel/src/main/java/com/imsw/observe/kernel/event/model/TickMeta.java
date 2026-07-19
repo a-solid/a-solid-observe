@@ -1,17 +1,18 @@
 package com.imsw.observe.kernel.event.model;
 
+import java.time.Instant;
 import java.util.Map;
 
 /**
  * {@link TickEvent} 的元数据（Cron 触发）。sourceType 由子类型隐式 = CRON，故不再单独字段（ADR-0006）。
  *
- * <p>由 {@code CronSource}（ADR-0007 B4，B9 §4 对齐 Source 契约）产出：{@code cronName}/{@code cronExpression} 为真实值，
- * {@code source} = 订阅在 {@code Snapshot.subscriptionsBySource} 的索引键（= sub.source().mq()，
- * 通常等于 cronName）——matcher 按此路由（见 {@code DefaultSubscriptionMatcher.matchesNamed}）。
+ * <p>由 {@code CronSource}（ADR-0007 + B9 §4）产出。{@code subscriptionId} 为 matcher 路由键——
+ * 按 {@code Snapshot.subscriptionsById} 直查回原订阅（与 DelayedEvent/ApiEvent 对称，
+ * 见 ADR-0007 addendum）。{@code cronExpression} 透传便于脚本/可观测。
  *
- * @param source         Cron 来源标识（cron name；必须等于订阅索引键）
- * @param cronName       Cron 任务名（与 source 通常一致；显式字段便于脚本/索引）
- * @param cronExpression Cron 表达式（Spring 6 字段；可为 null 的历史占位已被 B4 取代）
- * @param attributes     附加属性
+ * @param subscriptionId 原订阅 id（matcher 路由键）
+ * @param cronExpression Cron 表达式（Spring 6 字段；触发该 TickEvent 的 cron，便于脚本/可观测）
+ * @param firedAt        实际触发时刻（与 {@link TickEvent#sourceTs()} 冗余但便于不解析外层 record 的脚本读取）
+ * @param attributes     附加属性（cron 来源一般无业务上下文，可空）
  */
-public record TickMeta(String source, String cronName, String cronExpression, Map<String, Object> attributes) {}
+public record TickMeta(Long subscriptionId, String cronExpression, Instant firedAt, Map<String, Object> attributes) {}

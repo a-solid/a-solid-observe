@@ -154,9 +154,14 @@ public class WorkerConfig {
         return source;
     }
 
+    /**
+     * ApiSource：HTTP 入口（{@code POST /api/v1/events/api/{ns}/{name}}）按 (ns,name) 查订阅、wrap ApiEvent 入队。
+     * 注入 {@code Supplier<PipelineRegistry>}——ApiSource 用其按 (ns,name) 反查订阅得 subscriptionId
+     * （详见 ADR-0007 addendum）。
+     */
     @Bean
-    public ApiSource apiSource(final SourceDispatcher dispatcher) {
-        ApiSource source = new ApiSource();
+    public ApiSource apiSource(final SourceDispatcher dispatcher, final PipelineRegistry pipelineRegistry) {
+        ApiSource source = new ApiSource(() -> pipelineRegistry);
         source.start(dispatcher::onEvent);
         return source;
     }

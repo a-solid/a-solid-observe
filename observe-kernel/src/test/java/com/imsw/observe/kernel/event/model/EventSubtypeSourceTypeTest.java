@@ -53,11 +53,11 @@ class EventSubtypeSourceTypeTest {
     }
 
     private static Event tickEvent() {
-        return new TickEvent(new TickMeta("nightly", "nightly", "0 0 * * * *", Map.of()), Instant.now());
+        return new TickEvent(new TickMeta(7L, "0 0 * * * *", Instant.now(), Map.of()), Instant.now());
     }
 
     private static Event apiEvent() {
-        return new ApiEvent(new ApiMeta("orders", "orders", Map.of()), Map.of(), Instant.now());
+        return new ApiEvent(new ApiMeta(9L, Map.of()), Map.of(), Instant.now());
     }
 
     private static DelayedEvent delayed(final Event original) {

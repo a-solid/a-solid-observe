@@ -47,9 +47,9 @@ class SourceDispatcherTest {
         Subscription sub = new Subscription(
                 10L,
                 "smoke",
+                "cdc-orders",
                 List.of(1L),
-                new Subscription.SourceRef(
-                        "mq", "trade_db", "orders", Set.of(CdcOp.INSERT), SourceType.CDC, null, null, null),
+                new Subscription.SourceRef("trade_db", "orders", Set.of(CdcOp.INSERT), SourceType.CDC, null, null),
                 null,
                 new Action.Run());
         PipelineRegistry registry = new PipelineRegistry();
@@ -81,9 +81,9 @@ class SourceDispatcherTest {
         Subscription sub = new Subscription(
                 10L,
                 "smoke",
+                "cdc-orders",
                 List.of(1L, 2L),
-                new Subscription.SourceRef(
-                        "mq", "trade_db", "orders", Set.of(CdcOp.INSERT), SourceType.CDC, null, null, null),
+                new Subscription.SourceRef("trade_db", "orders", Set.of(CdcOp.INSERT), SourceType.CDC, null, null),
                 null,
                 new Action.Run());
         PipelineRegistry registry = new PipelineRegistry();
@@ -142,9 +142,9 @@ class SourceDispatcherTest {
         Subscription sub = new Subscription(
                 10L,
                 "smoke",
+                "cdc-orders",
                 List.of(1L, 2L),
-                new Subscription.SourceRef(
-                        "mq", "trade_db", "orders", Set.of(CdcOp.INSERT), SourceType.CDC, null, null, null),
+                new Subscription.SourceRef("trade_db", "orders", Set.of(CdcOp.INSERT), SourceType.CDC, null, null),
                 null,
                 new Action.Schedule(Duration.ofMinutes(30), "after.orderId"));
         PipelineRegistry registry = new PipelineRegistry();
@@ -180,9 +180,9 @@ class SourceDispatcherTest {
         Subscription sub = new Subscription(
                 11L,
                 "billing",
+                "cdc-orders",
                 List.of(1L),
-                new Subscription.SourceRef(
-                        "mq", "trade_db", "orders", Set.of(CdcOp.UPDATE), SourceType.CDC, null, null, null),
+                new Subscription.SourceRef("trade_db", "orders", Set.of(CdcOp.UPDATE), SourceType.CDC, null, null),
                 null,
                 new Action.Cancel("after.orderId"));
         PipelineRegistry registry = new PipelineRegistry();
@@ -217,9 +217,9 @@ class SourceDispatcherTest {
         Subscription sub = new Subscription(
                 12L,
                 "smoke",
+                "cdc-orders",
                 List.of(1L, 2L),
-                new Subscription.SourceRef(
-                        "mq", "trade_db", "orders", Set.of(CdcOp.INSERT), SourceType.CDC, null, null, null),
+                new Subscription.SourceRef("trade_db", "orders", Set.of(CdcOp.INSERT), SourceType.CDC, null, null),
                 null,
                 new Action.Schedule(Duration.ofMillis(50), "after.orderId"));
         PipelineRegistry registry = new PipelineRegistry();
@@ -283,7 +283,13 @@ class SourceDispatcherTest {
         public void run(final Pipeline pipeline, final Event triggerEvent, final Long subscriptionId) {
             received.add(new SubscriptionMatcher.MatchedSubscription(
                     new Subscription(
-                            subscriptionId, pipeline.namespace(), List.of(pipeline.id()), null, null, new Action.Run()),
+                            subscriptionId,
+                            pipeline.namespace(),
+                            "test",
+                            List.of(pipeline.id()),
+                            null,
+                            null,
+                            new Action.Run()),
                     List.of(pipeline)));
         }
     }

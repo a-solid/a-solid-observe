@@ -94,7 +94,6 @@ class EndToEndFlowTest {
                 null,
                 NAMESPACE,
                 java.util.List.of(pipelineId),
-                "mq",
                 "trade_db",
                 "orders",
                 Set.of(CdcOp.INSERT),
@@ -107,7 +106,6 @@ class EndToEndFlowTest {
                 null,
                 SubscriptionDefinition.Status.ACTIVE,
                 "tester",
-                null,
                 null,
                 null,
                 null,
@@ -165,13 +163,12 @@ class EndToEndFlowTest {
         versions.saveDraft(NAMESPACE, CRON_PIPELINE_NAME, pipeline, "tester");
         versions.publish(NAMESPACE, CRON_PIPELINE_NAME, 1, "tester");
 
-        // CRON 订阅：mq = cronName（loader 把 mq 灌入 SourceRef.mq → 索引键），cron 表达式每秒。
-        // mq/cronName 取同值与 B4 推荐路径一致；expression "* * * * * ?" = 每秒。
+        // CRON 订阅：cron 表达式每秒。Cron 不再需要 mq/cronName 字段——路由走 subscriptionId
+        // （见 ADR-0007 addendum）。订阅以 (namespace, name) 寻址，业务键 = "e2e-cron-sub"。
         SubscriptionDefinition sub = new SubscriptionDefinition(
                 null,
                 NAMESPACE,
                 java.util.List.of(pipelineId),
-                CRON_NAME,
                 null,
                 null,
                 Set.of(),
@@ -187,7 +184,6 @@ class EndToEndFlowTest {
                 null,
                 null,
                 "* * * * * ?",
-                CRON_NAME,
                 SubscriptionDefinition.Concurrent.SKIP);
         subscriptions.create(sub);
 
@@ -240,7 +236,6 @@ class EndToEndFlowTest {
                 null,
                 NAMESPACE,
                 java.util.List.of(pipelineId),
-                "mq",
                 "trade_db",
                 "orders",
                 Set.of(CdcOp.INSERT),
@@ -253,7 +248,6 @@ class EndToEndFlowTest {
                 null,
                 SubscriptionDefinition.Status.ACTIVE,
                 "tester",
-                null,
                 null,
                 null,
                 null,

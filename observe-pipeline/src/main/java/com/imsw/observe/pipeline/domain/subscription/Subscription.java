@@ -8,6 +8,7 @@ import com.imsw.observe.kernel.event.model.SourceType;
 public record Subscription(
         Long id,
         String namespace,
+        String name,
         java.util.List<Long> pipelineIds,
         SourceRef source,
         Condition fieldFilter,
@@ -19,17 +20,16 @@ public record Subscription(
      * <p>{@code opTypes} 仅对 CDC 订阅有意义（{@link CdcOp} INSERT/UPDATE/DELETE）；
      * Cron/Api 订阅不配 opTypes（null 或空），matcher 跳过 opTypes 校验（ADR-0006 §2/§4）。
      *
-     * <p>Cron per-subscription scheduling (B4, ADR-0007)：{@code cronExpression}/{@code cronName}/
-     * {@code concurrent} 仅对 sourceType == CRON 的订阅有意义（其它类型保持 null）。
+     * <p>Cron per-subscription scheduling (B4, ADR-0007 + addendum)：{@code cronExpression}/{@code concurrent}
+     * 仅对 sourceType == CRON 的订阅有意义（其它类型保持 null）。Cron/Api 不再有 source 名/mq/cronName
+     * 字段——路由改用订阅自己的 {@code (namespace, name)}（HTTP 入口）或 {@code subscriptionId}（事件回投）。
      */
     public record SourceRef(
-            String mq,
             String db,
             String table,
             Set<CdcOp> opTypes,
             SourceType sourceType,
             String cronExpression,
-            String cronName,
             Concurrent concurrent) {
 
         /**
