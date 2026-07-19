@@ -58,7 +58,7 @@ import com.imsw.observe.pipeline.domain.subscription.Subscription.SourceRef.Conc
  * 无 infrastructure 具体导入（{@link ScheduledExecutorService} /
  * {@link CronExpression} 为 JDK/Spring 通用并发与表达式工具，非领域 infrastructure）。
  */
-public final class CronSource implements Source {
+public final class CronSource implements Source, SnapshotListener {
 
     private static final Logger LOG = LoggerFactory.getLogger(CronSource.class);
 
@@ -120,6 +120,16 @@ public final class CronSource implements Source {
         Map<Long, CronSub> nextById = collectCronSubs(snap);
         upsert(nextById);
         removeStale(nextById);
+    }
+
+    /**
+     * {@link SnapshotListener} 契约：registry.replace swap 后调本方法，委托 {@link #sync} 起停 CRON 调度。
+     * 取代过去散在 bootstrap 的手动 {@code cronSource.sync(registry.snapshot())}（ADR-0007：CronSource 作为
+     * PipelineRegistry 的观察者）。
+     */
+    @Override
+    public void onSnapshot(final Snapshot snapshot) {
+        sync(snapshot);
     }
 
     /** 收集快照中全部 {@code sourceType == CRON} 且表达式非空的订阅，key by id。 */

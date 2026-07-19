@@ -65,9 +65,6 @@ class EndToEndFlowTest {
     private PipelineHotReloader hotReloader;
 
     @Autowired
-    private CronSource cronScheduler;
-
-    @Autowired
     private InMemoryCdcSource cdcSource;
 
     @Autowired
@@ -196,10 +193,9 @@ class EndToEndFlowTest {
                 SubscriptionDefinition.Concurrent.SKIP);
         subscriptions.create(sub);
 
-        // 热加载后显式同步 CronSource——与生产 HotReloaderScheduler.refresh() 末尾的 sync 调用一致
-        // （@Scheduled 30s 周期太慢，测试主动触发以保证确定性）。
+        // 热加载触发 registry.replace——内置 SnapshotListener 通知，CronSource 自动 sync 起调度句柄
+        // （@Scheduled 30s 周期太慢，测试主动触发 reloader.refresh 以保证确定性）。
         hotReloader.refresh();
-        cronScheduler.sync(registry.snapshot());
         assertThat(registry.isLoaded()).isTrue();
 
         AlertPo alert = waitForFirstAlert();
@@ -207,12 +203,11 @@ class EndToEndFlowTest {
         // namespace 软隔离：cron 触发链路同样落库到触发订阅所在 namespace。
         assertThat(alert.namespace).isEqualTo(NAMESPACE);
 
-        // 清理：删除 CRON 订阅并重新 sync，让 CronSource 取消调度句柄——避免后续测试
+        // 清理：删除 CRON 订阅并 refresh，registry.replace 通知 CronSource 取消调度句柄——避免后续测试
         // （cdcEventMatchesAndPersistsAlert 共享同一 Spring 上下文/DB）期间 CRON 仍在每秒 fire
         // 污染 evidence 计数。
         subscriptions.delete(NAMESPACE, "e2e-cron-sub");
         hotReloader.refresh();
-        cronScheduler.sync(registry.snapshot());
     }
 
     /**

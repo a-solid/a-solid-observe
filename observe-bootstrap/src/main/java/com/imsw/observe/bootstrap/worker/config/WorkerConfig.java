@@ -38,8 +38,14 @@ public class WorkerConfig {
     private static final Logger LOG = LoggerFactory.getLogger(WorkerConfig.class);
 
     @Bean
-    public PipelineRegistry pipelineRegistry() {
-        return new PipelineRegistry();
+    public PipelineRegistry pipelineRegistry(
+            final org.springframework.beans.factory.ObjectProvider<
+                            com.imsw.observe.pipeline.application.SnapshotListener>
+                    snapshotListeners) {
+        // 注入 SnapshotListener（运行时 = CronSource）。registry.replace swap 后自动通知——
+        // 取代过去散在此处的手动 cronSource.sync（ADR-0007：CronSource 作为 registry 观察者）。
+        // ObjectProvider 破构造期循环：registry → CronSource → dispatcher → matcher → registry。
+        return new PipelineRegistry(snapshotListeners);
     }
 
     @Bean
@@ -188,42 +194,30 @@ public class WorkerConfig {
     }
 
     @Bean
-    public ApplicationRunner workerColdStart(
-            final ConfigLoader configLoader, final PipelineRegistry registry, final CronSource cronSource) {
-        // 冷启动：先 load 落库快照，再 sync 让 CronSource 起订阅级调度句柄。CronSource 此时已 start
+    public ApplicationRunner workerColdStart(final ConfigLoader configLoader) {
+        // 冷启动：load 落库快照。registry.replace 内置 SnapshotListener 通知——CronSource 作为 listener
+        // 自动收到新 snapshot 起订阅级调度句柄（无需此处手动 sync）。CronSource 此时已 start
         // （bean 装配阶段注入 listener），sync 触发的 fire 才能正确投递 TickEvent。
-        return args -> {
-            configLoader.load();
-            cronSource.sync(registry.snapshot());
-        };
+        return args -> configLoader.load();
     }
 
     @Bean
-    public HotReloaderScheduler hotReloaderScheduler(
-            final PipelineHotReloader reloader, final PipelineRegistry registry, final CronSource cronSource) {
-        return new HotReloaderScheduler(reloader, registry, cronSource);
+    public HotReloaderScheduler hotReloaderScheduler(final PipelineHotReloader reloader) {
+        return new HotReloaderScheduler(reloader);
     }
 
     public static class HotReloaderScheduler {
 
         private final PipelineHotReloader reloader;
 
-        private final PipelineRegistry registry;
-
-        private final CronSource cronSource;
-
-        HotReloaderScheduler(
-                final PipelineHotReloader reloader, final PipelineRegistry registry, final CronSource cronSource) {
+        HotReloaderScheduler(final PipelineHotReloader reloader) {
             this.reloader = reloader;
-            this.registry = registry;
-            this.cronSource = cronSource;
         }
 
         @Scheduled(fixedDelay = 30_000L)
         public void refresh() {
+            // reloader.refresh → registry.replace → 内置 SnapshotListener 通知 CronSource 起停调度（ADR-0007）。
             reloader.refresh();
-            // 热加载后将最新快照同步给 CronSource——它按订阅 diff 起停 cron 调度（ADR-0007）。
-            cronSource.sync(registry.snapshot());
         }
     }
 }

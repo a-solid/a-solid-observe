@@ -17,14 +17,50 @@ import com.imsw.observe.pipeline.domain.subscription.Subscription;
 
 public final class PipelineRegistry {
 
+    private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(PipelineRegistry.class);
+
     private volatile Snapshot snapshot = Snapshot.empty();
+
+    /**
+     * Snapshot 观察者（{@link SnapshotListener}）。{@code null} = 无 Spring 场景（测试直 new），
+     * {@link #notifyListeners} 遇 null 跳过。用 {@link org.springframework.beans.factory.ObjectProvider}
+     * 而非 {@code List} 是为破构造期循环：registry → CronSource(listener) → dispatcher → matcher → registry。
+     * 构造期不解析，{@link #replace} 时 {@code orderedStream()} 取当前 listener bean（此时 bean 图已就绪）。
+     */
+    private final org.springframework.beans.factory.ObjectProvider<SnapshotListener> listeners;
+
+    /** 无参构造器：测试 / 无 Spring 场景（无 listener，replace 不通知）。 */
+    public PipelineRegistry() {
+        this(null);
+    }
+
+    public PipelineRegistry(final org.springframework.beans.factory.ObjectProvider<SnapshotListener> listeners) {
+        this.listeners = listeners;
+    }
 
     public Snapshot snapshot() {
         return snapshot;
     }
 
     public void replace(final Snapshot next) {
-        this.snapshot = next == null ? Snapshot.empty() : next;
+        // swap 先发生——观察者在 onSnapshot 里看到的是已生效状态。
+        Snapshot applied = next == null ? Snapshot.empty() : next;
+        this.snapshot = applied;
+        notifyListeners(applied);
+    }
+
+    private void notifyListeners(final Snapshot snap) {
+        if (listeners == null) {
+            return;
+        }
+        // per-listener 容错：单个 listener 抛异常不阻断 swap（已成事实）、不影响其他 listener。
+        listeners.orderedStream().forEach(listener -> {
+            try {
+                listener.onSnapshot(snap);
+            } catch (RuntimeException e) {
+                LOG.error("snapshot listener failed; snapshot already applied", e);
+            }
+        });
     }
 
     public boolean isLoaded() {
