@@ -2,7 +2,6 @@ package com.imsw.observe.pipeline.application;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -62,19 +61,20 @@ public final class DryRunService {
         } catch (RuntimeException e) {
             outcome = "FAILED";
         }
-        return new DryRunResult(outcome, sink.captured, Map.of());
+        return new DryRunResult(outcome, sink.captured);
     }
 
-    public record DryRunResult(
-            String outcome, List<AlertSignal> alerts, Map<String, Map<String, Object>> nodeOutputs) {}
+    public record DryRunResult(String outcome, List<AlertSignal> alerts) {}
 
     private static final class CapturingSink implements AlertSink {
 
         final List<AlertSignal> captured = new ArrayList<>();
 
         @Override
-        public void drainAndPersist(final ExecutionContext ctx) {
-            captured.addAll(ctx.data().drainNewAlerts());
+        public boolean drainAndPersist(final ExecutionContext ctx) {
+            List<AlertSignal> drained = ctx.drainAlerts();
+            captured.addAll(drained);
+            return !drained.isEmpty();
         }
     }
 

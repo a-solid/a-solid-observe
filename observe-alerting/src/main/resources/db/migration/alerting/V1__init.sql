@@ -56,8 +56,9 @@ CREATE INDEX idx_alerts_sev_status ON alerts(severity, status, starts_at DESC);
 CREATE INDEX idx_alerts_trace ON alerts(trace_id);
 CREATE INDEX idx_alerts_exec ON alerts(execution_id);
 
--- ADR-0005 §2：1:N evidence。PK 改为 snowflake id，alert_id 降为普通引用列；
+-- ADR-0005 §2：1:N evidence。PK 为 snowflake id，alert_id 降为普通引用列；
 -- emit_seq 为该 alert 内证据序号；(alert_id, captured_at) 支撑按告警回溯证据演变。
+-- 内容载荷 trigger_event = 触发事件 JSON 快照（与 executions.trigger_event 对齐，排错用）。
 CREATE TABLE alerts_evidence (
     id BIGINT PRIMARY KEY,
     alert_id BIGINT NOT NULL,
@@ -67,7 +68,7 @@ CREATE TABLE alerts_evidence (
     execution_id BIGINT NOT NULL,
     node_name VARCHAR,
 
-    outputs LONG VARCHAR,
+    trigger_event LONG VARCHAR,
 
     trace_id VARCHAR,
     span_id VARCHAR,

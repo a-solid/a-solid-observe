@@ -11,7 +11,6 @@ import static org.mockito.Mockito.when;
 
 import java.time.Instant;
 import java.util.List;
-import java.util.Map;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -69,7 +68,7 @@ class ValidateControllerTest {
 
     @Test
     void dryRunWithAtTypeCdcEventDeserializesAndRuns() {
-        DryRunService.DryRunResult stub = new DryRunService.DryRunResult("SUCCESS", List.of(), Map.of());
+        DryRunService.DryRunResult stub = new DryRunService.DryRunResult("SUCCESS", List.of());
         when(dryRunService.run(any(Pipeline.class), any(Event.class))).thenReturn(stub);
 
         var resp = controller.dryRun(new ValidateController.DryRunRequest(MINIMAL_PIPELINE_JSON, CDC_EVENT_JSON));

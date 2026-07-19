@@ -26,22 +26,17 @@ public final class DryRunAlertsApi implements AlertsApi {
                 spec.severity() == null ? Severity.INFO : spec.severity(),
                 labels,
                 new HashMap<>(annotations),
-                spec.evidence(),
                 spec.shortCircuit(),
                 spec.ttl());
         ctx.emitAlert(signal);
     }
 
     @Override
-    public void emit(
-            final Severity severity,
-            final Map<String, String> labels,
-            final Map<String, String> annotations,
-            final AlertSignal.EvidenceSpec evidence) {
+    public void emit(final Severity severity, final Map<String, String> labels, final Map<String, String> annotations) {
         Map<String, Object> annotationsObject = new HashMap<>();
         if (annotations != null) {
             annotations.forEach(annotationsObject::put);
         }
-        emit(new AlertSpec(null, severity, labels, annotationsObject, evidence, false, null));
+        emit(new AlertSpec(null, severity, labels, annotationsObject, false, null));
     }
 }

@@ -81,6 +81,6 @@ class WavePolicyTest {
     }
 
     private static AlertSignal signal(final Severity severity, final Duration ttl) {
-        return new AlertSignal("fp", severity, java.util.Map.of(), java.util.Map.of(), null, false, ttl);
+        return new AlertSignal("fp", severity, java.util.Map.of(), java.util.Map.of(), false, ttl);
     }
 }

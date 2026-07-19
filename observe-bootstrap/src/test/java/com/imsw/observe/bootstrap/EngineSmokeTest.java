@@ -106,12 +106,7 @@ class EngineSmokeTest {
                     alerts.emit(
                         com.imsw.observe.kernel.alert.model.Severity.CRITICAL,
                         java.util.Map.of("entity", "order", "team", "smoke"),
-                        java.util.Map.of("summary", "fraud amt=" + amt.toString()),
-                        new com.imsw.observe.kernel.alert.model.AlertSignal.EvidenceSpec(
-                            java.util.List.of(),
-                            true,
-                            true
-                        )
+                        java.util.Map.of("summary", "fraud amt=" + amt.toString())
                     )
                     return true
                 }
@@ -146,8 +141,10 @@ class EngineSmokeTest {
         final List<AlertSignal> captured = new ArrayList<>();
 
         @Override
-        public void drainAndPersist(final ExecutionContext ctx) {
-            captured.addAll(ctx.data().drainNewAlerts());
+        public boolean drainAndPersist(final ExecutionContext ctx) {
+            List<AlertSignal> drained = ctx.drainAlerts();
+            captured.addAll(drained);
+            return !drained.isEmpty();
         }
     }
 

@@ -29,7 +29,6 @@ import com.imsw.observe.kernel.alert.model.Severity;
 import com.imsw.observe.kernel.event.model.CdcEvent;
 import com.imsw.observe.kernel.event.model.CdcMeta;
 import com.imsw.observe.kernel.event.model.CdcOp;
-import com.imsw.observe.kernel.event.model.ExecutionData;
 import com.imsw.observe.kernel.event.model.ExecutionMeta;
 import com.imsw.observe.kernel.event.model.SourceType;
 import com.imsw.observe.kernel.util.SnowflakeIdGenerator;
@@ -126,7 +125,6 @@ class DefaultAlertSinkIntegrationTest {
                 Severity.CRITICAL,
                 Map.of("team", "overridden"),
                 Map.of("summary", "fraud"),
-                new AlertSignal.EvidenceSpec(List.of(), true, true),
                 false,
                 null);
         // context 用 team=base 的 pipeline.labels
@@ -169,9 +167,7 @@ class DefaultAlertSinkIntegrationTest {
         CdcEvent event = new CdcEvent(meta, Map.of(), Map.of("amount", 2000L), CdcOp.INSERT, Instant.now());
         ExecutionMeta execMeta = new ExecutionMeta(
                 1001L, "trade", 2001L, 1, pipelineLabels, null, null, SourceType.CDC, event, Instant.now(), 3001L);
-        ExecutionData data = new ExecutionData(event);
-        TestExecutionContext ctx = new TestExecutionContext(execMeta, data);
-        ctx.putNodeOutput("check", "amt", new java.math.BigDecimal("2000"));
+        TestExecutionContext ctx = new TestExecutionContext(execMeta, event);
         ctx.emitAlert(signal);
         return ctx;
     }
@@ -182,7 +178,6 @@ class DefaultAlertSinkIntegrationTest {
                 Severity.CRITICAL,
                 Map.of("entity", "order", "team", "demo"),
                 Map.of("summary", "fraud"),
-                new AlertSignal.EvidenceSpec(List.of(), true, true),
                 false,
                 ttl);
     }

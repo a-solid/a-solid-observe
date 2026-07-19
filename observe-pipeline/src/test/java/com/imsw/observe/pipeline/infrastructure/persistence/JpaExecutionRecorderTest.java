@@ -20,7 +20,6 @@ import com.imsw.observe.kernel.error.NodeExecutionException;
 import com.imsw.observe.kernel.event.model.CdcEvent;
 import com.imsw.observe.kernel.event.model.CdcMeta;
 import com.imsw.observe.kernel.event.model.CdcOp;
-import com.imsw.observe.kernel.event.model.ExecutionData;
 import com.imsw.observe.kernel.event.model.ExecutionMeta;
 import com.imsw.observe.kernel.event.model.SourceType;
 import com.imsw.observe.kernel.execution.model.ErrorType;
@@ -114,7 +113,7 @@ class JpaExecutionRecorderTest {
                 event,
                 Instant.now(),
                 3001L);
-        return new DefaultExecutionContext(execMeta, new ExecutionData(event));
+        return new DefaultExecutionContext(execMeta, event);
     }
 
     private void runInTx(final Runnable action) {

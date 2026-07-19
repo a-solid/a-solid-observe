@@ -13,7 +13,6 @@ import com.imsw.observe.kernel.alert.model.Severity;
 import com.imsw.observe.kernel.event.model.CdcEvent;
 import com.imsw.observe.kernel.event.model.CdcMeta;
 import com.imsw.observe.kernel.event.model.CdcOp;
-import com.imsw.observe.kernel.event.model.ExecutionData;
 import com.imsw.observe.kernel.event.model.ExecutionMeta;
 import com.imsw.observe.kernel.event.model.SourceType;
 
@@ -38,8 +37,7 @@ class AlertsApiSimplificationTest {
 
         api.critical(Map.of("summary", "fraud"));
 
-        assertThat(ctx.data().alerts).hasSize(1);
-        AlertSignal signal = ctx.data().alerts.get(0);
+        AlertSignal signal = ctx.drainAlerts().get(0);
         assertThat(signal.severity()).isEqualTo(Severity.CRITICAL);
         assertThat(signal.annotations()).containsEntry("summary", "fraud");
         // 简化 API 不传 labels → spec.labels=null → toSignal 归一化为 empty（打底在 sink 做）
@@ -56,7 +54,7 @@ class AlertsApiSimplificationTest {
 
         api.warning(Map.of("summary", "degraded"));
 
-        AlertSignal signal = ctx.data().alerts.get(0);
+        AlertSignal signal = ctx.drainAlerts().get(0);
         assertThat(signal.severity()).isEqualTo(Severity.WARNING);
         assertThat(signal.annotations()).containsEntry("summary", "degraded");
         assertThat(signal.labels()).isEmpty();
@@ -69,27 +67,27 @@ class AlertsApiSimplificationTest {
 
         api.info(Map.of("summary", "ok"));
 
-        AlertSignal signal = ctx.data().alerts.get(0);
+        AlertSignal signal = ctx.drainAlerts().get(0);
         assertThat(signal.severity()).isEqualTo(Severity.INFO);
         assertThat(signal.annotations()).containsEntry("summary", "ok");
         assertThat(signal.labels()).isEmpty();
     }
 
-    /** 简化 API 不接 evidence/shortCircuit/ttl → spec 内全为 null/false，与逃生口 emit(AlertSpec) 等价。 */
+    /** 简化 API 不接 shortCircuit/ttl → spec 内全为 false/null，与逃生口 emit(AlertSpec) 等价。 */
     @Test
     void simplifiedApiDefaultsMatchEscapeHatchWithDefaults() {
         TestExecutionContext ctx = newContext();
         DefaultAlertsApi api = new DefaultAlertsApi(ctx);
 
         api.critical(Map.of("k", "v"));
-        AlertSignal simplified = ctx.data().alerts.get(0);
+        AlertSignal simplified = ctx.drainAlerts().get(0);
 
-        // 等价的逃生口写法（labels=null/shortCircuit=false/ttl=null/evidence=null）
+        // 等价的逃生口写法（labels=null/shortCircuit=false/ttl=null）
         TestExecutionContext ctx2 = newContext();
         new DefaultAlertsApi(ctx2)
                 .emit(new com.imsw.observe.kernel.alert.model.AlertSpec(
-                        null, Severity.CRITICAL, null, Map.of("k", "v"), null, false, null));
-        AlertSignal escapeHatch = ctx2.data().alerts.get(0);
+                        null, Severity.CRITICAL, null, Map.of("k", "v"), false, null));
+        AlertSignal escapeHatch = ctx2.drainAlerts().get(0);
 
         assertThat(simplified.severity()).isEqualTo(escapeHatch.severity());
         assertThat(simplified.annotations()).isEqualTo(escapeHatch.annotations());
@@ -113,6 +111,6 @@ class AlertsApiSimplificationTest {
                 event,
                 Instant.now(),
                 3001L);
-        return new TestExecutionContext(execMeta, new ExecutionData(event));
+        return new TestExecutionContext(execMeta, event);
     }
 }

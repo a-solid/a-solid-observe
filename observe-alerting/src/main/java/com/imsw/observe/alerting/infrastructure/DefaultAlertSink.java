@@ -70,15 +70,15 @@ public final class DefaultAlertSink implements com.imsw.observe.kernel.alert.spi
     }
 
     @Override
-    public void drainAndPersist(final ExecutionContext ctx) {
-        List<AlertSignal> signals = ctx.data().drainNewAlerts();
+    public boolean drainAndPersist(final ExecutionContext ctx) {
+        List<AlertSignal> signals = ctx.drainAlerts();
         if (signals.isEmpty()) {
-            return;
+            return false;
         }
-        ctx.data().emittedAlert = true;
         for (AlertSignal signal : signals) {
             persist(signal, ctx);
         }
+        return true;
     }
 
     private void persist(final AlertSignal signal, final ExecutionContext ctx) {
@@ -118,7 +118,7 @@ public final class DefaultAlertSink implements com.imsw.observe.kernel.alert.spi
         }
         // WaveDecision.Open：开新波次
         WaveDecision.Open open = (WaveDecision.Open) decision;
-        Map<String, String> annotations = annotationRenderer.render(signal.annotations(), ctx);
+        Map<String, String> annotations = annotationRenderer.render(signal.annotations());
         AlertEntity entity =
                 buildAlertEntity(signal, meta, mergedLabels, annotations, fingerprint, now, open.newEndsAt());
         AlertPo alertPo = AlertMapper.toPo(entity);
@@ -157,7 +157,7 @@ public final class DefaultAlertSink implements com.imsw.observe.kernel.alert.spi
                 entity.pipelineVersion(),
                 entity.executionId(),
                 entity.nodeName(),
-                entity.outputs(),
+                entity.triggerEvent(),
                 entity.traceId(),
                 entity.spanId(),
                 capturedAt,

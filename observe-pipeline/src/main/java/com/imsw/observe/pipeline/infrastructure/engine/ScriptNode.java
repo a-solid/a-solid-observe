@@ -39,10 +39,9 @@ public final class ScriptNode implements Node {
     @Override
     public NodeOutcome execute(final NodeSpec spec, final ExecutionContext ctx) throws NodeExecutionException {
         DefaultExecutionContext defaultCtx = (DefaultExecutionContext) ctx;
-        defaultCtx.enterNode(spec.name());
         DefaultScriptContext scriptCtx = defaultCtx.scriptContext();
         if (scriptCtx.get("event") == null) {
-            Event trigger = ctx.data().event;
+            Event trigger = ctx.event();
             scriptCtx.putGlobal("event", trigger);
             scriptCtx.putGlobal("ctx", scriptCtx);
             scriptCtx.putGlobal("alerts", alertsApiFactory.apply(ctx));

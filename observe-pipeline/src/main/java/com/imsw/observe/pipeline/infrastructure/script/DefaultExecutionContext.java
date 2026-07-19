@@ -1,42 +1,37 @@
 package com.imsw.observe.pipeline.infrastructure.script;
 
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.ArrayList;
+import java.util.List;
 
 import com.imsw.observe.kernel.alert.model.AlertSignal;
+import com.imsw.observe.kernel.event.model.Event;
 import com.imsw.observe.kernel.event.model.ExecutionContext;
-import com.imsw.observe.kernel.event.model.ExecutionData;
 import com.imsw.observe.kernel.event.model.ExecutionMeta;
-import com.imsw.observe.kernel.util.TypeConverter;
 
+/**
+ * ExecutionContext 默认实现（瘦身版）。
+ *
+ * <p>持有执行元信息 + 触发事件 + 累积的告警信号。{@link #scriptContext()} 暴露脚本运行时工作区
+ * （仅 ScriptNode 用，非 ExecutionContext 接口契约——接口保持纯净，不塞脚本细节）。
+ */
 public final class DefaultExecutionContext implements ExecutionContext {
 
     private final ExecutionMeta meta;
-    private final ExecutionData data;
-    private final Map<String, Map<String, Object>> outputs = new HashMap<>();
-    private final DefaultScriptContext scriptContext = new DefaultScriptContext();
-    private String currentNode = "";
 
-    public DefaultExecutionContext(final ExecutionMeta meta, final ExecutionData data) {
+    private final Event event;
+
+    private final List<AlertSignal> alerts = new ArrayList<>();
+
+    private final DefaultScriptContext scriptContext = new DefaultScriptContext();
+
+    public DefaultExecutionContext(final ExecutionMeta meta, final Event event) {
         this.meta = meta;
-        this.data = data;
+        this.event = event;
     }
 
+    /** 脚本运行时工作区（非接口契约，仅 ScriptNode 用）。 */
     public DefaultScriptContext scriptContext() {
         return scriptContext;
-    }
-
-    @Override
-    public Map<String, Map<String, Object>> nodeOutputs() {
-        Map<String, Map<String, Object>> snapshot = new HashMap<>();
-        outputs.forEach((node, kvs) -> snapshot.put(node, Collections.unmodifiableMap(new HashMap<>(kvs))));
-        return Collections.unmodifiableMap(snapshot);
-    }
-
-    public void enterNode(final String name) {
-        this.currentNode = name;
-        outputs.computeIfAbsent(name, k -> new HashMap<>());
     }
 
     @Override
@@ -45,37 +40,19 @@ public final class DefaultExecutionContext implements ExecutionContext {
     }
 
     @Override
-    public ExecutionData data() {
-        return data;
-    }
-
-    @Override
-    public void putOutput(final String key, final Object value) {
-        outputs.computeIfAbsent(currentNode, k -> new HashMap<>()).put(key, value);
-    }
-
-    @Override
-    public Object getOutput(final String key) {
-        Map<String, Object> nodeOutputs = outputs.get(currentNode);
-        return nodeOutputs == null ? null : nodeOutputs.get(key);
-    }
-
-    @Override
-    public <T> T getOutput(final String key, final Class<T> type) {
-        return TypeConverter.convert(getOutput(key), type);
-    }
-
-    @Override
-    public <T> T getNodeOutput(final String nodeName, final String key, final Class<T> type) {
-        Map<String, Object> nodeOutputs = outputs.get(nodeName);
-        if (nodeOutputs == null) {
-            return null;
-        }
-        return TypeConverter.convert(nodeOutputs.get(key), type);
+    public Event event() {
+        return event;
     }
 
     @Override
     public void emitAlert(final AlertSignal signal) {
-        data.alerts.add(signal);
+        alerts.add(signal);
+    }
+
+    @Override
+    public List<AlertSignal> drainAlerts() {
+        List<AlertSignal> snapshot = List.copyOf(alerts);
+        alerts.clear();
+        return snapshot;
     }
 }

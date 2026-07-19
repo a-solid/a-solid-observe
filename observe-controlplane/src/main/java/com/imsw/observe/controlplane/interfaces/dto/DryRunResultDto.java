@@ -6,8 +6,7 @@ import java.util.Map;
 import com.imsw.observe.kernel.alert.model.AlertSignal;
 import com.imsw.observe.pipeline.application.DryRunService;
 
-public record DryRunResultDto(
-        String outcome, List<Map<String, Object>> alerts, Map<String, Map<String, Object>> nodeOutputs) {
+public record DryRunResultDto(String outcome, List<Map<String, Object>> alerts) {
 
     public static DryRunResultDto from(final DryRunService.DryRunResult result) {
         if (result == null) {
@@ -16,7 +15,7 @@ public record DryRunResultDto(
         List<Map<String, Object>> alerts = result.alerts() == null
                 ? List.of()
                 : result.alerts().stream().map(DryRunResultDto::alertToMap).toList();
-        return new DryRunResultDto(result.outcome(), alerts, result.nodeOutputs());
+        return new DryRunResultDto(result.outcome(), alerts);
     }
 
     private static Map<String, Object> alertToMap(final AlertSignal signal) {

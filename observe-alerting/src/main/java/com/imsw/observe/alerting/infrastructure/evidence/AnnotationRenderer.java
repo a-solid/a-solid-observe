@@ -3,11 +3,10 @@ package com.imsw.observe.alerting.infrastructure.evidence;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-import com.imsw.observe.kernel.event.model.ExecutionContext;
-
+/** 把脚本 annotations（Object 值）字符串化为 alert 表的 String 值。 */
 public final class AnnotationRenderer {
 
-    public Map<String, String> render(final Map<String, Object> annotations, final ExecutionContext ctx) {
+    public Map<String, String> render(final Map<String, Object> annotations) {
         if (annotations == null || annotations.isEmpty()) {
             return Map.of();
         }

@@ -1,24 +1,27 @@
 package com.imsw.observe.pipeline.infrastructure.script;
 
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
 import com.imsw.observe.kernel.script.spi.ScriptContext;
 import com.imsw.observe.kernel.util.TypeConverter;
 
+/**
+ * ScriptContext 默认实现（单 space）。
+ *
+ * <p>历史版本曾分 workingSpace（脚本 set 写入）与 globalSpace（engine bindings：event/alerts/db/now）
+ * 两套 map，但行为等价（没人 shadow bindings，{@code get} 先 working 再 global 的区分无实际意义），
+ * 合一为单 map（simplify-contexts 重构）。{@link #putGlobal} 保留为 ScriptNode 初始化 bindings 的入口，
+ * 与 {@link #set} 等价（都写同一 map），语义上区分"平台注入"vs"脚本写入"仅作注释意图。
+ */
 public final class DefaultScriptContext implements ScriptContext {
 
-    private final Map<String, Object> workingSpace = new HashMap<>();
-    private final Map<String, Object> globalSpace = new HashMap<>();
+    private final Map<String, Object> vars = new HashMap<>();
 
     @Override
     public Object get(final String key) {
-        if (workingSpace.containsKey(key)) {
-            return workingSpace.get(key);
-        }
-        return globalSpace.get(key);
+        return vars.get(key);
     }
 
     @Override
@@ -28,18 +31,16 @@ public final class DefaultScriptContext implements ScriptContext {
 
     @Override
     public void set(final String key, final Object value) {
-        workingSpace.put(key, value);
+        vars.put(key, value);
     }
 
     @Override
     public Set<String> keys() {
-        Set<String> all = new HashSet<>();
-        all.addAll(workingSpace.keySet());
-        all.addAll(globalSpace.keySet());
-        return all;
+        return Set.copyOf(vars.keySet());
     }
 
+    /** 平台注入 binding（event/alerts/db/now）；与 {@link #set} 等价，名取其意。 */
     public void putGlobal(final String key, final Object value) {
-        globalSpace.put(key, value);
+        vars.put(key, value);
     }
 }

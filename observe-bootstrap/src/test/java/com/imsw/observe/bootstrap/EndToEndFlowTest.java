@@ -284,9 +284,7 @@ class EndToEndFlowTest {
                 alerts.emit(
                     com.imsw.observe.kernel.alert.model.Severity.CRITICAL,
                     java.util.Map.of("entity", "delayed"),
-                    java.util.Map.of("summary", "fired"),
-                    new com.imsw.observe.kernel.alert.model.AlertSignal.EvidenceSpec(
-                        java.util.List.of(), true, true))
+                    java.util.Map.of("summary", "fired"))
                 return true
                 """,
                 ErrorPolicy.FAIL,
@@ -315,9 +313,7 @@ class EndToEndFlowTest {
                 alerts.emit(
                     com.imsw.observe.kernel.alert.model.Severity.CRITICAL,
                     java.util.Map.of("entity", "cron"),
-                    java.util.Map.of("summary", "tick"),
-                    new com.imsw.observe.kernel.alert.model.AlertSignal.EvidenceSpec(
-                        java.util.List.of(), true, true))
+                    java.util.Map.of("summary", "tick"))
                 return true
                 """,
                 ErrorPolicy.FAIL,
@@ -347,9 +343,7 @@ class EndToEndFlowTest {
                     alerts.emit(
                         com.imsw.observe.kernel.alert.model.Severity.CRITICAL,
                         java.util.Map.of("entity", "order"),
-                        java.util.Map.of("summary", "big"),
-                        new com.imsw.observe.kernel.alert.model.AlertSignal.EvidenceSpec(
-                            java.util.List.of(), true, true))
+                        java.util.Map.of("summary", "big"))
                     return true
                 }
                 return false

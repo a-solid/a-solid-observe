@@ -15,7 +15,6 @@ import com.imsw.observe.kernel.error.ScriptSandboxException;
 import com.imsw.observe.kernel.error.ScriptTimeoutException;
 import com.imsw.observe.kernel.event.model.Event;
 import com.imsw.observe.kernel.event.model.ExecutionContext;
-import com.imsw.observe.kernel.event.model.ExecutionData;
 import com.imsw.observe.kernel.event.model.ExecutionMeta;
 import com.imsw.observe.kernel.execution.model.ErrorType;
 import com.imsw.observe.kernel.execution.spi.ExecutionRecorder;
@@ -75,22 +74,22 @@ public final class DefaultPipelineRunner implements PipelineRunner {
     @Override
     public void run(final Pipeline pipeline, final Event triggerEvent, final Long subscriptionId) {
         ExecutionMeta meta = buildMeta(pipeline, triggerEvent, subscriptionId);
-        ExecutionData data = new ExecutionData(triggerEvent);
-        ExecutionContext ctx = new DefaultExecutionContext(meta, data);
+        ExecutionContext ctx = new DefaultExecutionContext(meta, triggerEvent);
 
         Instant start = Instant.now();
         String[] outcomeHolder = new String[1];
+        boolean[] emittedHolder = new boolean[1];
         Span span = TRACER.spanBuilder("pipeline " + pipeline.id()).startSpan();
         try (var scope = span.makeCurrent()) {
             transactionOperator.execute(() -> {
                 String outcome = executor.execute(pipeline, ctx).name();
-                alertSink.drainAndPersist(ctx);
+                emittedHolder[0] = alertSink.drainAndPersist(ctx);
                 outcomeHolder[0] = outcome;
                 span.setAttribute("outcome", outcome);
             });
             Duration duration = Duration.between(start, Instant.now());
             executionRecorder.recordSuccess(
-                    ctx, outcomeHolder[0], duration, data.emittedAlert, pipeline.executionLogSampleRatio());
+                    ctx, outcomeHolder[0], duration, emittedHolder[0], pipeline.executionLogSampleRatio());
             count(EXECUTIONS, pipeline.id(), "status", outcomeHolder[0]);
             LOG.info("pipeline {} outcome={} duration_ms={}", pipeline.id(), outcomeHolder[0], duration.toMillis());
         } catch (RuntimeException e) {

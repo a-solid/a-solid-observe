@@ -1,18 +1,15 @@
 package com.imsw.observe.alerting.infrastructure.persistence.evidence;
 
 import java.time.Instant;
-import java.util.Map;
 
 import jakarta.persistence.Column;
-import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
-import com.imsw.observe.kernel.util.MapStringObjectToJsonConverter;
-
 /**
- * 证据 PO（ADR-0005 §2：1:N）。PK 改为 snowflake {@code id}，{@code alert_id} 降为普通引用列。
+ * 证据 PO（ADR-0005 §2：1:N）。PK 为 snowflake {@code id}，{@code alert_id} 降为普通引用列。
+ * 内容载荷 {@code trigger_event} = 触发事件 JSON 快照（与 executions.trigger_event 对齐）。
  */
 @Entity
 @Table(name = "alerts_evidence")
@@ -40,9 +37,8 @@ public class EvidencePo {
     @Column(name = "node_name")
     public String nodeName;
 
-    @Column(name = "outputs", length = 262144)
-    @Convert(converter = MapStringObjectToJsonConverter.class)
-    public Map<String, Object> outputs;
+    @Column(name = "trigger_event", length = 1_048_576)
+    public String triggerEvent;
 
     @Column(name = "trace_id")
     public String traceId;

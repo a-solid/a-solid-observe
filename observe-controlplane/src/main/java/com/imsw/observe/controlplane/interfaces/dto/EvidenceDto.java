@@ -1,11 +1,10 @@
 package com.imsw.observe.controlplane.interfaces.dto;
 
 import java.time.Instant;
-import java.util.Map;
 
 import com.imsw.observe.alerting.domain.EvidenceEntity;
 
-/** 证据 DTO（ADR-0005 §2：自有 id + emitSeq，1:N）。 */
+/** 证据 DTO（ADR-0005 §2：自有 id + emitSeq，1:N）。内容载荷 triggerEvent = 触发事件 JSON 快照。 */
 public record EvidenceDto(
         Long id,
         Long alertId,
@@ -14,7 +13,7 @@ public record EvidenceDto(
         int pipelineVersion,
         Long executionId,
         String nodeName,
-        Map<String, Object> outputs,
+        String triggerEvent,
         String traceId,
         String spanId,
         Instant capturedAt,
@@ -30,7 +29,7 @@ public record EvidenceDto(
                 e.pipelineVersion(),
                 e.executionId(),
                 e.nodeName(),
-                e.outputs(),
+                e.triggerEvent(),
                 e.traceId(),
                 e.spanId(),
                 e.capturedAt(),

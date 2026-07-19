@@ -1,28 +1,25 @@
 package com.imsw.observe.alerting;
 
-import java.util.LinkedHashMap;
-import java.util.Map;
+import java.util.ArrayList;
+import java.util.List;
 
 import com.imsw.observe.kernel.alert.model.AlertSignal;
+import com.imsw.observe.kernel.event.model.Event;
 import com.imsw.observe.kernel.event.model.ExecutionContext;
-import com.imsw.observe.kernel.event.model.ExecutionData;
 import com.imsw.observe.kernel.event.model.ExecutionMeta;
 
+/** ExecutionContext 测试桩（瘦身接口版）。 */
 final class TestExecutionContext implements ExecutionContext {
 
     private final ExecutionMeta meta;
 
-    private final ExecutionData data;
+    private final Event event;
 
-    private final Map<String, Map<String, Object>> outputs = new LinkedHashMap<>();
+    private final List<AlertSignal> alerts = new ArrayList<>();
 
-    TestExecutionContext(final ExecutionMeta meta, final ExecutionData data) {
+    TestExecutionContext(final ExecutionMeta meta, final Event event) {
         this.meta = meta;
-        this.data = data;
-    }
-
-    void putNodeOutput(final String node, final String key, final Object value) {
-        outputs.computeIfAbsent(node, k -> new LinkedHashMap<>()).put(key, value);
+        this.event = event;
     }
 
     @Override
@@ -31,35 +28,19 @@ final class TestExecutionContext implements ExecutionContext {
     }
 
     @Override
-    public ExecutionData data() {
-        return data;
-    }
-
-    @Override
-    public void putOutput(final String key, final Object value) {}
-
-    @Override
-    public Object getOutput(final String key) {
-        return null;
-    }
-
-    @Override
-    public <T> T getOutput(final String key, final Class<T> type) {
-        return null;
-    }
-
-    @Override
-    public <T> T getNodeOutput(final String nodeName, final String key, final Class<T> type) {
-        return null;
-    }
-
-    @Override
-    public Map<String, Map<String, Object>> nodeOutputs() {
-        return outputs;
+    public Event event() {
+        return event;
     }
 
     @Override
     public void emitAlert(final AlertSignal signal) {
-        data.alerts.add(signal);
+        alerts.add(signal);
+    }
+
+    @Override
+    public List<AlertSignal> drainAlerts() {
+        List<AlertSignal> snapshot = List.copyOf(alerts);
+        alerts.clear();
+        return snapshot;
     }
 }

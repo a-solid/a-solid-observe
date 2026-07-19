@@ -1,11 +1,5 @@
 package com.imsw.observe.alerting.infrastructure.evidence;
 
-import java.time.Instant;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.imsw.observe.alerting.domain.EvidenceEntity;
@@ -13,6 +7,16 @@ import com.imsw.observe.kernel.alert.model.AlertSignal;
 import com.imsw.observe.kernel.event.model.ExecutionContext;
 import com.imsw.observe.kernel.event.model.ExecutionMeta;
 
+/**
+ * Evidence 收集器（ADR-0005 §2 + simplify-contexts 重构）。
+ *
+ * <p>evidence 的内容载荷 = 触发事件快照（序列化 {@link ExecutionMeta#triggerEvent()}）——排错时最硬的
+ * 证据（报警那一刻数据长啥样）。取代历史版本的 nodeOutputs/capture 机制（node 输出链零调用、
+ * capture 从空 nodeOutputs 捞 key 恒空——均坏/dead，已砍）。
+ *
+ * <p>每个 evidence 行 = 触发事件 JSON + 元信息（namespace/pipeline/execution/trace/capturedAt/emitSeq）。
+ * 序列化超 {@link #MAX_BYTES} 截断并标 truncated。
+ */
 public final class EvidenceCollector {
 
     private static final int MAX_BYTES = 256 * 1024;
@@ -25,8 +29,7 @@ public final class EvidenceCollector {
 
     public Collected collect(final AlertSignal signal, final ExecutionContext ctx) {
         ExecutionMeta meta = ctx.meta();
-        Map<String, Object> outputs = collectOutputs(signal.evidence(), ctx.nodeOutputs());
-        Sized sized = enforceLimit(outputs);
+        Serialized serialized = serializeEvent(meta.triggerEvent());
         EvidenceEntity entity = new EvidenceEntity(
                 null,
                 null,
@@ -35,86 +38,34 @@ public final class EvidenceCollector {
                 meta.pipelineVersion(),
                 meta.executionId(),
                 null,
-                sized.outputs,
+                serialized.json,
                 meta.traceId(),
                 meta.spanId(),
-                Instant.now(),
-                sized.truncated,
+                java.time.Instant.now(),
+                serialized.truncated,
                 0);
-        return new Collected(entity, sized.sizeBytes, sized.truncated);
+        return new Collected(entity, serialized.sizeBytes, serialized.truncated);
     }
 
-    private Map<String, Object> collectOutputs(
-            final AlertSignal.EvidenceSpec spec, final Map<String, Map<String, Object>> nodeOutputs) {
-        if (nodeOutputs == null || nodeOutputs.isEmpty()) {
-            return new LinkedHashMap<>();
+    private Serialized serializeEvent(final Object event) {
+        if (event == null) {
+            return new Serialized(null, 0, false);
         }
-        Map<String, Object> result = new LinkedHashMap<>();
-        boolean attachOutputs = spec == null || spec.attachOutputs();
-        if (attachOutputs) {
-            nodeOutputs.forEach((node, kvs) -> {
-                if (kvs != null && !kvs.isEmpty()) {
-                    result.put(node, new LinkedHashMap<>(kvs));
-                }
-            });
-        }
-        Set<String> capture = captureKeys(spec);
-        if (!capture.isEmpty()) {
-            Map<String, Object> captured = collectCaptured(capture, nodeOutputs);
-            if (!captured.isEmpty()) {
-                result.put("_captured", captured);
-            }
-        }
-        return result;
-    }
-
-    private static Set<String> captureKeys(final AlertSignal.EvidenceSpec spec) {
-        if (spec == null || spec.capture() == null) {
-            return Set.of();
-        }
-        return Set.copyOf(spec.capture());
-    }
-
-    private static Map<String, Object> collectCaptured(
-            final Set<String> capture, final Map<String, Map<String, Object>> nodeOutputs) {
-        Map<String, Object> captured = new LinkedHashMap<>();
-        for (String key : capture) {
-            nodeOutputs.forEach((node, kvs) -> {
-                if (kvs != null && kvs.containsKey(key)) {
-                    captured.put(key, kvs.get(key));
-                }
-            });
-        }
-        return captured;
-    }
-
-    private Sized enforceLimit(final Map<String, Object> outputs) {
-        int size = measure(outputs);
-        if (size <= MAX_BYTES) {
-            return new Sized(outputs, size, false);
-        }
-        Map<String, Object> trimmed = new LinkedHashMap<>();
-        for (Map.Entry<String, Object> entry : outputs.entrySet()) {
-            trimmed.put(entry.getKey(), entry.getValue());
-            int measured = measure(trimmed);
-            if (measured > MAX_BYTES) {
-                trimmed.remove(entry.getKey());
-                trimmed.put("_truncated", List.of("size_limit_exceeded"));
-                break;
-            }
-        }
-        return new Sized(trimmed, measure(trimmed), true);
-    }
-
-    private int measure(final Object value) {
+        String json;
         try {
-            return objectMapper.writeValueAsString(value).length();
+            json = objectMapper.writeValueAsString(event);
         } catch (JsonProcessingException e) {
-            return 0;
+            return new Serialized(null, 0, false);
         }
+        int size = json.length();
+        if (size <= MAX_BYTES) {
+            return new Serialized(json, size, false);
+        }
+        // 截断到字节上限（粗粒度——按字符数截，JSON 可能不完整，但 evidence 仅排错展示用，可接受）。
+        return new Serialized(json.substring(0, MAX_BYTES), MAX_BYTES, true);
     }
 
-    private record Sized(Map<String, Object> outputs, int sizeBytes, boolean truncated) {}
+    private record Serialized(String json, int sizeBytes, boolean truncated) {}
 
     public record Collected(EvidenceEntity entity, int sizeBytes, boolean truncated) {}
 }

@@ -40,16 +40,12 @@ public final class DefaultAlertsApi implements AlertsApi {
     }
 
     @Override
-    public void emit(
-            final Severity severity,
-            final Map<String, String> labels,
-            final Map<String, String> annotations,
-            final AlertSignal.EvidenceSpec evidence) {
+    public void emit(final Severity severity, final Map<String, String> labels, final Map<String, String> annotations) {
         Map<String, Object> annotationsObject = new HashMap<>();
         if (annotations != null) {
             annotations.forEach(annotationsObject::put);
         }
-        emit(new AlertSpec(null, severity, labels, annotationsObject, evidence, false, null));
+        emit(new AlertSpec(null, severity, labels, annotationsObject, false, null));
     }
 
     private AlertSignal toSignal(final AlertSpec spec) {
@@ -58,7 +54,6 @@ public final class DefaultAlertsApi implements AlertsApi {
         String fingerprint = spec.fingerprint() == null
                 ? AlertFingerprintCalculator.compute(ctx.meta().pipelineId(), labels)
                 : spec.fingerprint();
-        return new AlertSignal(
-                fingerprint, spec.severity(), labels, annotations, spec.evidence(), spec.shortCircuit(), spec.ttl());
+        return new AlertSignal(fingerprint, spec.severity(), labels, annotations, spec.shortCircuit(), spec.ttl());
     }
 }
