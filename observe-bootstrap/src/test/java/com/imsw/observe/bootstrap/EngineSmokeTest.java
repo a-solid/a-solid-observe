@@ -119,8 +119,6 @@ class EngineSmokeTest {
                 1L,
                 "smoke",
                 1,
-                "smoke-team",
-                "smoke-app",
                 Map.of("domain", "trade"),
                 "Smoke Pipeline",
                 Pipeline.Status.PUBLISHED,

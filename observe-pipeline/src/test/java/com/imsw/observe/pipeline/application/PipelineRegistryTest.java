@@ -83,8 +83,6 @@ class PipelineRegistryTest {
                                 1L,
                                 "ns",
                                 1,
-                                "t",
-                                "app",
                                 Map.of(),
                                 "name",
                                 Pipeline.Status.PUBLISHED,

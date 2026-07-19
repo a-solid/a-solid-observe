@@ -133,8 +133,6 @@ class SourceDispatcherBackpressureTest {
                 id,
                 "smoke",
                 version,
-                "team",
-                "app",
                 Map.of(),
                 "name",
                 Pipeline.Status.PUBLISHED,
