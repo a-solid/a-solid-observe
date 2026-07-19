@@ -44,8 +44,7 @@ CREATE INDEX idx_pv_status_published ON pipeline_versions(status, published_at D
 CREATE TABLE subscriptions (
     id BIGINT PRIMARY KEY,
     namespace VARCHAR NOT NULL,
-    pipeline_id BIGINT NOT NULL,
-    pipeline_version INT NOT NULL,
+    pipeline_ids VARCHAR(4096) NOT NULL,
 
     mq VARCHAR,
     topic VARCHAR,
