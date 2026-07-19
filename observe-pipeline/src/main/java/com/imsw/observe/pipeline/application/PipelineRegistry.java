@@ -93,6 +93,12 @@ public final class PipelineRegistry {
          */
         final Map<String, Subscription> subscriptionsByNamespaceAndName;
 
+        /**
+         * (namespace, name) → Pipeline 索引：仅 InjectController 用（按业务键寻址 pipeline 替代物理 id）。
+         * 与其它 controller 对齐——CONTEXT.md "对外 API 用业务键寻址" 铁律。
+         */
+        final Map<String, Pipeline> pipelinesByNamespaceAndName;
+
         final boolean loaded;
 
         private Snapshot(
@@ -100,16 +106,18 @@ public final class PipelineRegistry {
                 final Map<String, List<Subscription>> subscriptionsByDbTable,
                 final Map<Long, Subscription> subscriptionsById,
                 final Map<String, Subscription> subscriptionsByNamespaceAndName,
+                final Map<String, Pipeline> pipelinesByNamespaceAndName,
                 final boolean loaded) {
             this.pipelinesById = pipelinesById;
             this.subscriptionsByDbTable = subscriptionsByDbTable;
             this.subscriptionsById = subscriptionsById;
             this.subscriptionsByNamespaceAndName = subscriptionsByNamespaceAndName;
+            this.pipelinesByNamespaceAndName = pipelinesByNamespaceAndName;
             this.loaded = loaded;
         }
 
         public static Snapshot empty() {
-            return new Snapshot(Map.of(), Map.of(), Map.of(), Map.of(), false);
+            return new Snapshot(Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), false);
         }
 
         /**
@@ -123,6 +131,12 @@ public final class PipelineRegistry {
          */
         public static Snapshot loaded(final Map<Long, Pipeline> pipelines, final List<Subscription> subscriptions) {
             Map<Long, Pipeline> pipelineCopy = Map.copyOf(pipelines);
+            Map<String, Pipeline> pipelineByNsName = new HashMap<>();
+            for (Pipeline p : pipelineCopy.values()) {
+                if (p.namespace() != null && p.name() != null) {
+                    pipelineByNsName.put(nsNameKey(p.namespace(), p.name()), p);
+                }
+            }
             Map<String, List<Subscription>> cdcIndex = new HashMap<>();
             Map<Long, Subscription> byId = new HashMap<>();
             Map<String, Subscription> byNsName = new HashMap<>();
@@ -150,6 +164,7 @@ public final class PipelineRegistry {
                     Collections.unmodifiableMap(immutableCdc),
                     Collections.unmodifiableMap(byId),
                     Collections.unmodifiableMap(byNsName),
+                    Collections.unmodifiableMap(pipelineByNsName),
                     true);
         }
 
@@ -209,6 +224,14 @@ public final class PipelineRegistry {
 
         public Pipeline pipelineById(final Long pipelineId) {
             return pipelinesById.get(pipelineId);
+        }
+
+        /** InjectController 专用：按 (namespace, name) 直查 pipeline（找不到返回 null）。 */
+        public Pipeline pipelineByNamespaceAndName(final String namespace, final String name) {
+            if (namespace == null || name == null) {
+                return null;
+            }
+            return pipelinesByNamespaceAndName.get(nsNameKey(namespace, name));
         }
 
         static String dbTableKey(final String db, final String table) {

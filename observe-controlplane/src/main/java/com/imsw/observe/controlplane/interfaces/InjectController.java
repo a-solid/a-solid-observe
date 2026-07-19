@@ -26,8 +26,9 @@ import com.imsw.observe.pipeline.domain.Pipeline;
  * （真实 AlertSink + ExecutionRecorder + 真事务），pipeline 执行产出告警<b>真实落库</b>、execution 记录真实写入。
  * 用于"用自定义数据手动触发一次告警"——例如排错时灌一条 CDC 事件验证脚本 + 看告警是否生成。
  *
- * <p>按 {@code pipelineId} 从运行态 registry 取已加载的（已发布 + 已热加载）Pipeline；不在 registry 则 404
- * （提示未发布或未热加载）。{@code eventJson} 须带 {@code @type} discriminator（同 dry-run）。
+ * <p>按业务键 {@code (namespace, name)} 从运行态 registry 取已加载的（已发布 + 已热加载）Pipeline——与其它
+ * controller 对齐（CONTEXT.md "对外 API 用业务键寻址" 铁律）；不在 registry 则 404（提示未发布或未热加载）。
+ * {@code eventJson} 须带 {@code @type} discriminator（同 dry-run）。
  */
 @RestController
 @RequestMapping("/api/v1")
@@ -42,13 +43,15 @@ public class InjectController {
         this.runner = runner;
     }
 
-    @PostMapping("/pipelines/{pipelineId}/inject")
+    @PostMapping("/namespaces/{namespace}/pipelines/{name}/inject")
     public ApiResponse<InjectResultDto> inject(
-            @PathVariable final Long pipelineId, @Valid @RequestBody final InjectRequest req) {
-        Pipeline pipeline = registry.snapshot().pipelineById(pipelineId);
+            @PathVariable final String namespace,
+            @PathVariable final String name,
+            @Valid @RequestBody final InjectRequest req) {
+        Pipeline pipeline = registry.snapshot().pipelineByNamespaceAndName(namespace, name);
         if (pipeline == null) {
-            throw new ResourceNotFoundException(
-                    "pipeline " + pipelineId + " not loaded in registry (not published or not hot-reloaded)");
+            throw new ResourceNotFoundException("pipeline " + namespace + "/" + name
+                    + " not loaded in registry (not published or not hot-reloaded)");
         }
         Event event = deserializeEvent(req.eventJson());
         String outcome;
