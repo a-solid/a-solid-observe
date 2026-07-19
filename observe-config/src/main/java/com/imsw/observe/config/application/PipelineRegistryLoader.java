@@ -93,22 +93,15 @@ public final class PipelineRegistryLoader {
             if (pipeline == null) {
                 return null;
             }
-            // 旧数据（namespace 列加入前序列化的 definitionJson）可能 namespace=null；
-            // 用版本所在 PO 的 namespace 兜底，保证运行态 Pipeline 必带 namespace（软隔离铁律）。
+            // namespace invariant：saveDraft 已保证 definitionJson 内嵌 namespace 非空且与版本 PO 一致
+            // （软隔离铁律 ADR-0002）。body namespace null/blank 视为数据损坏——拒绝加载（warn + skip），
+            // 不再用版本 PO 的 namespace 兜底重建（旧 11 参 positional 重建脆且为旧数据迁移兜底，项目未上线无此场景）。
             if (pipeline.namespace() == null || pipeline.namespace().isBlank()) {
-                return new Pipeline(
-                        pipeline.id(),
-                        versionPo.namespace,
-                        pipeline.version(),
-                        pipeline.team(),
-                        pipeline.application(),
-                        pipeline.labels(),
-                        pipeline.name(),
-                        pipeline.status(),
-                        pipeline.nodes(),
-                        pipeline.createdAt(),
-                        pipeline.publishedAt(),
-                        pipeline.executionLogSampleRatio());
+                LOG.warn(
+                        "pipeline {} version {} has blank namespace in definitionJson, skipping",
+                        versionPo.pipelineId,
+                        versionPo.version);
+                return null;
             }
             return pipeline;
         } catch (RuntimeException e) {

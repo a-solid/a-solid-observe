@@ -1,5 +1,7 @@
 package com.imsw.observe.pipeline.application;
 
+import java.util.function.Supplier;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -36,19 +38,16 @@ public final class DelayedActionHandler {
 
     private final DelayedEventStore store;
 
-    private volatile EventListener dispatcher;
-
-    public DelayedActionHandler(final DelayedEventStore store, final EventListener dispatcher) {
-        this.store = store;
-        this.dispatcher = dispatcher;
-    }
-
     /**
-     * Wiring 入口：dispatcher bean 创建后调用，把自己注入 handler——避免构造期循环依赖
-     * （dispatcher 持有 handler、handler 持有 dispatcher=EventListener）。
+     * Dispatcher 延迟获取——构造期 dispatcher bean 尚未就绪（循环：dispatcher 持有 handler、handler 持有
+     * dispatcher=EventListener），用 {@code Supplier} 让 fire 时才解析。application 层纯 Java（无 Spring 注解），
+     * 装配方传 {@code () -> dispatcher}，Spring 自然解析循环。
      */
-    public void setDispatcher(final EventListener dispatcher) {
-        this.dispatcher = dispatcher;
+    private final Supplier<EventListener> dispatcherSupplier;
+
+    public DelayedActionHandler(final DelayedEventStore store, final Supplier<EventListener> dispatcherSupplier) {
+        this.store = store;
+        this.dispatcherSupplier = dispatcherSupplier;
     }
 
     /**
@@ -99,7 +98,7 @@ public final class DelayedActionHandler {
             Event delayed = wrapAsDelayed(original, subscription, correlationKey);
             // DelayedEvent 作为普通事件回流：dispatcher.onEvent → matcher 按 subscriptionId 路由回原订阅 →
             // 扇出 N 个 pipeline（与 ADR-0006 addendum "DelayedEvent 走 matcher" 一致）。
-            dispatcher.onEvent(delayed);
+            dispatcherSupplier.get().onEvent(delayed);
         } catch (RuntimeException e) {
             LOG.warn("delayed fire failed subscription={} key={}", subscription.id(), fullKey, e);
         }

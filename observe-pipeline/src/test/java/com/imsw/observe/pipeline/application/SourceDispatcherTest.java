@@ -58,11 +58,10 @@ class SourceDispatcherTest {
         RecordingRunner runner = new RecordingRunner();
         pool = new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>());
         DelayedEventStore delayedStore = new NoopDelayedEventStore();
-        DelayedActionHandler delayedHandler = new DelayedActionHandler(delayedStore, e -> {});
+        DelayedActionHandler delayedHandler = new DelayedActionHandler(delayedStore, () -> dispatcher);
         // queue 容量 8、dispatch 线程 1、runner 在途上限 16（足够大不阻塞测试路径）。
         dispatcher =
                 new SourceDispatcher(new DefaultSubscriptionMatcher(registry), runner, pool, delayedHandler, 8, 1, 16);
-        delayedHandler.setDispatcher(dispatcher);
 
         dispatcher.start();
         dispatcher.onEvent(event("trade_db", "orders", CdcOp.INSERT));
@@ -92,10 +91,9 @@ class SourceDispatcherTest {
 
         RecordingRunner runner = new RecordingRunner();
         pool = new ThreadPoolExecutor(2, 2, 0L, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>());
-        DelayedActionHandler delayedHandler = new DelayedActionHandler(new NoopDelayedEventStore(), e -> {});
+        DelayedActionHandler delayedHandler = new DelayedActionHandler(new NoopDelayedEventStore(), () -> dispatcher);
         dispatcher =
                 new SourceDispatcher(new DefaultSubscriptionMatcher(registry), runner, pool, delayedHandler, 8, 1, 16);
-        delayedHandler.setDispatcher(dispatcher);
 
         dispatcher.start();
         dispatcher.onEvent(event("trade_db", "orders", CdcOp.INSERT));
@@ -157,10 +155,9 @@ class SourceDispatcherTest {
         RecordingRunner runner = new RecordingRunner();
         pool = new ThreadPoolExecutor(2, 2, 0L, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>());
         RecordingDelayedEventStore store = new RecordingDelayedEventStore();
-        DelayedActionHandler delayedHandler = new DelayedActionHandler(store, e -> {});
+        DelayedActionHandler delayedHandler = new DelayedActionHandler(store, () -> dispatcher);
         dispatcher =
                 new SourceDispatcher(new DefaultSubscriptionMatcher(registry), runner, pool, delayedHandler, 8, 1, 16);
-        delayedHandler.setDispatcher(dispatcher);
 
         dispatcher.start();
         // CDC INSERT 携带 orderId=order-123，path "after.orderId" 抽出 key="order-123"。
@@ -197,10 +194,9 @@ class SourceDispatcherTest {
         RecordingRunner runner = new RecordingRunner();
         pool = new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>());
         RecordingDelayedEventStore store = new RecordingDelayedEventStore();
-        DelayedActionHandler delayedHandler = new DelayedActionHandler(store, e -> {});
+        DelayedActionHandler delayedHandler = new DelayedActionHandler(store, () -> dispatcher);
         dispatcher =
                 new SourceDispatcher(new DefaultSubscriptionMatcher(registry), runner, pool, delayedHandler, 8, 1, 16);
-        delayedHandler.setDispatcher(dispatcher);
 
         dispatcher.start();
         CdcMeta meta = new CdcMeta("mq", "trade_db", "orders", Map.of());
@@ -243,10 +239,9 @@ class SourceDispatcherTest {
         try {
             com.imsw.observe.pipeline.infrastructure.delayed.InMemoryDelayedEventStore store =
                     new com.imsw.observe.pipeline.infrastructure.delayed.InMemoryDelayedEventStore(ses);
-            DelayedActionHandler delayedHandler = new DelayedActionHandler(store, e -> {});
+            DelayedActionHandler delayedHandler = new DelayedActionHandler(store, () -> dispatcher);
             dispatcher = new SourceDispatcher(
                     new DefaultSubscriptionMatcher(registry), runner, pool, delayedHandler, 8, 1, 16);
-            delayedHandler.setDispatcher(dispatcher);
 
             dispatcher.start();
             CdcMeta meta = new CdcMeta("mq", "trade_db", "orders", Map.of());

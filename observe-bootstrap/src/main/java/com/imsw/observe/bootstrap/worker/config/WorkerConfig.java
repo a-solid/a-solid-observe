@@ -90,13 +90,13 @@ public class WorkerConfig {
 
     @Bean
     public com.imsw.observe.pipeline.application.DelayedActionHandler delayedActionHandler(
-            final com.imsw.observe.pipeline.application.DelayedEventStore store) {
-        // dispatcher 在 sourceDispatcher bean 内通过 setDispatcher 注入（避免循环依赖：
-        // dispatcher 持有 handler、handler 持有 dispatcher=EventListener）。
-        com.imsw.observe.pipeline.application.EventListener placeholder = e -> {
-            throw new IllegalStateException("dispatcher not wired yet");
-        };
-        return new com.imsw.observe.pipeline.application.DelayedActionHandler(store, placeholder);
+            final com.imsw.observe.pipeline.application.DelayedEventStore store,
+            final org.springframework.beans.factory.ObjectProvider<SourceDispatcher> dispatcherProvider) {
+        // dispatcher 用 ObjectProvider 延迟解析——破构造期循环（dispatcher 持有 handler、handler 持有
+        // dispatcher=EventListener）。handler 构造时不解析 dispatcher，fire 时才 get()——此时 dispatcher
+        // bean 已就绪。删了旧 setDispatcher + throw 占位炸弹。
+        return new com.imsw.observe.pipeline.application.DelayedActionHandler(
+                store, () -> (com.imsw.observe.pipeline.application.EventListener) dispatcherProvider.getObject());
     }
 
     /**
@@ -123,9 +123,8 @@ public class WorkerConfig {
                 props.getDispatchQueueSize(),
                 props.getDispatchThreads(),
                 runnerInFlight);
-        // 把 dispatcher 自身作为 EventListener 注入 handler——延时到点 fire 时 DelayedEvent 灌进 dispatcher
-        // 的 onEvent，经 matcher 按 subscriptionId 路由回原订阅扇出（ADR-0006 addendum）。
-        delayedActionHandler.setDispatcher(dispatcher);
+        // dispatcher 注入 handler 已在 delayedActionHandler bean 内用 ObjectProvider 延迟解析（破循环），
+        // 无需此处手动 setDispatcher。fire 时 handler 解析 dispatcher.onEvent 灌回队列（ADR-0006 addendum）。
         return dispatcher;
     }
 
