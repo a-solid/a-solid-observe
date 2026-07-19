@@ -120,8 +120,7 @@ class CronSourceTest {
         Subscription apiSub = new Subscription(
                 1L,
                 "ns",
-                100L,
-                1,
+                List.of(100L),
                 new Subscription.SourceRef(
                         "every-second", null, null, null, Set.of(), SourceType.API, null, null, Concurrent.SKIP),
                 null,
@@ -291,8 +290,7 @@ class CronSourceTest {
         Subscription sub = new Subscription(
                 5L,
                 "ns",
-                100L,
-                1,
+                List.of(100L),
                 new Subscription.SourceRef(
                         "idx-key",
                         null,
@@ -335,8 +333,7 @@ class CronSourceTest {
         return new Subscription(
                 id,
                 "ns",
-                100L,
-                1,
+                List.of(100L),
                 new Subscription.SourceRef(name, null, null, null, Set.of(), SourceType.CRON, expr, name, concurrent),
                 null,
                 null);

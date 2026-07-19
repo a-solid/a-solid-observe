@@ -308,7 +308,6 @@ class SubscriptionCrudServiceTest {
                 null,
                 null,
                 null,
-                null,
                 SourceType.CDC,
                 null,
                 SubscriptionDefinition.ActionType.RUN,
@@ -351,7 +350,6 @@ class SubscriptionCrudServiceTest {
                 "billing",
                 List.of(100L),
                 "idx-key", // mq（索引键）
-                null,
                 null,
                 null,
                 null,
@@ -409,7 +407,6 @@ class SubscriptionCrudServiceTest {
                 namespace,
                 List.of(pipelineId),
                 "cron-source",
-                null,
                 null,
                 null,
                 null,

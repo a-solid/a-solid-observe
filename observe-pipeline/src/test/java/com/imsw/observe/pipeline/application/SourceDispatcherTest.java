@@ -45,8 +45,7 @@ class SourceDispatcherTest {
         Subscription sub = new Subscription(
                 10L,
                 "smoke",
-                1L,
-                1,
+                List.of(1L),
                 new Subscription.SourceRef(
                         "mq", "topic", "trade_db", "orders", Set.of(CdcOp.INSERT), SourceType.CDC, null, null, null),
                 null,
@@ -69,7 +68,37 @@ class SourceDispatcherTest {
         awaitRunnerCount(runner, 1, 2_000L);
 
         assertThat(runner.received).hasSize(1);
-        assertThat(runner.received.get(0).pipeline().id()).isEqualTo(1L);
+        assertThat(runner.received.get(0).pipelines().get(0).id()).isEqualTo(1L);
+    }
+
+    @Test
+    void fansOutToMultiplePipelinesWithFailureIsolation() throws Exception {
+        // 扇出：一个 subscription 绑 2 个 pipeline；其中一个抛异常不影响另一个执行。
+        Pipeline p1 = pipeline(1L, 1);
+        Pipeline p2 = pipeline(2L, 1);
+        Subscription sub = new Subscription(
+                10L,
+                "smoke",
+                List.of(1L, 2L),
+                new Subscription.SourceRef(
+                        "mq", "topic", "trade_db", "orders", Set.of(CdcOp.INSERT), SourceType.CDC, null, null, null),
+                null,
+                new Action.Run());
+        PipelineRegistry registry = new PipelineRegistry();
+        registry.replace(PipelineRegistry.Snapshot.loaded(Map.of(1L, p1, 2L, p2), List.of(sub)));
+
+        RecordingRunner runner = new RecordingRunner();
+        pool = new ThreadPoolExecutor(2, 2, 0L, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>());
+        DelayedActionHandler delayedHandler = new DelayedActionHandler(new NoopDelayedEventStore(), runner);
+        dispatcher =
+                new SourceDispatcher(new DefaultSubscriptionMatcher(registry), runner, pool, delayedHandler, 8, 1, 16);
+
+        dispatcher.start();
+        dispatcher.onEvent(event("trade_db", "orders", CdcOp.INSERT));
+
+        awaitRunnerCount(runner, 2, 2_000L);
+        // 两个 pipeline 都被 runner 调用（各自一次）。
+        assertThat(runner.received).hasSize(2);
     }
 
     private static void awaitRunnerCount(final RecordingRunner runner, final int expected, final long timeoutMs)
@@ -111,14 +140,8 @@ class SourceDispatcherTest {
         public void run(final Pipeline pipeline, final Event triggerEvent, final Long subscriptionId) {
             received.add(new SubscriptionMatcher.MatchedSubscription(
                     new Subscription(
-                            subscriptionId,
-                            pipeline.namespace(),
-                            pipeline.id(),
-                            pipeline.version(),
-                            null,
-                            null,
-                            new Action.Run()),
-                    pipeline));
+                            subscriptionId, pipeline.namespace(), List.of(pipeline.id()), null, null, new Action.Run()),
+                    List.of(pipeline)));
         }
     }
 

@@ -93,8 +93,7 @@ class EndToEndFlowTest {
         SubscriptionDefinition sub = new SubscriptionDefinition(
                 null,
                 NAMESPACE,
-                pipelineId,
-                1,
+                java.util.List.of(pipelineId),
                 "mq",
                 "topic",
                 "trade_db",
@@ -172,8 +171,7 @@ class EndToEndFlowTest {
         SubscriptionDefinition sub = new SubscriptionDefinition(
                 null,
                 NAMESPACE,
-                pipelineId,
-                1,
+                java.util.List.of(pipelineId),
                 CRON_NAME,
                 null,
                 null,

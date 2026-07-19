@@ -42,8 +42,7 @@ class DefaultSubscriptionMatcherTest {
         Subscription sub = new Subscription(
                 10L,
                 "smoke",
-                1L,
-                1,
+                java.util.List.of(1L),
                 new Subscription.SourceRef(
                         "mq", "topic", "trade_db", "orders", Set.of(CdcOp.INSERT), SourceType.CDC, null, null, null),
                 new Condition.Compare("after.status", Condition.Compare.Op.EQ, "PAID"),
@@ -71,8 +70,7 @@ class DefaultSubscriptionMatcherTest {
         Subscription sub = new Subscription(
                 11L,
                 "smoke",
-                1L,
-                1,
+                java.util.List.of(1L),
                 new Subscription.SourceRef(
                         "nightly-sync", null, null, null, Set.of(), SourceType.CRON, null, null, null),
                 null,
@@ -96,8 +94,7 @@ class DefaultSubscriptionMatcherTest {
         Subscription sub = new Subscription(
                 12L,
                 "smoke",
-                1L,
-                1,
+                java.util.List.of(1L),
                 new Subscription.SourceRef(
                         "order-webhook", null, null, null, Set.of(), SourceType.API, null, null, null),
                 null,
@@ -117,20 +114,40 @@ class DefaultSubscriptionMatcherTest {
     }
 
     @Test
-    void skipsWhenPipelineVersionMismatch() {
-        Pipeline pipeline = pipeline(1L, 2);
+    void returnsOnlyExistingPipelinesWhenSomeMissing() {
+        // 扇出：pipelineIds 含未加载的 id（2）→ 只返回存在的（p1）。
+        Pipeline p1 = pipeline(1L, 1);
         Subscription sub = new Subscription(
                 10L,
                 "smoke",
-                1L,
-                1,
+                java.util.List.of(1L, 2L),
                 new Subscription.SourceRef(
                         null, null, "trade_db", "orders", Set.of(), SourceType.CDC, null, null, null),
                 null,
                 new Action.Run());
         PipelineRegistry registry = new PipelineRegistry();
-        registry.replace(PipelineRegistry.Snapshot.loaded(Map.of(1L, pipeline), List.of(sub)));
+        registry.replace(PipelineRegistry.Snapshot.loaded(Map.of(1L, p1), List.of(sub)));
 
+        SubscriptionMatcher matcher = new DefaultSubscriptionMatcher(registry);
+        List<SubscriptionMatcher.MatchedSubscription> matched =
+                matcher.match(cdcEvent("trade_db", "orders", CdcOp.INSERT, Map.of()));
+        assertThat(matched).hasSize(1);
+        assertThat(matched.get(0).pipelines()).containsExactly(p1);
+    }
+
+    @Test
+    void skipsWhenAllPipelinesMissing() {
+        // 扇出：pipelineIds 全部不在 registry → matched 为空。
+        Subscription sub = new Subscription(
+                10L,
+                "smoke",
+                java.util.List.of(99L),
+                new Subscription.SourceRef(
+                        null, null, "trade_db", "orders", Set.of(), SourceType.CDC, null, null, null),
+                null,
+                new Action.Run());
+        PipelineRegistry registry = new PipelineRegistry();
+        registry.replace(PipelineRegistry.Snapshot.loaded(Map.of(), List.of(sub)));
         SubscriptionMatcher matcher = new DefaultSubscriptionMatcher(registry);
         assertThat(matcher.match(cdcEvent("trade_db", "orders", CdcOp.INSERT, Map.of())))
                 .isEmpty();

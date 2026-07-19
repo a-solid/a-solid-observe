@@ -96,8 +96,7 @@ class SourceDispatcherBackpressureTest {
         Subscription sub = new Subscription(
                 1L,
                 "smoke",
-                1L,
-                1,
+                List.of(1L),
                 new Subscription.SourceRef(
                         "mq", "topic", "db", "t", Set.of(CdcOp.INSERT), SourceType.CDC, null, null, null),
                 null,
