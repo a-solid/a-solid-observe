@@ -198,7 +198,7 @@ observe:
 | 删 team/application 一等列波及面大（pipeline/meta/execution/alert 多处） | 全量 grep 清；编译 + 测试拦截 |
 | label 投影列与 JSON 不一致 | 投影在 sink 唯一写入点同步填，不分叉 |
 | 反压队列阻塞 Cron fire | 可接受（定时延后）；SKIP 策略保留 |
-| MQ 逐条 ack 性能 | 一期 QPS 可接受；高 QPS 远期可批量 ack（不在本批） |
+| MQ 逐条 ack 性能 | 逐条 ack 为定稿（非"远期优化"）。瓶颈在 pipeline 执行，dispatcher 队列 + Semaphore 反压锁死消费速率，onMessage 不可能攒批；批量 ack 唯一省的是确认帧网络往返（相对 pipeline 执行耗时可忽略），且会引入部分重投语义，反不如逐条干净 |
 | dispatch 队列丢事件（异常停机） | at-least-once 由 MQ 重投保证；Cron 无持久化（misfire 忽略，ADR-0007） |
 | ddl-auto vs 生产迁移 | V2 SQL 作生产参考；上线前真实库冒烟 |
 
