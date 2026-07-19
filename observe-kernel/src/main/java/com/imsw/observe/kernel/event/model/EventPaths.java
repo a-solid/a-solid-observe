@@ -13,7 +13,7 @@ import java.util.Map;
  *       {@code meta.source} / {@code meta.attributes.<x>}</li>
  *   <li>{@link TickEvent}：{@code meta.cronName} / {@code meta.cronExpression} /
  *       {@code meta.source} / {@code meta.attributes.<x>}</li>
- *   <li>{@link DelayedEvent}：{@code meta.subscriptionId} / {@code meta.attributes.<x>}
+ *   <li>{@link DelayedEvent}：{@code meta.subscriptionId} / {@code meta.correlationKey}
  *       （原事件字段请由调用方在包装前从 originalEvent 提取）</li>
  * </ul>
  *
@@ -136,7 +136,10 @@ public final class EventPaths {
         if ("subscriptionId".equals(rest)) {
             return meta.subscriptionId();
         }
-        return resolveAttributes(meta.attributes(), rest);
+        if ("correlationKey".equals(rest)) {
+            return meta.correlationKey();
+        }
+        return null;
     }
 
     private static Object resolveAttributes(final Map<String, Object> attrs, final String rest) {

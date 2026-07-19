@@ -178,8 +178,8 @@ class DefaultSubscriptionMatcherTest {
         SubscriptionMatcher matcher = new DefaultSubscriptionMatcher(registry);
 
         Event nested = cdcEvent("trade_db", "orders", CdcOp.INSERT, Map.of("amount", 1));
-        DelayedEvent hit = new DelayedEvent(new DelayedMeta(42L, Map.of()), nested, Instant.now());
-        DelayedEvent staleId = new DelayedEvent(new DelayedMeta(999L, Map.of()), nested, Instant.now());
+        DelayedEvent hit = new DelayedEvent(new DelayedMeta(42L, "order-1"), nested, Instant.now());
+        DelayedEvent staleId = new DelayedEvent(new DelayedMeta(999L, "order-1"), nested, Instant.now());
 
         List<SubscriptionMatcher.MatchedSubscription> matched = matcher.match(hit);
         assertThat(matched).hasSize(1);

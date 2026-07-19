@@ -1,9 +1,5 @@
 package com.imsw.observe.pipeline.application;
 
-import java.time.Instant;
-import java.util.Map;
-import java.util.UUID;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -77,8 +73,7 @@ public final class DelayedActionHandler {
                 return true;
             }
             String fullKey = namespacedKey(subscription.namespace(), rawKey);
-            Instant scheduledAt = Instant.now();
-            store.schedule(fullKey, () -> fire(subscription, event, rawKey, fullKey, scheduledAt), schedule.delay());
+            store.schedule(fullKey, () -> fire(subscription, event, rawKey, fullKey), schedule.delay());
             return true;
         }
         if (action instanceof Action.Cancel cancel) {
@@ -99,13 +94,9 @@ public final class DelayedActionHandler {
     }
 
     private void fire(
-            final Subscription subscription,
-            final Event original,
-            final String correlationKey,
-            final String fullKey,
-            final Instant scheduledAt) {
+            final Subscription subscription, final Event original, final String correlationKey, final String fullKey) {
         try {
-            Event delayed = wrapAsDelayed(original, subscription, correlationKey, scheduledAt);
+            Event delayed = wrapAsDelayed(original, subscription, correlationKey);
             // DelayedEvent 作为普通事件回流：dispatcher.onEvent → matcher 按 subscriptionId 路由回原订阅 →
             // 扇出 N 个 pipeline（与 ADR-0006 addendum "DelayedEvent 走 matcher" 一致）。
             dispatcher.onEvent(delayed);
@@ -115,18 +106,9 @@ public final class DelayedActionHandler {
     }
 
     private static DelayedEvent wrapAsDelayed(
-            final Event original,
-            final Subscription subscription,
-            final String correlationKey,
-            final Instant scheduledAt) {
-        DelayedMeta meta = new DelayedMeta(
-                subscription.id(),
-                Map.of(
-                        "schedule_id", UUID.randomUUID().toString(),
-                        "scheduled_at", scheduledAt.toString(),
-                        "fired_at", Instant.now().toString(),
-                        "correlation_key", correlationKey));
-        return new DelayedEvent(meta, original, Instant.now());
+            final Event original, final Subscription subscription, final String correlationKey) {
+        DelayedMeta meta = new DelayedMeta(subscription.id(), correlationKey);
+        return new DelayedEvent(meta, original, java.time.Instant.now());
     }
 
     private static String namespacedKey(final String namespace, final String rawKey) {

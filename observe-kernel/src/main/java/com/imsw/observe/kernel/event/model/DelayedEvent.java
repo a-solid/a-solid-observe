@@ -11,7 +11,7 @@ import java.time.Instant;
  * 嵌套 Event（见 {@link Event} 上的 Jackson 多态注解，{@code @JsonSubTypes} 覆盖所有子类型，
  * 嵌套字段自动按子类型名 round-trip）。
  *
- * @param meta           {@link DelayedMeta}（含 subscriptionId 路由键 + attributes 审计字段）
+ * @param meta           {@link DelayedMeta}（subscriptionId 路由键 + correlationKey 业务键）
  * @param originalEvent  被延时重放的原始事件
  * @param sourceTs       实际 fire 时间
  */
