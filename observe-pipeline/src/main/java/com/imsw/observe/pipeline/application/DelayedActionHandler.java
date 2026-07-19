@@ -17,13 +17,17 @@ import com.imsw.observe.pipeline.domain.subscription.Subscription;
 /**
  * 延时动作处理器（application 层）——订阅级语义（delayed-redesign spec D2/D6/D7）。
  *
- * <p>承接 domain 逻辑：correlationKey 提取（{@link EventPaths}）、namespace 级 key 拼装、
- * SCHEDULE/CANCEL 路由、DELAYED 包装 event 构造、fire → {@link DelayedEventRelayer} 重放。依赖
- * {@link DelayedEventStore} 端口（非具体实现），实现可换为 Redis/DB 持久化而 handler 不变（ADR-0001 依赖倒置）。
+ * <p>承接 domain 逻辑：correlationKey 提取（{@link EventPaths}）、namespace 级 key 拼装、SCHEDULE/CANCEL 路由、
+ * DelayedEvent 包装构造、fire → {@link EventListener#onEvent} 回流。依赖 {@link DelayedEventStore} 端口
+ * （非具体实现），实现可换为 Redis/DB 持久化而 handler 不变（ADR-0001 依赖倒置）。
  *
  * <p><b>订阅级 vs 旧 (sub,pipeline) 上下文</b>：扇出后一个订阅绑 N 个 pipeline，schedule 是订阅级资源
  * （一个延迟任务，到期 fire 时复用 matcher 扇出），不能按 (sub,pipeline) 各 schedule 一次。dispatcher
  * 在外层 for 内调本类一次（per 订阅），不在内层 pipeline for 内调用。
+ *
+ * <p><b>fire 回流路径</b>：fire 到点构造 {@link DelayedEvent} 后调 {@code dispatcher.onEvent(delayed)}——
+ * DelayedEvent 作为普通事件经 dispatcher 队列、由 matcher 按 {@link DelayedMeta#subscriptionId()} 路由回原订阅、
+ * 扇出 N 个 pipeline（旧"绕过 matcher 直调 PipelineRunner"语义已被取代，见 ADR-0006 addendum）。
  *
  * <p><b>correlationKey 命名空间</b>：{@code fullKey = namespace + ":" + rawKey}（D4）。同 namespace 内的
  * schedule/cancel 自然配对，cancel 可从任意订阅（CDC/CRON/API）发起；跨 namespace 不能 cancel（软隔离）。
@@ -36,26 +40,32 @@ public final class DelayedActionHandler {
 
     private final DelayedEventStore store;
 
-    private volatile DelayedEventRelayer relayer;
+    private volatile EventListener dispatcher;
 
-    public DelayedActionHandler(final DelayedEventStore store, final DelayedEventRelayer relayer) {
+    public DelayedActionHandler(final DelayedEventStore store, final EventListener dispatcher) {
         this.store = store;
-        this.relayer = relayer;
+        this.dispatcher = dispatcher;
     }
 
     /**
-     * Wiring 入口：dispatcher bean 创建后调用，把自己作为 relayer 注入——避免构造期循环依赖
-     * （dispatcher 持有 handler、handler 持有 relayer=dispatcher）。
+     * Wiring 入口：dispatcher bean 创建后调用，把自己注入 handler——避免构造期循环依赖
+     * （dispatcher 持有 handler、handler 持有 dispatcher=EventListener）。
      */
-    public void setRelayer(final DelayedEventRelayer relayer) {
-        this.relayer = relayer;
+    public void setDispatcher(final EventListener dispatcher) {
+        this.dispatcher = dispatcher;
     }
 
     /**
      * 订阅级 action 分发。返回 true 表示已消费（SCHEDULE/CANCEL），dispatcher 不再走 RUN 扇出；
      * 返回 false 表示非延时 action（RUN），dispatcher 走扇出路径。
+     *
+     * <p>DelayedEvent 早返：DelayedEvent 是 fire 产物，回流到 handle 表示已到点——必须走 RUN 扇出
+     * （return false），不能再 schedule/cancel 自己，避免无限自我重排。
      */
     public boolean handle(final Subscription subscription, final Event event) {
+        if (event instanceof DelayedEvent) {
+            return false;
+        }
         Action action = subscription.action();
         if (action instanceof Action.Schedule schedule) {
             String rawKey = extractKey(event, schedule.correlationKeyPath());
@@ -96,9 +106,9 @@ public final class DelayedActionHandler {
             final Instant scheduledAt) {
         try {
             Event delayed = wrapAsDelayed(original, subscription, correlationKey, scheduledAt);
-            // 重放：DelayedEvent 经 relayer 投回 dispatcher → matcher 重新匹配订阅 → 扇出 N 个 pipeline
-            // （与 ADR-0006 §9.2 "延时到点重放绕过 source 路由、复用 matcher 扇出" 一致）。
-            relayer.relay(subscription, delayed);
+            // DelayedEvent 作为普通事件回流：dispatcher.onEvent → matcher 按 subscriptionId 路由回原订阅 →
+            // 扇出 N 个 pipeline（与 ADR-0006 addendum "DelayedEvent 走 matcher" 一致）。
+            dispatcher.onEvent(delayed);
         } catch (RuntimeException e) {
             LOG.warn("delayed fire failed subscription={} key={}", subscription.id(), fullKey, e);
         }
@@ -110,10 +120,9 @@ public final class DelayedActionHandler {
             final String correlationKey,
             final Instant scheduledAt) {
         DelayedMeta meta = new DelayedMeta(
-                "delayed:" + subscription.id(),
+                subscription.id(),
                 Map.of(
                         "schedule_id", UUID.randomUUID().toString(),
-                        "subscription_id", subscription.id(),
                         "scheduled_at", scheduledAt.toString(),
                         "fired_at", Instant.now().toString(),
                         "correlation_key", correlationKey));

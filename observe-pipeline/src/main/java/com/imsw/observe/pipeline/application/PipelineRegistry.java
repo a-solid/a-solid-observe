@@ -51,21 +51,32 @@ public final class PipelineRegistry {
          */
         final Map<String, List<Subscription>> subscriptionsBySource;
 
+        /**
+         * DelayedEvent 订阅索引：key = {@code subscription.id()}。
+         *
+         * <p>每条订阅无条件入索引（sub.id 不依赖 sourceType）。DelayedEvent fire 到点经
+         * {@code SourceDispatcher.onEvent} 回流 → matcher 路由 → 本索引按 subscriptionId 直查唯一订阅
+         * （与 CdcMeta 的 db/table、TickMeta/ApiMeta 的 source 对称）。
+         */
+        final Map<Long, Subscription> subscriptionsById;
+
         final boolean loaded;
 
         private Snapshot(
                 final Map<Long, Pipeline> pipelinesById,
                 final Map<String, List<Subscription>> subscriptionsByDbTable,
                 final Map<String, List<Subscription>> subscriptionsBySource,
+                final Map<Long, Subscription> subscriptionsById,
                 final boolean loaded) {
             this.pipelinesById = pipelinesById;
             this.subscriptionsByDbTable = subscriptionsByDbTable;
             this.subscriptionsBySource = subscriptionsBySource;
+            this.subscriptionsById = subscriptionsById;
             this.loaded = loaded;
         }
 
         public static Snapshot empty() {
-            return new Snapshot(Map.of(), Map.of(), Map.of(), false);
+            return new Snapshot(Map.of(), Map.of(), Map.of(), Map.of(), false);
         }
 
         /**
@@ -84,7 +95,12 @@ public final class PipelineRegistry {
             Map<Long, Pipeline> pipelineCopy = Map.copyOf(pipelines);
             Map<String, List<Subscription>> cdcIndex = new HashMap<>();
             Map<String, List<Subscription>> sourceIndex = new HashMap<>();
+            Map<Long, Subscription> byId = new HashMap<>();
             for (Subscription sub : subscriptions) {
+                // subscriptionsById 无条件收——DelayedEvent fire 回流时按 subscriptionId 直查（不依赖 sourceType）。
+                if (sub.id() != null) {
+                    byId.put(sub.id(), sub);
+                }
                 if (sub.source() == null) {
                     continue;
                 }
@@ -108,6 +124,7 @@ public final class PipelineRegistry {
                     Collections.unmodifiableMap(pipelineCopy),
                     Collections.unmodifiableMap(immutableCdc),
                     Collections.unmodifiableMap(immutableSource),
+                    Collections.unmodifiableMap(byId),
                     true);
         }
 
@@ -123,7 +140,9 @@ public final class PipelineRegistry {
          * <ul>
          *   <li>{@link CdcEvent} → subscriptionsByDbTable（key = {@link CdcMeta#db()}|{@link CdcMeta#table()}）。</li>
          *   <li>{@link TickEvent} / {@link ApiEvent} → subscriptionsBySource（key = {@code meta().source()}）。</li>
-         *   <li>{@link DelayedEvent} → 空（DelayedEvent 绕过 matcher，见 ADR-0006 §9.2 / §4）。</li>
+         *   <li>{@link DelayedEvent} → subscriptionsById（key = {@link DelayedMeta#subscriptionId()}）——
+         *       fire 到点经 {@code SourceDispatcher.onEvent} 回流，按 subscriptionId 直查唯一订阅。
+         *       历史"绕过 matcher"语义（ADR-0006 §9.2）已被取代，见 ADR-0006 addendum。</li>
          * </ul>
          */
         public List<Subscription> subscriptionsFor(final Event event) {
@@ -137,7 +156,10 @@ public final class PipelineRegistry {
             if (event instanceof ApiEvent api) {
                 return subscriptionsBySource.getOrDefault(api.meta().source(), List.of());
             }
-            // DelayedEvent 不走 matcher（绕过 SourceDispatcher，直调 PipelineRunner）。
+            if (event instanceof DelayedEvent delayed) {
+                Subscription sub = subscriptionsById.get(delayed.meta().subscriptionId());
+                return sub == null ? List.of() : List.of(sub);
+            }
             return List.of();
         }
 

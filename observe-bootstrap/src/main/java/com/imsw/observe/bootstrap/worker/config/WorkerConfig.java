@@ -85,11 +85,12 @@ public class WorkerConfig {
     @Bean
     public com.imsw.observe.pipeline.application.DelayedActionHandler delayedActionHandler(
             final com.imsw.observe.pipeline.application.DelayedEventStore store) {
-        // relayer 在 sourceDispatcher bean 内通过 setRelayer 注入（避免循环依赖：
-        // dispatcher 持有 handler、handler 持有 relayer=dispatcher）。
-        return new com.imsw.observe.pipeline.application.DelayedActionHandler(store, (sub, e) -> {
-            throw new IllegalStateException("relayer not wired yet");
-        });
+        // dispatcher 在 sourceDispatcher bean 内通过 setDispatcher 注入（避免循环依赖：
+        // dispatcher 持有 handler、handler 持有 dispatcher=EventListener）。
+        com.imsw.observe.pipeline.application.EventListener placeholder = e -> {
+            throw new IllegalStateException("dispatcher not wired yet");
+        };
+        return new com.imsw.observe.pipeline.application.DelayedActionHandler(store, placeholder);
     }
 
     /**
@@ -103,7 +104,6 @@ public class WorkerConfig {
     public SourceDispatcher sourceDispatcher(
             final SubscriptionMatcher matcher,
             final PipelineRunner runner,
-            final com.imsw.observe.pipeline.application.PipelineRegistry registry,
             final ThreadPoolExecutor pool,
             final com.imsw.observe.pipeline.application.DelayedActionHandler delayedActionHandler,
             final WorkerProperties props) {
@@ -112,15 +112,14 @@ public class WorkerConfig {
         SourceDispatcher dispatcher = new SourceDispatcher(
                 matcher,
                 runner,
-                registry,
                 pool,
                 delayedActionHandler,
                 props.getDispatchQueueSize(),
                 props.getDispatchThreads(),
                 runnerInFlight);
-        // 把 dispatcher 自身作为 relayer 注入 handler——延时到点 fire 时 (sub, DelayedEvent) 回灌到 dispatcher
-        // 的 relay，绕过 matcher 直接按订阅扇出（ADR-0006 §9.2）。
-        delayedActionHandler.setRelayer(dispatcher::relay);
+        // 把 dispatcher 自身作为 EventListener 注入 handler——延时到点 fire 时 DelayedEvent 灌进 dispatcher
+        // 的 onEvent，经 matcher 按 subscriptionId 路由回原订阅扇出（ADR-0006 addendum）。
+        delayedActionHandler.setDispatcher(dispatcher);
         return dispatcher;
     }
 

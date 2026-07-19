@@ -217,13 +217,13 @@ class EndToEndFlowTest {
 
     /**
      * SCHEDULE-only 端到端（delayed-redesign spec D1/D2）：CDC INSERT → schedule delay 500ms →
-     * fire → DelayedEvent 重放 → matcher 绕过、订阅级扇出 → pipeline 跑 → 告警落库。
+     * fire → DelayedEvent 经 dispatcher.onEvent 回流 → matcher 按 subscriptionId 路由、订阅级扇出 → pipeline 跑 → 告警落库。
      *
      * <p>覆盖关键链路：
      * <ul>
      *   <li>订阅级 action 分发：dispatcher 不在 pipeline 内调 handler。</li>
      *   <li>namespace 级 key 拼装：fullKey = "e2e:{orderId}"。</li>
-     *   <li>fire 走 relayer → dispatcher.relay → 绕 matcher 直扇出。</li>
+     *   <li>fire → dispatcher.onEvent → matcher 按 subscriptionId 路由 → 扇出（ADR-0006 addendum）。</li>
      * </ul>
      */
     @Test

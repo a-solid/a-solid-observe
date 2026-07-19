@@ -14,6 +14,8 @@ import com.imsw.observe.kernel.event.model.ApiMeta;
 import com.imsw.observe.kernel.event.model.CdcEvent;
 import com.imsw.observe.kernel.event.model.CdcMeta;
 import com.imsw.observe.kernel.event.model.CdcOp;
+import com.imsw.observe.kernel.event.model.DelayedEvent;
+import com.imsw.observe.kernel.event.model.DelayedMeta;
 import com.imsw.observe.kernel.event.model.Event;
 import com.imsw.observe.kernel.event.model.SourceType;
 import com.imsw.observe.kernel.event.model.TickEvent;
@@ -151,6 +153,41 @@ class DefaultSubscriptionMatcherTest {
         SubscriptionMatcher matcher = new DefaultSubscriptionMatcher(registry);
         assertThat(matcher.match(cdcEvent("trade_db", "orders", CdcOp.INSERT, Map.of())))
                 .isEmpty();
+    }
+
+    /**
+     * DelayedEvent 按 subscriptionId 路由（ADR-0006 addendum）：fire 到点经 dispatcher.onEvent 回流，
+     * matcher 在 Snapshot.subscriptionsById 直查唯一订阅，扇出其 pipelineIds。
+     */
+    @Test
+    void matchesDelayedBySubscriptionId() {
+        Pipeline p1 = pipeline(1L, 1);
+        Pipeline p2 = pipeline(2L, 1);
+        // sub.id = 42；故意把 sourceType 设为 CDC（突出"DelayedEvent 不靠 sourceType 路由，只看 subscriptionId"）。
+        Subscription sub = new Subscription(
+                42L,
+                "smoke",
+                List.of(1L, 2L),
+                new Subscription.SourceRef(
+                        "mq", "topic", "trade_db", "orders", Set.of(CdcOp.INSERT), SourceType.CDC, null, null, null),
+                null,
+                new Action.Run());
+        PipelineRegistry registry = new PipelineRegistry();
+        registry.replace(PipelineRegistry.Snapshot.loaded(Map.of(1L, p1, 2L, p2), List.of(sub)));
+
+        SubscriptionMatcher matcher = new DefaultSubscriptionMatcher(registry);
+
+        Event nested = cdcEvent("trade_db", "orders", CdcOp.INSERT, Map.of("amount", 1));
+        DelayedEvent hit = new DelayedEvent(new DelayedMeta(42L, Map.of()), nested, Instant.now());
+        DelayedEvent staleId = new DelayedEvent(new DelayedMeta(999L, Map.of()), nested, Instant.now());
+
+        List<SubscriptionMatcher.MatchedSubscription> matched = matcher.match(hit);
+        assertThat(matched).hasSize(1);
+        assertThat(matched.get(0).subscription().id()).isEqualTo(42L);
+        assertThat(matched.get(0).pipelines()).containsExactly(p1, p2);
+
+        // subscriptionId 不在 registry → 空匹配（不路由到任何订阅）。
+        assertThat(matcher.match(staleId)).isEmpty();
     }
 
     private Pipeline pipeline(final Long id, final int version) {

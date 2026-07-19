@@ -35,7 +35,7 @@ record DelayedEvent(DelayedMeta meta, Event originalEvent, Instant sourceTs) imp
 - **CdcEvent**：含 before/after 快照 + CdcOp。`IbmMqCdcSource` 产出。
 - **TickEvent**：无 payload，纯触发信号；`TickMeta` 带 cron name / cron 表达式 / 触发时刻。pipeline 脚本在节点里 `db.queryOne` 主动查 DB。`CronSource` 产出。
 - **ApiEvent**：`payload`（HTTP POST body 反序列化 Map）+ `ApiMeta`（api name）。`ApiSource` 产出。
-- **DelayedEvent**：嵌套 `originalEvent`（通常 CdcEvent）+ `DelayedMeta`（schedule_id / correlation_key / scheduled_at / fired_at）。语义 = 延迟重放原始事件。`InMemoryDelayedEventStore.fire` 产出，绕过 SourceDispatcher 直调 PipelineRunner。
+- **DelayedEvent**：嵌套 `originalEvent`（通常 CdcEvent）+ `DelayedMeta`（schedule_id / correlation_key / scheduled_at / fired_at）。语义 = 延迟重放原始事件。~~`InMemoryDelayedEventStore.fire` 产出，绕过 SourceDispatcher 直调 PipelineRunner~~。 **〔§3 已被 addendum 取代〕**：改为经 `DelayedActionHandler.fire` → `SourceDispatcher.onEvent` 回流走 matcher。
 
 ### 4. SubscriptionMatcher pattern match 分发
 
@@ -43,7 +43,7 @@ record DelayedEvent(DelayedMeta meta, Event originalEvent, Instant sourceTs) imp
 - `CdcEvent` → 按 `meta.db()/table()` + `cdc.op()` 匹配 CDC 订阅（opTypes 生效）
 - `TickEvent` → 按 `meta.source()`（cron name）匹配 Cron 订阅
 - `ApiEvent` → 按 `meta.source()`（api name）匹配 Api 订阅
-- `DelayedEvent` → 不走 matcher（§9.2 绕过 Source 通道）
+- `DelayedEvent` → ~~不走 matcher（§9.2 绕过 Source 通道）~~ **〔§4 已被 addendum 取代〕**：走 matcher，按 `meta.subscriptionId()` 在 `Snapshot.subscriptionsById` 直查唯一订阅。
 
 PipelineRegistry 建多个索引：by `(db, table)` for CDC、by `source` for Cron/Api。
 
@@ -74,3 +74,34 @@ PipelineRegistry 建多个索引：by `(db, table)` for CDC、by `source` for Cr
 - **DelayedEvent 拷贝字段不嵌套（D2）**：rejected。丢失"延时重放"元信息层次。
 - **TickEvent 带 payload**：rejected。偏离 cron"纯触发"语义，source 变重。
 - **脚本侧 asCdc() 显式转换（S-bind）**：rejected。引入样板，违背"简化书写"诉求；订阅层已保证类型，无需脚本侧再转换。
+
+---
+
+## Addendum (2026-07-19): DelayedEvent 走 matcher 路由（§9.2 失效）
+
+### 变更
+
+§9.2 "DelayedEvent 绕过 SourceDispatcher/matcher 直调 PipelineRunner" 被取代。DelayedEvent 现在是**普通事件**：fire 到点经 `DelayedActionHandler.fire` → `dispatcher.onEvent(delayed)` 回流，与 CdcEvent/TickEvent/ApiEvent 走同一条队列、同一个 dispatchLoop、同一套反压链。
+
+### 配套设计
+
+- **`DelayedMeta` 对称化**：删 `source`（旧约定 `"delayed:" + subscriptionId` 是死字段），加 `subscriptionId` 为一等字段。matcher 按 subscriptionId 在 `Snapshot.subscriptionsById` 直查回原订阅，与 CdcMeta 的 db/table、TickMeta/ApiMeta 的 source 对称。
+- **matcher 删 DelayedEvent 短路**：原 `DefaultSubscriptionMatcher.match` 第 40 行 `event instanceof DelayedEvent → return empty` 删除。`matchesSource` 加 DelayedEvent 分支（snapshot 已按 subscriptionId 路由到唯一订阅，直接放行让 tryMatch 走 pipeline 扇出）。
+- **`Snapshot.subscriptionsById` 索引**：每条订阅无条件入索引（不依赖 sourceType），供 DelayedEvent 按 subscriptionId 直查。
+- **`handle` DelayedEvent 早返护栏**：`DelayedActionHandler.handle` 入口判断 `event instanceof DelayedEvent → return false`——表示已 fire、走 RUN 扇出。否则原订阅的 Schedule action 会再次 schedule 自己，无限自我重排。
+
+### 消解的 leak
+
+- 删 `DelayedEventRelayer` 接口（application 层）
+- 删 `SourceDispatcher.relay(Subscription, Event)` / `dispatchDelayedReplay` / 私有 `DelayedReplay` record
+- `SourceDispatcher.queue` 类型回到 `BlockingQueue<Event>`（从 `BlockingQueue<Object>` 混装）
+- dispatchLoop 删除 instanceof 分流，单分支 `dispatch(event)`
+
+### 部分保留
+
+Spring bean 构造期循环依赖（dispatcher 持有 handler、handler 持有 dispatcher=EventListener）由 `setDispatcher` setter 注入破解——与原 `setRelayer` setter 形态一致，只是名字换了。这是 Spring bean 生命周期约束，与设计正确性无关。
+
+### 由本 addendum 取代的旧语义
+
+- §3 "DelayedEvent：语义 = 延迟重放原始事件。`InMemoryDelayedEventStore.fire` 产出，**绕过 SourceDispatcher 直调 PipelineRunner**"——改为"经 SourceDispatcher.onEvent 回流走 matcher 路由"。
+- §4 "DelayedEvent → 不走 matcher（§9.2 绕过 Source 通道）"——改为"走 matcher 按 subscriptionId 路由"。

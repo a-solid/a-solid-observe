@@ -8,8 +8,9 @@ import java.time.Duration;
  * <p>三种 actionType 平权，每个订阅选其一：
  * <ul>
  *   <li>{@link Run}：事件到达 → 立即扇出 N 个 pipeline（默认）。</li>
- *   <li>{@link Schedule}：事件到达 → 安排一个未来执行的延迟任务；到期 fire 时 DelayedEvent 重放，
- *       matcher 重新匹配订阅、扇出（与 ADR-0006 §9.2 一致）。</li>
+ *   <li>{@link Schedule}：事件到达 → 安排一个未来执行的延迟任务；到期 fire 时构造 DelayedEvent
+ *       经 {@code SourceDispatcher.onEvent} 回流，matcher 按 subscriptionId 路由回原订阅、扇出
+ *       （见 ADR-0006 addendum）。</li>
  *   <li>{@link Cancel}：事件到达 → 撤销 namespace 内 correlationKey 匹配的延迟任务。</li>
  * </ul>
  *

@@ -58,11 +58,11 @@ class SourceDispatcherTest {
         RecordingRunner runner = new RecordingRunner();
         pool = new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>());
         DelayedEventStore delayedStore = new NoopDelayedEventStore();
-        DelayedActionHandler delayedHandler = new DelayedActionHandler(delayedStore, (s, e) -> {});
+        DelayedActionHandler delayedHandler = new DelayedActionHandler(delayedStore, e -> {});
         // queue 容量 8、dispatch 线程 1、runner 在途上限 16（足够大不阻塞测试路径）。
-        dispatcher = new SourceDispatcher(
-                new DefaultSubscriptionMatcher(registry), runner, registry, pool, delayedHandler, 8, 1, 16);
-        delayedHandler.setRelayer(dispatcher::relay);
+        dispatcher =
+                new SourceDispatcher(new DefaultSubscriptionMatcher(registry), runner, pool, delayedHandler, 8, 1, 16);
+        delayedHandler.setDispatcher(dispatcher);
 
         dispatcher.start();
         dispatcher.onEvent(event("trade_db", "orders", CdcOp.INSERT));
@@ -92,10 +92,10 @@ class SourceDispatcherTest {
 
         RecordingRunner runner = new RecordingRunner();
         pool = new ThreadPoolExecutor(2, 2, 0L, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>());
-        DelayedActionHandler delayedHandler = new DelayedActionHandler(new NoopDelayedEventStore(), (s, e) -> {});
-        dispatcher = new SourceDispatcher(
-                new DefaultSubscriptionMatcher(registry), runner, registry, pool, delayedHandler, 8, 1, 16);
-        delayedHandler.setRelayer(dispatcher::relay);
+        DelayedActionHandler delayedHandler = new DelayedActionHandler(new NoopDelayedEventStore(), e -> {});
+        dispatcher =
+                new SourceDispatcher(new DefaultSubscriptionMatcher(registry), runner, pool, delayedHandler, 8, 1, 16);
+        delayedHandler.setDispatcher(dispatcher);
 
         dispatcher.start();
         dispatcher.onEvent(event("trade_db", "orders", CdcOp.INSERT));
@@ -157,10 +157,10 @@ class SourceDispatcherTest {
         RecordingRunner runner = new RecordingRunner();
         pool = new ThreadPoolExecutor(2, 2, 0L, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>());
         RecordingDelayedEventStore store = new RecordingDelayedEventStore();
-        DelayedActionHandler delayedHandler = new DelayedActionHandler(store, (s, e) -> {});
-        dispatcher = new SourceDispatcher(
-                new DefaultSubscriptionMatcher(registry), runner, registry, pool, delayedHandler, 8, 1, 16);
-        delayedHandler.setRelayer(dispatcher::relay);
+        DelayedActionHandler delayedHandler = new DelayedActionHandler(store, e -> {});
+        dispatcher =
+                new SourceDispatcher(new DefaultSubscriptionMatcher(registry), runner, pool, delayedHandler, 8, 1, 16);
+        delayedHandler.setDispatcher(dispatcher);
 
         dispatcher.start();
         // CDC INSERT 携带 orderId=order-123，path "after.orderId" 抽出 key="order-123"。
@@ -197,10 +197,10 @@ class SourceDispatcherTest {
         RecordingRunner runner = new RecordingRunner();
         pool = new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>());
         RecordingDelayedEventStore store = new RecordingDelayedEventStore();
-        DelayedActionHandler delayedHandler = new DelayedActionHandler(store, (s, e) -> {});
-        dispatcher = new SourceDispatcher(
-                new DefaultSubscriptionMatcher(registry), runner, registry, pool, delayedHandler, 8, 1, 16);
-        delayedHandler.setRelayer(dispatcher::relay);
+        DelayedActionHandler delayedHandler = new DelayedActionHandler(store, e -> {});
+        dispatcher =
+                new SourceDispatcher(new DefaultSubscriptionMatcher(registry), runner, pool, delayedHandler, 8, 1, 16);
+        delayedHandler.setDispatcher(dispatcher);
 
         dispatcher.start();
         CdcMeta meta = new CdcMeta("mq", "trade_db", "orders", Map.of());
@@ -213,11 +213,11 @@ class SourceDispatcherTest {
     }
 
     /**
-     * Delayed replay 路径（fire → relay → dispatcher 直扇出）：模拟 handler fire 触发，dispatcher.relay
-     * 应跳过 matcher、按订阅的 pipelineIds 扇出 N 个 pipeline。
+     * Delayed replay 路径（fire → onEvent → matcher 按 subscriptionId 路由 → 扇出 N pipeline）：
+     * 模拟 handler fire 触发，DelayedEvent 作为普通事件经 dispatcher → matcher 路由回原订阅扇出。
      */
     @Test
-    void delayedReplayFansOutPipelinesBypassingMatcher() throws Exception {
+    void delayedReplayRoutedByMatcherViaSubscriptionId() throws Exception {
         Pipeline p1 = pipeline(1L, 1);
         Pipeline p2 = pipeline(2L, 1);
         Subscription sub = new Subscription(
@@ -243,17 +243,17 @@ class SourceDispatcherTest {
         try {
             com.imsw.observe.pipeline.infrastructure.delayed.InMemoryDelayedEventStore store =
                     new com.imsw.observe.pipeline.infrastructure.delayed.InMemoryDelayedEventStore(ses);
-            DelayedActionHandler delayedHandler = new DelayedActionHandler(store, (s, e) -> {});
+            DelayedActionHandler delayedHandler = new DelayedActionHandler(store, e -> {});
             dispatcher = new SourceDispatcher(
-                    new DefaultSubscriptionMatcher(registry), runner, registry, pool, delayedHandler, 8, 1, 16);
-            delayedHandler.setRelayer(dispatcher::relay);
+                    new DefaultSubscriptionMatcher(registry), runner, pool, delayedHandler, 8, 1, 16);
+            delayedHandler.setDispatcher(dispatcher);
 
             dispatcher.start();
             CdcMeta meta = new CdcMeta("mq", "trade_db", "orders", Map.of());
             dispatcher.onEvent(
                     new CdcEvent(meta, Map.of(), Map.of("orderId", "order-789"), CdcOp.INSERT, Instant.now()));
 
-            // 50ms delay + 调度开销；等两个 pipeline 都被 runner 调用（replay 扇出）。
+            // 50ms delay + 调度开销；等两个 pipeline 都被 runner 调用（matcher 路由后扇出）。
             awaitRunnerCount(runner, 2, 2_000L);
             assertThat(runner.received).hasSize(2);
             // 调度阶段（首次 onEvent 后）runner 还不应被触发——SCHEDULE 已消费。

@@ -23,17 +23,21 @@ import com.imsw.observe.pipeline.domain.Pipeline;
  *
  * <ul>
  *   <li>{@link #onEvent(Event)} 阻塞入队（{@code queue.put}）：队列满时调用方（MQ onMessage /
- *       Cron fire / Api submit）被反压——例如 MQ 不 ack → 重投/暂停投递。</li>
+ *       Cron fire / Api submit / delayed fire）被反压——例如 MQ 不 ack → 重投/暂停投递。</li>
  *   <li>N 个分发线程循环 {@code queue.take()} → {@link SubscriptionMatcher#match} → 对每个 matched
  *       提交 {@code runnerPool.execute(run)}。</li>
  *   <li>runnerPool 饱和时不丢弃：分发线程在 {@link Semaphore#acquire()} 上阻塞（{@code inFlight}
  *       信号量 cap = runnerPool 工作队列容量 + 最大线程数），保证「入队即被执行」。</li>
  * </ul>
  *
+ * <p><b>DelayedEvent 一视同仁</b>：DelayedEvent 是普通 {@link Event} 子类型，fire 到点经
+ * {@link DelayedActionHandler} 调 {@code onEvent(delayed)} 回流——matcher 按 subscriptionId 路由回原订阅，
+ * 与 CdcEvent/TickEvent/ApiEvent 走同一条队列 + 同一个 dispatchLoop + 同一套反压链（见 ADR-0006 addendum）。
+ *
  * <p><b>at-least-once</b>：事件一旦 {@code onEvent} 入队成功，保证最终被 match + 提交执行；
  * runnerPool 饱和靠阻塞反压，不靠拒绝丢弃。下游 pipeline 异步失败不回 MQ（沿用现状）。
  */
-public final class SourceDispatcher implements EventListener, DelayedEventRelayer {
+public final class SourceDispatcher implements EventListener {
 
     private static final Logger LOG = LoggerFactory.getLogger(SourceDispatcher.class);
 
@@ -41,13 +45,11 @@ public final class SourceDispatcher implements EventListener, DelayedEventRelaye
 
     private final PipelineRunner runner;
 
-    private final PipelineRegistry registry;
-
     private final ThreadPoolExecutor runnerPool;
 
     private final DelayedActionHandler delayedActionHandler;
 
-    private final BlockingQueue<Object> queue;
+    private final BlockingQueue<Event> queue;
 
     private final int dispatchThreads;
 
@@ -72,7 +74,6 @@ public final class SourceDispatcher implements EventListener, DelayedEventRelaye
     public SourceDispatcher(
             final SubscriptionMatcher matcher,
             final PipelineRunner runner,
-            final PipelineRegistry registry,
             final ThreadPoolExecutor runnerPool,
             final DelayedActionHandler delayedActionHandler,
             final int queueCapacity,
@@ -80,7 +81,6 @@ public final class SourceDispatcher implements EventListener, DelayedEventRelaye
             final int runnerInFlight) {
         this.matcher = matcher;
         this.runner = runner;
-        this.registry = registry;
         this.runnerPool = runnerPool;
         this.delayedActionHandler = delayedActionHandler;
         this.queue = new ArrayBlockingQueue<>(Math.max(1, queueCapacity));
@@ -99,7 +99,7 @@ public final class SourceDispatcher implements EventListener, DelayedEventRelaye
     }
 
     /**
-     * 阻塞入队。队列满时调用方被反压（MQ 不 ack / Cron fire 延后 / Api submit 阻塞）。
+     * 阻塞入队。队列满时调用方被反压（MQ 不 ack / Cron fire 延后 / Api submit 阻塞 / delayed fire 阻塞）。
      *
      * <p>事件一旦 {@code put} 返回即已入队，由分发线程保证 match + 提交执行（at-least-once）。
      */
@@ -175,38 +175,21 @@ public final class SourceDispatcher implements EventListener, DelayedEventRelaye
         }
     }
 
-    /** 分发线程主循环：take → 分流（普通事件走 matcher；delayed replay 跳过 matcher 直扇出）。 */
+    /** 分发线程主循环：take → dispatch（matcher 路由 + 订阅级 action + 扇出）。 */
     private void dispatchLoop() {
         while (running.get() || !queue.isEmpty()) {
             try {
-                Object item = queue.poll(100L, TimeUnit.MILLISECONDS);
-                if (item == null) {
+                Event event = queue.poll(100L, TimeUnit.MILLISECONDS);
+                if (event == null) {
                     continue;
                 }
-                if (item instanceof DelayedReplay replay) {
-                    dispatchDelayedReplay(replay);
-                } else if (item instanceof Event event) {
-                    dispatch(event);
-                }
+                dispatch(event);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 return;
             } catch (RuntimeException e) {
                 LOG.warn("dispatch loop error", e);
             }
-        }
-    }
-
-    private void dispatchDelayedReplay(final DelayedReplay replay) throws InterruptedException {
-        // DelayedEvent 绕过 matcher（见 DefaultSubscriptionMatcher 注释 + ADR-0006 §9.2），订阅已在 schedule
-        // 时匹配过；这里直接从 registry.snapshot 按 sub.pipelineIds 找 pipeline 扇出。
-        PipelineRegistry.Snapshot snapshot = registry.snapshot();
-        for (Long pipelineId : replay.subscription().pipelineIds()) {
-            Pipeline pipeline = snapshot.pipelineById(pipelineId);
-            if (pipeline == null) {
-                continue;
-            }
-            submitMatched(replay.subscription(), pipeline, replay.event());
         }
     }
 
@@ -218,6 +201,7 @@ public final class SourceDispatcher implements EventListener, DelayedEventRelaye
         for (SubscriptionMatcher.MatchedSubscription m : matched) {
             // 订阅级 action（delayed-redesign spec D2/D6）：SCHEDULE/CANCEL 在订阅层消费一次，
             // 不进入内层 pipeline for——避免 N 个 pipeline 各调一次 store.schedule/cancel。
+            // DelayedEvent 在 handle 内被早返（return false），自然走 RUN 扇出——避免无限自我重排。
             if (delayedActionHandler.handle(m.subscription(), event)) {
                 continue;
             }
@@ -226,22 +210,6 @@ public final class SourceDispatcher implements EventListener, DelayedEventRelaye
             for (Pipeline pipeline : m.pipelines()) {
                 submitMatched(m.subscription(), pipeline, event);
             }
-        }
-    }
-
-    @Override
-    public void relay(
-            final com.imsw.observe.pipeline.domain.subscription.Subscription subscription, final Event delayedEvent) {
-        // DelayedEvent 重放：绕过 matcher（匹配在 schedule 时已做过，避免重复匹配 + 与 ADR-0006 §9.2
-        // "DelayedEvent 绕过 matcher 直调 runner" 语义一致），直接按订阅扇出 N 个 pipeline。
-        // 走 onEvent 路径会撞上 DefaultSubscriptionMatcher 第 40 行——matcher 显式跳过 DelayedEvent 返回空，
-        // 故必须经此专用入口直接 fanout。
-        // 经队列反压：把 (sub, event) 灌进 queue，分发线程消费后扇出（与 RUN 一致的反压链）。
-        try {
-            queue.put(new DelayedReplay(subscription, delayedEvent));
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException("interrupted enqueuing delayed replay", e);
         }
     }
 
@@ -271,8 +239,4 @@ public final class SourceDispatcher implements EventListener, DelayedEventRelaye
             inFlight.release();
         }
     }
-
-    /** 队列元素之一：delayed replay（订阅 + 包装后事件），绕过 matcher 直接扇出。 */
-    private record DelayedReplay(
-            com.imsw.observe.pipeline.domain.subscription.Subscription subscription, Event event) {}
 }

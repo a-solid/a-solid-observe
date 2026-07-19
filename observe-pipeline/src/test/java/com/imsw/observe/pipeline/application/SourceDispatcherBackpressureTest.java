@@ -58,11 +58,11 @@ class SourceDispatcherBackpressureTest {
         NoopRunner runner = new NoopRunner();
         pool = new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>(4));
         DelayedEventStore delayedStore = new NoopDelayedEventStore();
-        DelayedActionHandler delayedHandler = new DelayedActionHandler(delayedStore, (s, e) -> {});
+        DelayedActionHandler delayedHandler = new DelayedActionHandler(delayedStore, e -> {});
         // queue 容量 2，dispatch 线程 0（不消费——保证队列被 producer 灌满后保持满）。
-        dispatcher = new SourceDispatcher(
-                new DefaultSubscriptionMatcher(registry), runner, registry, pool, delayedHandler, 2, 0, 16);
-        delayedHandler.setRelayer(dispatcher::relay);
+        dispatcher =
+                new SourceDispatcher(new DefaultSubscriptionMatcher(registry), runner, pool, delayedHandler, 2, 0, 16);
+        delayedHandler.setDispatcher(dispatcher);
 
         // 灌满 2 个事件（容量 2）。
         dispatcher.onEvent(event());
@@ -107,10 +107,10 @@ class SourceDispatcherBackpressureTest {
         CountingRunner runner = new CountingRunner();
         pool = new ThreadPoolExecutor(2, 2, 0L, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>(16));
         DelayedEventStore delayedStore = new NoopDelayedEventStore();
-        DelayedActionHandler delayedHandler = new DelayedActionHandler(delayedStore, (s, e) -> {});
-        dispatcher = new SourceDispatcher(
-                new DefaultSubscriptionMatcher(registry), runner, registry, pool, delayedHandler, 4, 1, 32);
-        delayedHandler.setRelayer(dispatcher::relay);
+        DelayedActionHandler delayedHandler = new DelayedActionHandler(delayedStore, e -> {});
+        dispatcher =
+                new SourceDispatcher(new DefaultSubscriptionMatcher(registry), runner, pool, delayedHandler, 4, 1, 32);
+        delayedHandler.setDispatcher(dispatcher);
 
         // start 前 onEvent，事件进队列但未被消费。
         dispatcher.onEvent(event());

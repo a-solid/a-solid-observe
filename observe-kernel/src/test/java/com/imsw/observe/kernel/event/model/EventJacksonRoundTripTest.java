@@ -79,10 +79,9 @@ class EventJacksonRoundTripTest {
                 Instant.parse("2026-07-18T09:00:00Z"));
         DelayedEvent original = new DelayedEvent(
                 new DelayedMeta(
-                        "delayed:42",
+                        42L,
                         Map.of(
                                 "schedule_id", 100L,
-                                "subscription_id", 7L,
                                 "scheduled_at", "2026-07-18T09:00:05Z",
                                 "fired_at", "2026-07-18T09:00:10Z",
                                 "correlation_key", "order-9")),
@@ -109,8 +108,7 @@ class EventJacksonRoundTripTest {
                 new ApiMeta("http://api/orders", "orders", Map.of()),
                 Map.of("orderId", 11L),
                 Instant.parse("2026-07-18T12:00:00Z"));
-        DelayedEvent original =
-                new DelayedEvent(new DelayedMeta("delayed:11", Map.of("subscription_id", 3L)), nested, Instant.now());
+        DelayedEvent original = new DelayedEvent(new DelayedMeta(11L, Map.of()), nested, Instant.now());
 
         String json = JsonUtil.toJson(original);
         assertThat(json).contains("\"@type\":\"DelayedEvent\"").contains("\"@type\":\"ApiEvent\"");

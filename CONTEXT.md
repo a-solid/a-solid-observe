@@ -107,7 +107,7 @@ _Avoid_: 给 TickEvent 塞 before/after（cron 无数据变更语义）
 HTTP 触发事件，含 `payload`（HTTP POST body 反序列化的 Map）+ `ApiMeta`（api name）。由 `ApiSource` 产出。
 
 **DelayedEvent**:
-延时触发事件，**嵌套原始 Event**（`originalEvent`，通常是 CdcEvent）+ `DelayedMeta`（schedule_id / correlation_key / scheduled_at / fired_at）。语义：延时 = 延迟重放原始事件。由 `InMemoryDelayedEventStore.fire` 产出，绕过 SourceDispatcher 直调 PipelineRunner（§9.2）。
+延时触发事件，**嵌套原始 Event**（`originalEvent`，通常是 CdcEvent）+ `DelayedMeta`（subscriptionId 路由键 + attributes 审计字段）。语义：延时 = 延迟重放原始事件。由 `DelayedActionHandler.fire` 到点构造，经 `SourceDispatcher.onEvent` 回流——与其它 Event 子类型一样走 matcher，按 subscriptionId 路由回原订阅扇出（见 ADR-0006 addendum）。
 
 **CdcOp**:
 CDC 数据变更语义枚举：`INSERT`/`UPDATE`/`DELETE`，仅挂 `CdcEvent`。

@@ -23,7 +23,9 @@ import com.imsw.observe.pipeline.domain.subscription.Subscription;
  *   <li>{@link TickEvent} → Snapshot 的 source 索引（cron name）；校验 sourceType==CRON。非 CDC 子类型不跑 opTypes/fieldFilter
  *       （fieldFilter 主要面向 CDC 的 before/after 路径；Cron/Api 订阅语义靠 sourceType + source 名硬匹配）。</li>
  *   <li>{@link ApiEvent} → Snapshot 的 source 索引（api name）；校验 sourceType==API。</li>
- *   <li>{@link DelayedEvent} → 直接返回空（DelayedEvent 绕过 SourceDispatcher/matcher，直调 PipelineRunner，ADR-0006 §9.2）。</li>
+ *   <li>{@link DelayedEvent} → Snapshot 的 subscriptionsById 索引（按 {@link DelayedMeta#subscriptionId()}
+ *       直查回原订阅）——fire 到点经 {@code SourceDispatcher.onEvent} 回流，matcher 按 subscriptionId 路由后扇出
+ *       N 个 pipeline（旧"绕过 matcher"语义已被取代，见 ADR-0006 addendum）。</li>
  * </ul>
  */
 public final class DefaultSubscriptionMatcher implements SubscriptionMatcher {
@@ -37,8 +39,7 @@ public final class DefaultSubscriptionMatcher implements SubscriptionMatcher {
     @Override
     public List<MatchedSubscription> match(final Event event) {
         List<MatchedSubscription> matched = new ArrayList<>();
-        if (!registry.isLoaded() || event == null || event instanceof DelayedEvent) {
-            // DelayedEvent 绕过 matcher：原事件已在首次 match 时匹配过，延时重放直调 PipelineRunner。
+        if (!registry.isLoaded() || event == null) {
             return matched;
         }
         PipelineRegistry.Snapshot snapshot = registry.snapshot();
@@ -71,7 +72,7 @@ public final class DefaultSubscriptionMatcher implements SubscriptionMatcher {
     }
 
     private static boolean passesFieldFilter(final Subscription sub, final Event event) {
-        // fieldFilter 仅对 CDC 有意义（before/after 路径）；Cron/Api 子类型无对应路径解析，跳过过滤。
+        // fieldFilter 仅对 CDC 有意义（before/after 路径）；Tick/Api/Delayed 子类型无对应路径解析，跳过过滤。
         if (!(event instanceof CdcEvent)) {
             return true;
         }
@@ -84,6 +85,11 @@ public final class DefaultSubscriptionMatcher implements SubscriptionMatcher {
     }
 
     private static boolean matchesSource(final Subscription sub, final Event event) {
+        // DelayedEvent：snapshot.subscriptionsFor 已按 subscriptionId 路由到唯一订阅（不依赖 source 字段）。
+        // 直接放行，让 tryMatch 走 pipeline 扇出。
+        if (event instanceof DelayedEvent) {
+            return true;
+        }
         if (sub.source() == null) {
             return false;
         }
