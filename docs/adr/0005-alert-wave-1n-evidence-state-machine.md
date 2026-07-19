@@ -32,13 +32,15 @@ evidence 量增长由归档治理（§7.1 已预留 created_at + 索引）。
 
 ### 4. 处置 API（用户友好）
 
+> 路径风格（2026-07-19 修订）：与全仓 ADR-0002 软隔离风格一致，namespace 作必填 query 参数，而非路径段。
+
 ```
-POST   /api/v1/namespaces/{ns}/alerts/{id}/ack          {note}  → ACKNOWLEDGED
-POST   /api/v1/namespaces/{ns}/alerts/{id}/resolve      {note}  → RESOLVED（用户手动关）
-POST   /api/v1/namespaces/{ns}/alerts/{id}/ignore       {note}  → IGNORED
-POST   /api/v1/namespaces/{ns}/alert-silences           {match: {fingerprint|labels|ns+pipeline}, duration, note}
-GET    /api/v1/namespaces/{ns}/alert-silences
-DELETE /api/v1/namespaces/{ns}/alert-silences/{id}
+POST   /api/v1/alerts/{id}/ack?namespace={ns}          {note}  → ACKNOWLEDGED
+POST   /api/v1/alerts/{id}/resolve?namespace={ns}      {note}  → RESOLVED（用户手动关）
+POST   /api/v1/alerts/{id}/ignore?namespace={ns}       {note}  → IGNORED
+POST   /api/v1/alert-silences?namespace={ns}           {match: {fingerprint|labels|ns+pipeline}, duration, note}
+GET    /api/v1/alert-silences?namespace={ns}
+DELETE /api/v1/alert-silences/{id}?namespace={ns}
 ```
 
 ## Why

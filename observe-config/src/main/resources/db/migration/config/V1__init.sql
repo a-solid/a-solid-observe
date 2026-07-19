@@ -11,8 +11,6 @@ CREATE UNIQUE INDEX idx_namespaces_name ON namespaces(name);
 CREATE TABLE pipelines (
     id BIGINT PRIMARY KEY,
     namespace VARCHAR NOT NULL,
-    team VARCHAR NOT NULL,
-    application VARCHAR NOT NULL,
     labels VARCHAR(16384),
     name VARCHAR NOT NULL,
     description VARCHAR,
@@ -25,7 +23,6 @@ CREATE TABLE pipelines (
 );
 
 CREATE UNIQUE INDEX idx_pipelines_ns_name ON pipelines(namespace, name);
-CREATE INDEX idx_pipelines_team_app ON pipelines(team, application);
 CREATE INDEX idx_pipelines_status_updated ON pipelines(status, updated_at);
 
 CREATE TABLE pipeline_versions (

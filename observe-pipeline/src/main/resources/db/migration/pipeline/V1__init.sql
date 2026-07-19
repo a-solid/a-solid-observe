@@ -3,8 +3,6 @@ CREATE TABLE executions (
     namespace VARCHAR NOT NULL,
     pipeline_id BIGINT NOT NULL,
     pipeline_version INT NOT NULL,
-    team VARCHAR NOT NULL,
-    application VARCHAR NOT NULL,
     trigger_type VARCHAR NOT NULL,
     trigger_event LONG VARCHAR,
     subscription_id BIGINT,
@@ -21,7 +19,6 @@ CREATE TABLE executions (
 
 CREATE INDEX idx_exec_ns_started ON executions(namespace, started_at DESC);
 CREATE INDEX idx_exec_pipeline ON executions(pipeline_id, started_at DESC);
-CREATE INDEX idx_exec_team ON executions(team, started_at DESC);
 CREATE INDEX idx_exec_status ON executions(status, started_at DESC);
 CREATE INDEX idx_exec_trace ON executions(trace_id);
 CREATE INDEX idx_exec_sub ON executions(subscription_id, started_at DESC);
@@ -33,8 +30,6 @@ CREATE TABLE failed_executions (
     pipeline_id BIGINT NOT NULL,
     pipeline_version INT NOT NULL,
     execution_id BIGINT,
-    team VARCHAR NOT NULL,
-    application VARCHAR NOT NULL,
     trigger_type VARCHAR NOT NULL,
     trigger_event LONG VARCHAR,
     subscription_id BIGINT,
@@ -64,7 +59,6 @@ CREATE INDEX idx_fe_ns_created ON failed_executions(namespace, created_at DESC);
 CREATE INDEX idx_fe_status ON failed_executions(status, created_at DESC);
 CREATE INDEX idx_fe_execution ON failed_executions(execution_id);
 CREATE INDEX idx_fe_pipeline ON failed_executions(pipeline_id, created_at DESC);
-CREATE INDEX idx_fe_team ON failed_executions(team, created_at DESC);
 CREATE INDEX idx_fe_trigger ON failed_executions(trigger_type, created_at DESC);
 CREATE INDEX idx_fe_error_type ON failed_executions(error_type, created_at DESC);
 CREATE INDEX idx_fe_sub ON failed_executions(subscription_id, created_at DESC);

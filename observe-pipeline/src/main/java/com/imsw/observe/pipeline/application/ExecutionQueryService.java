@@ -35,11 +35,9 @@ public class ExecutionQueryService {
     }
 
     /**
-     * 列表查询，软隔离铁律（ADR-0002）：namespace 必填，行内存过滤（与既有 pipelineId 过滤同款；
-     * execution 资源表不对外暴露 BIGINT 物理主键，namespace 仅作软过滤维度）。
-     *
-     * <p>分页：先取候选行并完成 namespace/pipelineId 内存过滤，再分页，{@link PageImpl} 携带真实 total。
-     * B6 会为 stats 场景补 JPQL where 下推。
+     * 列表查询，软隔离铁律（ADR-0002）：namespace 必填，**namespace/过滤条件下推到 JPQL where**
+     * （避免 findAll + 内存过滤在跨 namespace 超 {@code FETCH_SIZE} 行时静默截断），再对结果分页，
+     * {@link PageImpl} 携带真实 total。
      */
     public Page<Execution> findExecutions(final String namespace, final Long pipelineId, final Pageable pageable) {
         return findExecutions(namespace, pipelineId, null, null, null, pageable);
@@ -54,12 +52,9 @@ public class ExecutionQueryService {
             final Instant to,
             final Pageable pageable) {
         String normStatus = status == null || status.isBlank() ? null : status.toUpperCase();
-        List<Execution> filtered = executionRepository.findAll(PageRequest.of(0, FETCH_SIZE)).stream()
-                .filter(e -> namespace.equals(e.namespace))
-                .filter(e -> pipelineId == null || pipelineId.equals(e.pipelineId))
-                .filter(e -> normStatus == null || normStatus.equals(e.status))
-                .filter(e -> from == null || !e.startedAt.isBefore(from))
-                .filter(e -> to == null || e.startedAt.isBefore(to))
+        List<Execution> filtered = executionRepository
+                .findByNamespaceFilters(namespace, pipelineId, normStatus, from, to, PageRequest.of(0, FETCH_SIZE))
+                .stream()
                 .map(ExecutionQueryService::toExecution)
                 .toList();
         return paginate(filtered, pageable);
@@ -89,13 +84,10 @@ public class ExecutionQueryService {
             final Pageable pageable) {
         String normStatus = status == null || status.isBlank() ? null : status.toUpperCase();
         String normError = errorType == null || errorType.isBlank() ? null : errorType.toUpperCase();
-        List<FailedExecution> filtered = failedExecutionRepository.findAll(PageRequest.of(0, FETCH_SIZE)).stream()
-                .filter(e -> namespace.equals(e.namespace))
-                .filter(e -> pipelineId == null || pipelineId.equals(e.pipelineId))
-                .filter(e -> normStatus == null || normStatus.equals(e.status))
-                .filter(e -> normError == null || normError.equals(e.errorType))
-                .filter(e -> from == null || !e.createdAt.isBefore(from))
-                .filter(e -> to == null || e.createdAt.isBefore(to))
+        List<FailedExecution> filtered = failedExecutionRepository
+                .findByNamespaceFilters(
+                        namespace, pipelineId, normStatus, normError, from, to, PageRequest.of(0, FETCH_SIZE))
+                .stream()
                 .map(ExecutionQueryService::toFailedExecution)
                 .toList();
         return paginate(filtered, pageable);

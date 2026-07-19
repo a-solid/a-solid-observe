@@ -7,4 +7,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface PipelineVersionRepository extends JpaRepository<PipelineVersionPo, PipelineVersionPk> {
 
     List<PipelineVersionPo> findAllByNamespace(String namespace);
+
+    List<PipelineVersionPo> findAllByPipelineIdOrderByVersionAsc(Long pipelineId);
 }

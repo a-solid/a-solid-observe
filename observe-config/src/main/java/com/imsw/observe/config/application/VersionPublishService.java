@@ -1,7 +1,6 @@
 package com.imsw.observe.config.application;
 
 import java.time.Instant;
-import java.util.Comparator;
 import java.util.List;
 
 import org.springframework.stereotype.Service;
@@ -96,9 +95,9 @@ public class VersionPublishService {
     @Transactional(readOnly = true)
     public List<PipelineVersion> versions(final String namespace, final String pipelineName) {
         PipelineDefinitionPo def = requireDefinition(namespace, pipelineName);
-        return versionRepository.findAll().stream()
-                .filter(v -> def.id.equals(v.pipelineId))
-                .sorted(Comparator.comparingInt((PipelineVersionPo v) -> v.version))
+        // namespace 已通过 requireDefinition 软校验（def 即该 namespace 下的 pipeline），
+        // 直接按 pipelineId 查版本，避免 findAll + 内存过滤扫描全表。
+        return versionRepository.findAllByPipelineIdOrderByVersionAsc(def.id).stream()
                 .map(VersionPublishService::toEntity)
                 .toList();
     }
@@ -114,8 +113,7 @@ public class VersionPublishService {
 
     @Transactional
     public int nextVersion(final Long pipelineId) {
-        return versionRepository.findAll().stream()
-                        .filter(v -> pipelineId.equals(v.pipelineId))
+        return versionRepository.findAllByPipelineIdOrderByVersionAsc(pipelineId).stream()
                         .mapToInt(v -> v.version)
                         .max()
                         .orElse(0)

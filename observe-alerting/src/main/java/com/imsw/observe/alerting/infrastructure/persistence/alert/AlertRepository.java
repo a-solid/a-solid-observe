@@ -17,10 +17,30 @@ public interface AlertRepository extends JpaRepository<AlertPo, Long> {
 
     Optional<AlertPo> findFirstByFingerprintAndStatusOrderByIdAsc(String fingerprint, String status);
 
-    List<AlertPo> findByStatusOrderByIdDesc(String status, Pageable pageable);
-
     @Query("select a.id from AlertPo a where a.status = 'FIRING' and a.endsAt < :now order by a.id")
     List<Long> findExpiredFiringIds(@Param("now") Instant now, Pageable pageable);
+
+    /**
+     * 列表查询（ADR-0002 软隔离铁律）：namespace 下推 where，避免 findAll + 内存过滤导致的跨 namespace 截断。
+     * 所有可选过滤用 {@code :x is null or ...} 表达；结果按 id 倒序，分页由 {@link Pageable} 承担。
+     */
+    @Query("select a from AlertPo a where a.namespace = :namespace "
+            + "and (:status is null or a.status = :status) "
+            + "and (:team is null or a.labelTeam = :team) "
+            + "and (:pipelineId is null or a.pipelineId = :pipelineId) "
+            + "and (:severity is null or a.severity = :severity) "
+            + "and (:from is null or a.startsAt >= :from) "
+            + "and (:to is null or a.startsAt < :to) "
+            + "order by a.id desc")
+    List<AlertPo> findByNamespaceFilters(
+            @Param("namespace") String namespace,
+            @Param("status") String status,
+            @Param("team") String team,
+            @Param("pipelineId") Long pipelineId,
+            @Param("severity") String severity,
+            @Param("from") Instant from,
+            @Param("to") Instant to,
+            @Param("pageable") Pageable pageable);
 
     @Modifying
     @Query("update AlertPo a set a.lastSeenAt = :now, a.endsAt = :endsAt, "
