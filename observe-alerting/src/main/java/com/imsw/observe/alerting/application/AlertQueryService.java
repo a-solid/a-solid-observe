@@ -153,6 +153,20 @@ public class AlertQueryService {
         return (epochSecond / stepSeconds) * stepSeconds;
     }
 
+    /** B9 dashboard Top-N：按 fingerprint 聚合的告警计数（top limit 行）。 */
+    public List<DimensionCount> topFingerprints(
+            final String namespace, final Instant from, final Instant to, final int limit) {
+        int safeLimit = Math.max(1, Math.min(limit, MAX_LIMIT));
+        return alertRepository.countByFingerprint(namespace, from, to, PageRequest.of(0, safeLimit));
+    }
+
+    /** B9 dashboard Top-N：按 label_team 投影列聚合的告警计数（top limit 行）。 */
+    public List<DimensionCount> topTeams(
+            final String namespace, final Instant from, final Instant to, final int limit) {
+        int safeLimit = Math.max(1, Math.min(limit, MAX_LIMIT));
+        return alertRepository.countByTeamLabel(namespace, from, to, PageRequest.of(0, safeLimit));
+    }
+
     private static Instant bucketStart(final TimeseriesBucket b, final boolean daily) {
         ZonedDateTime z = ZonedDateTime.of(b.year(), b.month(), b.day(), daily ? 0 : b.hour(), 0, 0, 0, ZoneOffset.UTC);
         return z.toInstant();

@@ -136,6 +136,92 @@ class AlertStatsRepositoryTest {
         assertThat(points.get(1).count()).isZero();
     }
 
+    // ---------- B9 dashboard Top-N 聚合 ----------
+    // 复用 @BeforeEach 的 setUp 数据（窗口内 3 条：team-a CRITICAL ACTIVE x2 + team-b WARNING EXPIRED x1，
+    // 各自 fingerprint 不同；窗口外 1 条 team-a CRITICAL ACTIVE）。新增 1 条相同 fingerprint 的 alert 验证聚合。
+
+    @Test
+    void topFingerprintsAggregatesAndOrdersByCountDesc() {
+        // setUp 数据：窗口内 3 条不同 fingerprint（各 1 条）。再加 1 条与 setUp 第一条同 fp 的 alert → 该 fp 应为 2 条居首。
+        Instant base = Instant.parse("2026-07-19T10:00:00Z");
+        Instant from = Instant.parse("2026-07-19T10:00:00Z");
+        Instant to = Instant.parse("2026-07-19T11:00:00Z");
+        // 抓 setUp 第一条 alert 的 fingerprint，再加 1 条同 fp（窗口内）
+        AlertPo first = alertRepository.findAll().stream()
+                .filter(a -> "ns".equals(a.namespace) && a.startsAt.equals(base))
+                .findFirst()
+                .orElseThrow();
+        alertRepository.save(alertWithFp(
+                "ns", "team-a", Severity.CRITICAL, AlertStatus.ACTIVE, base.plusSeconds(60), 1L, first.fingerprint));
+
+        List<DimensionCount> top = alertQueryService.topFingerprints("ns", from, to, 5);
+
+        // setUp 3 条（fp 各不同）+ 新增 1 条与 first.fingerprint 相同 → first.fp 计数 2，其余 2 条各 1
+        assertThat(top).hasSize(3);
+        assertThat(top.get(0).count()).isEqualTo(2L); // 排首位
+        assertThat(top.get(0).dimension()).isEqualTo(first.fingerprint);
+        // 剩余 2 条各 1（按 count desc + fingerprint asc 二级排序）
+        assertThat(top.get(1).count()).isEqualTo(1L);
+        assertThat(top.get(2).count()).isEqualTo(1L);
+    }
+
+    @Test
+    void topTeamsAggregatesByLabelTeam() {
+        // setUp 数据：team-a 2 条、team-b 1 条（都在窗口内）
+        Instant from = Instant.parse("2026-07-19T10:00:00Z");
+        Instant to = Instant.parse("2026-07-19T11:00:00Z");
+
+        List<DimensionCount> top = alertQueryService.topTeams("ns", from, to, 5);
+
+        // team-a 2 条居首（按 count desc），team-b 1 条
+        assertThat(top)
+                .extracting("dimension", "count")
+                .containsExactly(
+                        org.assertj.core.groups.Tuple.tuple("team-a", 2L),
+                        org.assertj.core.groups.Tuple.tuple("team-b", 1L));
+    }
+
+    @Test
+    void topNAggregatesRespectNamespaceIsolation() {
+        // setUp 数据全在 "ns"。查 "other-ns" 应返回空。
+        Instant from = Instant.parse("2026-07-19T10:00:00Z");
+        Instant to = Instant.parse("2026-07-19T11:00:00Z");
+
+        List<DimensionCount> top = alertQueryService.topFingerprints("other-ns", from, to, 5);
+        assertThat(top).isEmpty();
+    }
+
+    private static AlertPo alertWithFp(
+            final String namespace,
+            final String team,
+            final Severity severity,
+            final AlertStatus status,
+            final Instant startsAt,
+            final Long pipelineId,
+            final String fingerprint) {
+        AlertPo po = new AlertPo();
+        po.id = System.nanoTime();
+        po.namespace = namespace;
+        po.labelTeam = team;
+        po.pipelineId = pipelineId;
+        po.pipelineVersion = 1;
+        po.executionId = 1L;
+        po.fingerprint = fingerprint;
+        po.severity = severity.name();
+        po.labels = java.util.Map.of();
+        po.annotations = java.util.Map.of();
+        po.startsAt = startsAt;
+        po.lastSeenAt = startsAt;
+        po.endsAt = startsAt.plusSeconds(600);
+        po.resolvedAt = status == AlertStatus.EXPIRED ? startsAt.plusSeconds(600) : null;
+        po.status = status.name();
+        po.disposition = "NONE";
+        po.dedupCount = 1;
+        po.createdAt = startsAt;
+        po.updatedAt = startsAt;
+        return po;
+    }
+
     private static AlertPo alert(
             final String namespace,
             final String team,

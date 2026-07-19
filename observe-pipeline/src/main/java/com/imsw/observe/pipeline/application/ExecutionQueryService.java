@@ -92,6 +92,16 @@ public class ExecutionQueryService {
         return map;
     }
 
+    /**
+     * B9 dashboard Top-N：按 pipelineId 聚合的执行计数（top limit 行）。dimension 字段为 pipelineId 的字符串形式，
+     * 由 caller 自行 lookup 名称（{@code PipelineRegistry} 运行态查找）。
+     */
+    public List<DimensionCount> topPipelinesByExecution(
+            final String namespace, final Instant from, final Instant to, final int limit) {
+        int safeLimit = Math.max(1, Math.min(limit, FETCH_SIZE));
+        return executionRepository.countByPipelineId(namespace, from, to, PageRequest.of(0, safeLimit));
+    }
+
     private static <T> Page<T> paginate(final List<T> filtered, final Pageable pageable) {
         int from = (int) Math.min(pageable.getOffset(), filtered.size());
         int to = (int) Math.min(pageable.getOffset() + pageable.getPageSize(), filtered.size());

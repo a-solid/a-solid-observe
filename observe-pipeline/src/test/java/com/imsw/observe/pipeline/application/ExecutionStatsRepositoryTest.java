@@ -96,6 +96,32 @@ class ExecutionStatsRepositoryTest {
         assertThat(stats.total()).isEqualTo(1L);
     }
 
+    @Test
+    void topPipelinesByExecutionAggregatesAndOrdersByCountDesc() {
+        Instant from = Instant.parse("2026-07-19T10:00:00Z");
+        Instant to = Instant.parse("2026-07-19T11:00:00Z");
+        // pipelineId=1 有 3 条（2 SUCCESS + 1 FAILED）、pipelineId=2 有 1 条
+        // (setUp 已灌入这 4 条；此测试断言 setUp 数据下 top-N 正确分组)
+
+        var top = executionQueryService.topPipelinesByExecution("ns", from, to, 5);
+
+        // 按 count 降序：pid=1 (3 条) 在前、pid=2 (1 条) 在后；dimension 字段为 pipelineId 字符串
+        assertThat(top)
+                .extracting("dimension", "count")
+                .containsExactly(
+                        org.assertj.core.groups.Tuple.tuple("1", 3L), org.assertj.core.groups.Tuple.tuple("2", 1L));
+    }
+
+    @Test
+    void topPipelinesByExecutionRespectsNamespaceIsolation() {
+        Instant from = Instant.parse("2026-07-19T10:00:00Z");
+        Instant to = Instant.parse("2026-07-19T11:00:00Z");
+
+        var top = executionQueryService.topPipelinesByExecution("other-ns", from, to, 5);
+
+        assertThat(top).isEmpty();
+    }
+
     private static ExecutionPo execution(
             final String ns, final String status, final Instant startedAt, final Long pid) {
         ExecutionPo po = new ExecutionPo();

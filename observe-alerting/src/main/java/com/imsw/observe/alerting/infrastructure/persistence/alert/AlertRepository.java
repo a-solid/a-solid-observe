@@ -130,4 +130,27 @@ public interface AlertRepository extends JpaRepository<AlertPo, Long> {
             @Param("from") Instant from,
             @Param("to") Instant to,
             @Param("severity") String severity);
+
+    // ---------- B9 dashboard top-N 聚合（namespace 下推 where，按 count 降序取 Top N） ----------
+
+    /** Top-N fingerprint：按 fingerprint 聚合计数，count 降序，limit 由 Pageable 承载。 */
+    @Query("select new com.imsw.observe.alerting.application.DimensionCount(a.fingerprint, count(a)) "
+            + "from AlertPo a where a.namespace = :namespace and a.startsAt >= :from and a.startsAt < :to "
+            + "group by a.fingerprint order by count(a) desc, a.fingerprint asc")
+    List<DimensionCount> countByFingerprint(
+            @Param("namespace") String namespace,
+            @Param("from") Instant from,
+            @Param("to") Instant to,
+            @Param("pageable") Pageable pageable);
+
+    /** Top-N team：按 label_team 投影列聚合（B9 / ADR-0004：原 team 一等列已下线为 label_team）。 */
+    @Query("select new com.imsw.observe.alerting.application.DimensionCount(a.labelTeam, count(a)) "
+            + "from AlertPo a where a.namespace = :namespace and a.startsAt >= :from and a.startsAt < :to "
+            + "and a.labelTeam is not null "
+            + "group by a.labelTeam order by count(a) desc, a.labelTeam asc")
+    List<DimensionCount> countByTeamLabel(
+            @Param("namespace") String namespace,
+            @Param("from") Instant from,
+            @Param("to") Instant to,
+            @Param("pageable") Pageable pageable);
 }

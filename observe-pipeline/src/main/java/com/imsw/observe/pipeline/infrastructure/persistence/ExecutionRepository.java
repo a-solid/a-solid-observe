@@ -48,4 +48,19 @@ public interface ExecutionRepository extends JpaRepository<ExecutionPo, Long> {
             @Param("to") Instant to,
             @Param("pipelineId") Long pipelineId,
             @Param("triggerType") String triggerType);
+
+    /**
+     * B9 dashboard Top-N：按 pipelineId 聚合计数（含全部 status），count 降序取 limit 行（Pageable 承载）。
+     * service 层把 pipelineId → name 一次 lookup（{@code PipelineRegistry} 运行态查找）。
+     */
+    @Query("select new com.imsw.observe.pipeline.application.DimensionCount("
+            + "cast(e.pipelineId as string), count(e)) "
+            + "from ExecutionPo e where e.namespace = :namespace "
+            + "and e.startedAt >= :from and e.startedAt < :to "
+            + "group by e.pipelineId order by count(e) desc, e.pipelineId asc")
+    List<DimensionCount> countByPipelineId(
+            @Param("namespace") String namespace,
+            @Param("from") Instant from,
+            @Param("to") Instant to,
+            @Param("pageable") org.springframework.data.domain.Pageable pageable);
 }
