@@ -46,7 +46,7 @@ class DefaultSubscriptionMatcherTest {
                 "smoke",
                 java.util.List.of(1L),
                 new Subscription.SourceRef(
-                        "mq", "topic", "trade_db", "orders", Set.of(CdcOp.INSERT), SourceType.CDC, null, null, null),
+                        "mq", "trade_db", "orders", Set.of(CdcOp.INSERT), SourceType.CDC, null, null, null),
                 new Condition.Compare("after.status", Condition.Compare.Op.EQ, "PAID"),
                 new Action.Run());
         PipelineRegistry registry = new PipelineRegistry();
@@ -73,8 +73,7 @@ class DefaultSubscriptionMatcherTest {
                 11L,
                 "smoke",
                 java.util.List.of(1L),
-                new Subscription.SourceRef(
-                        "nightly-sync", null, null, null, Set.of(), SourceType.CRON, null, null, null),
+                new Subscription.SourceRef("nightly-sync", null, null, Set.of(), SourceType.CRON, null, null, null),
                 null,
                 new Action.Run());
         PipelineRegistry registry = new PipelineRegistry();
@@ -97,8 +96,7 @@ class DefaultSubscriptionMatcherTest {
                 12L,
                 "smoke",
                 java.util.List.of(1L),
-                new Subscription.SourceRef(
-                        "order-webhook", null, null, null, Set.of(), SourceType.API, null, null, null),
+                new Subscription.SourceRef("order-webhook", null, null, Set.of(), SourceType.API, null, null, null),
                 null,
                 new Action.Run());
         PipelineRegistry registry = new PipelineRegistry();
@@ -123,8 +121,7 @@ class DefaultSubscriptionMatcherTest {
                 10L,
                 "smoke",
                 java.util.List.of(1L, 2L),
-                new Subscription.SourceRef(
-                        null, null, "trade_db", "orders", Set.of(), SourceType.CDC, null, null, null),
+                new Subscription.SourceRef(null, "trade_db", "orders", Set.of(), SourceType.CDC, null, null, null),
                 null,
                 new Action.Run());
         PipelineRegistry registry = new PipelineRegistry();
@@ -144,8 +141,7 @@ class DefaultSubscriptionMatcherTest {
                 10L,
                 "smoke",
                 java.util.List.of(99L),
-                new Subscription.SourceRef(
-                        null, null, "trade_db", "orders", Set.of(), SourceType.CDC, null, null, null),
+                new Subscription.SourceRef(null, "trade_db", "orders", Set.of(), SourceType.CDC, null, null, null),
                 null,
                 new Action.Run());
         PipelineRegistry registry = new PipelineRegistry();
@@ -169,7 +165,7 @@ class DefaultSubscriptionMatcherTest {
                 "smoke",
                 List.of(1L, 2L),
                 new Subscription.SourceRef(
-                        "mq", "topic", "trade_db", "orders", Set.of(CdcOp.INSERT), SourceType.CDC, null, null, null),
+                        "mq", "trade_db", "orders", Set.of(CdcOp.INSERT), SourceType.CDC, null, null, null),
                 null,
                 new Action.Run());
         PipelineRegistry registry = new PipelineRegistry();

@@ -49,7 +49,7 @@ class SourceDispatcherTest {
                 "smoke",
                 List.of(1L),
                 new Subscription.SourceRef(
-                        "mq", "topic", "trade_db", "orders", Set.of(CdcOp.INSERT), SourceType.CDC, null, null, null),
+                        "mq", "trade_db", "orders", Set.of(CdcOp.INSERT), SourceType.CDC, null, null, null),
                 null,
                 new Action.Run());
         PipelineRegistry registry = new PipelineRegistry();
@@ -83,7 +83,7 @@ class SourceDispatcherTest {
                 "smoke",
                 List.of(1L, 2L),
                 new Subscription.SourceRef(
-                        "mq", "topic", "trade_db", "orders", Set.of(CdcOp.INSERT), SourceType.CDC, null, null, null),
+                        "mq", "trade_db", "orders", Set.of(CdcOp.INSERT), SourceType.CDC, null, null, null),
                 null,
                 new Action.Run());
         PipelineRegistry registry = new PipelineRegistry();
@@ -144,7 +144,7 @@ class SourceDispatcherTest {
                 "smoke",
                 List.of(1L, 2L),
                 new Subscription.SourceRef(
-                        "mq", "topic", "trade_db", "orders", Set.of(CdcOp.INSERT), SourceType.CDC, null, null, null),
+                        "mq", "trade_db", "orders", Set.of(CdcOp.INSERT), SourceType.CDC, null, null, null),
                 null,
                 new Action.Schedule(Duration.ofMinutes(30), "after.orderId"));
         PipelineRegistry registry = new PipelineRegistry();
@@ -182,7 +182,7 @@ class SourceDispatcherTest {
                 "billing",
                 List.of(1L),
                 new Subscription.SourceRef(
-                        "mq", "topic", "trade_db", "orders", Set.of(CdcOp.UPDATE), SourceType.CDC, null, null, null),
+                        "mq", "trade_db", "orders", Set.of(CdcOp.UPDATE), SourceType.CDC, null, null, null),
                 null,
                 new Action.Cancel("after.orderId"));
         PipelineRegistry registry = new PipelineRegistry();
@@ -219,7 +219,7 @@ class SourceDispatcherTest {
                 "smoke",
                 List.of(1L, 2L),
                 new Subscription.SourceRef(
-                        "mq", "topic", "trade_db", "orders", Set.of(CdcOp.INSERT), SourceType.CDC, null, null, null),
+                        "mq", "trade_db", "orders", Set.of(CdcOp.INSERT), SourceType.CDC, null, null, null),
                 null,
                 new Action.Schedule(Duration.ofMillis(50), "after.orderId"));
         PipelineRegistry registry = new PipelineRegistry();

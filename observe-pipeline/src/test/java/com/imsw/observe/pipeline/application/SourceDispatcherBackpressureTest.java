@@ -97,8 +97,7 @@ class SourceDispatcherBackpressureTest {
                 1L,
                 "smoke",
                 List.of(1L),
-                new Subscription.SourceRef(
-                        "mq", "topic", "db", "t", Set.of(CdcOp.INSERT), SourceType.CDC, null, null, null),
+                new Subscription.SourceRef("mq", "db", "t", Set.of(CdcOp.INSERT), SourceType.CDC, null, null, null),
                 null,
                 new Action.Run());
         PipelineRegistry registry = new PipelineRegistry();

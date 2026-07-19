@@ -24,7 +24,6 @@ public record Subscription(
      */
     public record SourceRef(
             String mq,
-            String topic,
             String db,
             String table,
             Set<CdcOp> opTypes,

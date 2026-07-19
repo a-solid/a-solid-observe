@@ -115,7 +115,6 @@ public final class PipelineRegistryLoader {
                 com.imsw.observe.config.infrastructure.persistence.SubscriptionMapper.toEntity(po, conditionCodec);
         Subscription.SourceRef source = new Subscription.SourceRef(
                 entity.mq(),
-                entity.topic(),
                 entity.db(),
                 entity.table(),
                 entity.opTypes(),

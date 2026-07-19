@@ -96,7 +96,6 @@ public class SubscriptionController {
     public record SubscriptionFields(
             @NotNull java.util.List<Long> pipelineIds,
             String mq,
-            String topic,
             String db,
             String table,
             Set<CdcOp> opTypes,
@@ -124,7 +123,6 @@ public class SubscriptionController {
                     namespace,
                     pipelineIds,
                     mq,
-                    topic,
                     db,
                     table,
                     opTypes,

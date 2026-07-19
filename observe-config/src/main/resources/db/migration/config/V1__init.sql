@@ -47,7 +47,6 @@ CREATE TABLE subscriptions (
     pipeline_ids VARCHAR(4096) NOT NULL,
 
     mq VARCHAR,
-    topic VARCHAR,
     db VARCHAR,
     table_name VARCHAR,
     op_types VARCHAR(256),

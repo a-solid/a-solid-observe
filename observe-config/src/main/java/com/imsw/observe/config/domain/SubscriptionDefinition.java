@@ -12,7 +12,6 @@ public record SubscriptionDefinition(
         String namespace,
         java.util.List<Long> pipelineIds,
         String mq,
-        String topic,
         String db,
         String table,
         Set<CdcOp> opTypes,

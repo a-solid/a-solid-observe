@@ -122,7 +122,7 @@ class CronSourceTest {
                 "ns",
                 List.of(100L),
                 new Subscription.SourceRef(
-                        "every-second", null, null, null, Set.of(), SourceType.API, null, null, Concurrent.SKIP),
+                        "every-second", null, null, Set.of(), SourceType.API, null, null, Concurrent.SKIP),
                 null,
                 null);
         scheduler.sync(snapshot(apiSub));
@@ -295,7 +295,6 @@ class CronSourceTest {
                         "idx-key",
                         null,
                         null,
-                        null,
                         Set.of(),
                         SourceType.CRON,
                         "* * * * * ?",
@@ -334,7 +333,7 @@ class CronSourceTest {
                 id,
                 "ns",
                 List.of(100L),
-                new Subscription.SourceRef(name, null, null, null, Set.of(), SourceType.CRON, expr, name, concurrent),
+                new Subscription.SourceRef(name, null, null, Set.of(), SourceType.CRON, expr, name, concurrent),
                 null,
                 null);
     }

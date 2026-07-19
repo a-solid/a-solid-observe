@@ -24,7 +24,6 @@ public final class SubscriptionMapper {
                 po.namespace,
                 po.pipelineIds,
                 po.mq,
-                po.topic,
                 po.db,
                 po.tableName,
                 toOpSet(po.opTypes),
@@ -53,7 +52,6 @@ public final class SubscriptionMapper {
         po.namespace = entity.namespace();
         po.pipelineIds = entity.pipelineIds() == null ? new ArrayList<>() : new ArrayList<>(entity.pipelineIds());
         po.mq = entity.mq();
-        po.topic = entity.topic();
         po.db = entity.db();
         po.tableName = entity.table();
         po.opTypes = fromOpSet(entity.opTypes());

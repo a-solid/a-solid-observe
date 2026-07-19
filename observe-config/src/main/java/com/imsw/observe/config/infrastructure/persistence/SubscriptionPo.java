@@ -29,9 +29,6 @@ public class SubscriptionPo {
     @Column(name = "mq")
     public String mq;
 
-    @Column(name = "topic")
-    public String topic;
-
     @Column(name = "db")
     public String db;
 
