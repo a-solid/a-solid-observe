@@ -93,12 +93,11 @@ public final class PipelineRegistryLoader {
             if (pipeline == null) {
                 return null;
             }
-            // namespace invariant：saveDraft 已保证 definitionJson 内嵌 namespace 非空且与版本 PO 一致
-            // （软隔离铁律 ADR-0002）。body namespace null/blank 视为数据损坏——拒绝加载（warn + skip），
-            // 不再用版本 PO 的 namespace 兜底重建（旧 11 参 positional 重建脆且为旧数据迁移兜底，项目未上线无此场景）。
-            if (pipeline.namespace() == null || pipeline.namespace().isBlank()) {
+            // saveDraft 已保证 definitionJson 自包含全量服务端字段（id/namespace/name/version/status）。
+            // 如果仍有空，说明数据损坏——拒绝加载。
+            if (pipeline.namespace() == null || pipeline.namespace().isBlank() || pipeline.id() == null) {
                 LOG.warn(
-                        "pipeline {} version {} has blank namespace in definitionJson, skipping",
+                        "pipeline {} version {} has blank id/namespace in definitionJson, skipping",
                         versionPo.pipelineId,
                         versionPo.version);
                 return null;

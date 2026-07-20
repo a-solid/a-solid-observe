@@ -33,10 +33,8 @@ public class VersionPublishService {
     public PipelineVersion saveDraft(
             final String namespace, final String pipelineName, final Pipeline pipeline, final String publishedBy) {
         PipelineDefinitionPo def = requireDefinition(namespace, pipelineName);
-        // 软隔离铁律（ADR-0002）：definitionJson 内嵌的 pipeline.namespace 必须与路径 namespace 一致。
-        // PipelineRegistryLoader.deserialize 优先采信 body 的 namespace 而非版本 PO 的 namespace，
-        // 否则 ns-A 写权限的调用方能保存 body namespace="B" 的草稿，发布后 execution/alert 落到 ns-B。
-        // body namespace null/blank 视为「不声明」，loader 会用版本 PO 的 namespace 兜底，可接受。
+        // 软隔离铁律（ADR-0002）：body namespace 必须与路径一致或留空（注入）。
+        // definitionJson 独立自包含全量数据（包括服务端字段），loader 直接反序列化即用。
         if (pipeline != null
                 && pipeline.namespace() != null
                 && !pipeline.namespace().isBlank()
@@ -44,19 +42,22 @@ public class VersionPublishService {
             throw new IllegalArgumentException("pipeline body namespace '" + pipeline.namespace()
                     + "' must match path namespace '" + def.namespace + "'");
         }
-        String json = JsonUtil.toJson(pipeline);
-        int nextVersion = nextVersion(def.id);
+        int ver = nextVersion(def.id);
+        Instant now = Instant.now();
+        Pipeline normalized =
+                normalize(pipeline, def.id, def.namespace, def.name, ver, Pipeline.Status.DRAFT, now, null);
+        String json = JsonUtil.toJson(normalized);
         PipelineVersionPo po = new PipelineVersionPo();
         po.namespace = def.namespace;
         po.pipelineId = def.id;
-        po.version = nextVersion;
+        po.version = ver;
         po.definitionJson = json;
         po.definitionHash = HashUtil.sha256(json);
         po.status = "DRAFT";
         po.publishedBy = publishedBy;
-        po.createdAt = Instant.now();
+        po.createdAt = now;
         versionRepository.save(po);
-        def.updatedAt = Instant.now();
+        def.updatedAt = now;
         definitionRepository.save(def);
         return toEntity(po);
     }
@@ -69,13 +70,29 @@ public class VersionPublishService {
                 .findById(versionPk(def.id, version))
                 .orElseThrow(
                         () -> new IllegalArgumentException("pipeline version not found: " + def.id + " v" + version));
+        Instant now = Instant.now();
+        // 重序列化 definitionJson：status 和 publishedAt 与版本 PO 一致，loader 反序列化后语义正确。
+        Pipeline current = JsonUtil.fromJson(po.definitionJson, Pipeline.class);
+        if (current != null) {
+            Pipeline published = normalize(
+                    current,
+                    def.id,
+                    def.namespace,
+                    def.name,
+                    version,
+                    Pipeline.Status.PUBLISHED,
+                    current.createdAt(),
+                    now);
+            po.definitionJson = JsonUtil.toJson(published);
+            po.definitionHash = HashUtil.sha256(po.definitionJson);
+        }
         po.status = "PUBLISHED";
         po.publishedBy = publishedBy;
-        po.publishedAt = Instant.now();
+        po.publishedAt = now;
         versionRepository.save(po);
         def.status = "PUBLISHED";
         def.currentVersion = version;
-        def.updatedAt = Instant.now();
+        def.updatedAt = now;
         definitionRepository.save(def);
         return toEntity(po);
     }
@@ -143,5 +160,31 @@ public class VersionPublishService {
                 po.publishedBy,
                 po.createdAt,
                 po.publishedAt);
+    }
+
+    /** 注入全部服务端字段到 pipeline body，确保 definitionJson 独立自包含。 */
+    static Pipeline normalize(
+            final Pipeline body,
+            final Long id,
+            final String namespace,
+            final String name,
+            final int version,
+            final Pipeline.Status status,
+            final Instant createdAt,
+            final Instant publishedAt) {
+        if (body == null) {
+            return null;
+        }
+        return new Pipeline(
+                id,
+                namespace,
+                version,
+                body.labels(),
+                name,
+                status,
+                body.nodes(),
+                createdAt,
+                publishedAt,
+                body.executionLogSampleRatio());
     }
 }

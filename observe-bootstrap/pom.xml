@@ -61,6 +61,10 @@
             <artifactId>com.ibm.mq.allclient</artifactId>
             <version>${ibm-mq-client.version}</version>
         </dependency>
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+        </dependency>
     </dependencies>
 
     <build>
@@ -79,14 +83,6 @@
                 <configuration>
                     <mainClass>com.imsw.observe.bootstrap.ObserveApplication</mainClass>
                 </configuration>
-            </plugin>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-checkstyle-plugin</artifactId>
-            </plugin>
-            <plugin>
-                <groupId>com.diffplug.spotless</groupId>
-                <artifactId>spotless-maven-plugin</artifactId>
             </plugin>
         </plugins>
     </build>
