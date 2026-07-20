@@ -12,6 +12,7 @@ import org.springframework.data.repository.query.Param;
 
 import com.imsw.observe.alerting.application.DimensionCount;
 import com.imsw.observe.alerting.application.TimeseriesBucket;
+import com.imsw.observe.alerting.application.TimeseriesBucketEpoch;
 
 public interface AlertRepository extends JpaRepository<AlertPo, Long> {
 
@@ -129,6 +130,19 @@ public interface AlertRepository extends JpaRepository<AlertPo, Long> {
             @Param("namespace") String namespace,
             @Param("from") Instant from,
             @Param("to") Instant to,
+            @Param("severity") String severity);
+
+    @Query("select new com.imsw.observe.alerting.application.TimeseriesBucketEpoch("
+            + "floor(extract(epoch from a.startsAt) / :stepSeconds) * :stepSeconds, a.severity, count(a)) "
+            + "from AlertPo a where a.namespace = :namespace and a.startsAt >= :from and a.startsAt < :to "
+            + "and (:severity is null or a.severity = :severity) "
+            + "group by floor(extract(epoch from a.startsAt) / :stepSeconds) * :stepSeconds, a.severity "
+            + "order by floor(extract(epoch from a.startsAt) / :stepSeconds) * :stepSeconds, a.severity")
+    List<TimeseriesBucketEpoch> timeseriesEpoch(
+            @Param("namespace") String namespace,
+            @Param("from") Instant from,
+            @Param("to") Instant to,
+            @Param("stepSeconds") long stepSeconds,
             @Param("severity") String severity);
 
     // ---------- B9 dashboard top-N 聚合（namespace 下推 where，按 count 降序取 Top N） ----------

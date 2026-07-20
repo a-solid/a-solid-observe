@@ -28,6 +28,9 @@ public class AlertQueryService {
 
     private static final int MAX_LIMIT = 1000;
 
+    private static final long STEP_5D = 432_000L;
+    private static final long STEP_7D = 604_800L;
+
     private final AlertRepository alertRepository;
 
     private final EvidenceRepository evidenceRepository;
@@ -120,14 +123,26 @@ public class AlertQueryService {
     }
 
     /**
-     * 告警时间序列：按桶（1h/1d）返回 {@code [{bucketStart, count}]}，缺桶补零（图表连续性）。
-     *
-     * @param bucket {@code "1h"} 或 {@code "1d"}，其它按 {@code 1h} 处理。
+     * 告警时间序列：按桶（1h/1d/5d/7d）返回 {@code [{bucketStart, count, severity}]}，缺桶补零（图表连续性）。
      */
     public List<TimeseriesPoint> alertTimeseries(
             final String namespace, final Instant from, final Instant to, final String bucket, final String severity) {
         String normSeverity = normalize(severity);
-        boolean daily = "1d".equalsIgnoreCase(bucket);
+        if ("5d".equalsIgnoreCase(bucket) || "7d".equalsIgnoreCase(bucket)) {
+            long stepSeconds = "5d".equalsIgnoreCase(bucket) ? STEP_5D : STEP_7D;
+            List<TimeseriesBucketEpoch> rows =
+                    alertRepository.timeseriesEpoch(namespace, from, to, stepSeconds, normSeverity);
+            return fillEpochTimeseries(rows, from.getEpochSecond(), to.getEpochSecond(), stepSeconds, normSeverity);
+        }
+        return fineTimeseries(namespace, from, to, normSeverity, "1d".equalsIgnoreCase(bucket));
+    }
+
+    private List<TimeseriesPoint> fineTimeseries(
+            final String namespace,
+            final Instant from,
+            final Instant to,
+            final String normSeverity,
+            final boolean daily) {
         List<TimeseriesBucket> rows = daily
                 ? alertRepository.timeseriesDaily(namespace, from, to, normSeverity)
                 : alertRepository.timeseriesHourly(namespace, from, to, normSeverity);
@@ -156,6 +171,35 @@ public class AlertQueryService {
             for (String sev : knownSeverities) {
                 long count = severityCounts != null ? severityCounts.getOrDefault(sev, 0L) : 0L;
                 result.add(new TimeseriesPoint(start, count, sev));
+            }
+            cursor += stepSeconds;
+        }
+        return result;
+    }
+
+    private List<TimeseriesPoint> fillEpochTimeseries(
+            final List<TimeseriesBucketEpoch> rows,
+            final long fromEpoch,
+            final long toEpoch,
+            final long stepSeconds,
+            final String normSeverity) {
+        Map<String, Long> byKey = new LinkedHashMap<>();
+        for (TimeseriesBucketEpoch b : rows) {
+            byKey.put(b.epochSeconds() + "|" + b.severity(), b.count());
+        }
+        Set<String> severities;
+        if (normSeverity != null) {
+            severities = Set.of(normSeverity);
+        } else {
+            severities = Set.of("CRITICAL", "WARNING", "INFO");
+        }
+        List<TimeseriesPoint> result = new ArrayList<>();
+        long cursor = (fromEpoch / stepSeconds) * stepSeconds;
+        while (cursor < toEpoch) {
+            Instant start = Instant.ofEpochSecond(cursor);
+            for (String sev : severities) {
+                String key = cursor + "|" + sev;
+                result.add(new TimeseriesPoint(start, byKey.getOrDefault(key, 0L), sev));
             }
             cursor += stepSeconds;
         }
