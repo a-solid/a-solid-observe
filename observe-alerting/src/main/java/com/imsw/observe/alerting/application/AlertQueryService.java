@@ -5,9 +5,11 @@ import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -130,20 +132,33 @@ public class AlertQueryService {
         List<TimeseriesBucket> rows = daily
                 ? alertRepository.timeseriesDaily(namespace, from, to, normSeverity)
                 : alertRepository.timeseriesHourly(namespace, from, to, normSeverity);
-        Map<Instant, Long> byStart = new LinkedHashMap<>();
+        // 从数据中收集已知的 severity 级别，用于补零
+        Set<String> knownSeverities = new LinkedHashSet<>();
         for (TimeseriesBucket b : rows) {
-            byStart.put(bucketStart(b, daily), b.count());
+            knownSeverities.add(b.severity());
         }
-        // 按 from→to 步进补零
+        if (normSeverity != null) {
+            knownSeverities = Set.of(normSeverity);
+        }
+        // 按 (桶起点 → 级别 → 计数) 分组
+        Map<Instant, Map<String, Long>> byStart = new LinkedHashMap<>();
+        for (TimeseriesBucket b : rows) {
+            byStart.computeIfAbsent(bucketStart(b, daily), k -> new LinkedHashMap<>())
+                    .merge(b.severity(), b.count(), Long::sum);
+        }
+        // 按 from→to 步进，每个桶对每种 severity 补零
         List<TimeseriesPoint> result = new ArrayList<>();
         long stepSeconds = daily ? 86_400L : 3_600L;
         long fromEpoch = from.getEpochSecond();
         long toEpoch = to.getEpochSecond();
-        // 对齐到桶边界
         long cursor = alignToBucket(fromEpoch, stepSeconds);
         while (cursor < toEpoch) {
             Instant start = Instant.ofEpochSecond(cursor);
-            result.add(new TimeseriesPoint(start, byStart.getOrDefault(start, 0L)));
+            Map<String, Long> severityCounts = byStart.get(start);
+            for (String sev : knownSeverities) {
+                long count = severityCounts != null ? severityCounts.getOrDefault(sev, 0L) : 0L;
+                result.add(new TimeseriesPoint(start, count, sev));
+            }
             cursor += stepSeconds;
         }
         return result;

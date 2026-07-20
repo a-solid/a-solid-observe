@@ -109,31 +109,60 @@ class AlertStatsRepositoryTest {
     @Test
     void timeseriesHourlyFillsZeroBuckets() {
         // 窗口 3 小时，数据在第 1 小时内（10:00-10:30）→ 11:00、12:00 桶应为 0
+        // 数据含 CRITICAL(2) + WARNING(1) 两个级别 → 每个桶每个级别一行
         Instant from = Instant.parse("2026-07-19T10:00:00Z");
         Instant to = Instant.parse("2026-07-19T13:00:00Z");
 
         List<TimeseriesPoint> points = alertQueryService.alertTimeseries("ns", from, to, "1h", null);
 
-        assertThat(points).hasSize(3);
-        assertThat(points.get(0).bucketStart()).isEqualTo(Instant.parse("2026-07-19T10:00:00Z"));
-        assertThat(points.get(0).count()).isEqualTo(3L);
-        assertThat(points.get(1).bucketStart()).isEqualTo(Instant.parse("2026-07-19T11:00:00Z"));
-        assertThat(points.get(1).count()).isZero();
-        assertThat(points.get(2).count()).isZero();
+        assertThat(points).hasSize(6);
+        // 10:00 桶
+        assertThat(points.get(0))
+                .usingRecursiveComparison()
+                .isEqualTo(new TimeseriesPoint(Instant.parse("2026-07-19T10:00:00Z"), 2L, "CRITICAL"));
+        assertThat(points.get(1))
+                .usingRecursiveComparison()
+                .isEqualTo(new TimeseriesPoint(Instant.parse("2026-07-19T10:00:00Z"), 1L, "WARNING"));
+        // 11:00 桶补零
+        assertThat(points.get(2))
+                .usingRecursiveComparison()
+                .isEqualTo(new TimeseriesPoint(Instant.parse("2026-07-19T11:00:00Z"), 0L, "CRITICAL"));
+        assertThat(points.get(3))
+                .usingRecursiveComparison()
+                .isEqualTo(new TimeseriesPoint(Instant.parse("2026-07-19T11:00:00Z"), 0L, "WARNING"));
+        // 12:00 桶补零
+        assertThat(points.get(4))
+                .usingRecursiveComparison()
+                .isEqualTo(new TimeseriesPoint(Instant.parse("2026-07-19T12:00:00Z"), 0L, "CRITICAL"));
+        assertThat(points.get(5))
+                .usingRecursiveComparison()
+                .isEqualTo(new TimeseriesPoint(Instant.parse("2026-07-19T12:00:00Z"), 0L, "WARNING"));
     }
 
     @Test
     void timeseriesDailyBucketsByDay() {
         // 日桶窗口 07-19 00:00 → 07-21 00:00：07-19 当日 4 条（含 09:00 那条「窗口外」对小时窗而言、但对日窗在内）
+        // 数据含 CRITICAL(3) + WARNING(1) 两个级别 → 每个桶每个级别一行
         Instant from = Instant.parse("2026-07-19T00:00:00Z");
         Instant to = Instant.parse("2026-07-21T00:00:00Z");
 
         List<TimeseriesPoint> points = alertQueryService.alertTimeseries("ns", from, to, "1d", null);
 
-        assertThat(points).hasSize(2);
-        assertThat(points.get(0).bucketStart()).isEqualTo(Instant.parse("2026-07-19T00:00:00Z"));
-        assertThat(points.get(0).count()).isEqualTo(4L);
-        assertThat(points.get(1).count()).isZero();
+        assertThat(points).hasSize(4);
+        // 07-19 桶
+        assertThat(points.get(0))
+                .usingRecursiveComparison()
+                .isEqualTo(new TimeseriesPoint(Instant.parse("2026-07-19T00:00:00Z"), 3L, "CRITICAL"));
+        assertThat(points.get(1))
+                .usingRecursiveComparison()
+                .isEqualTo(new TimeseriesPoint(Instant.parse("2026-07-19T00:00:00Z"), 1L, "WARNING"));
+        // 07-20 桶补零
+        assertThat(points.get(2))
+                .usingRecursiveComparison()
+                .isEqualTo(new TimeseriesPoint(Instant.parse("2026-07-20T00:00:00Z"), 0L, "CRITICAL"));
+        assertThat(points.get(3))
+                .usingRecursiveComparison()
+                .isEqualTo(new TimeseriesPoint(Instant.parse("2026-07-20T00:00:00Z"), 0L, "WARNING"));
     }
 
     // ---------- B9 dashboard Top-N 聚合 ----------

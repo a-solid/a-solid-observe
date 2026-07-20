@@ -103,13 +103,13 @@ public interface AlertRepository extends JpaRepository<AlertPo, Long> {
 
     @Query("select new com.imsw.observe.alerting.application.TimeseriesBucket("
             + "extract(year from a.startsAt), extract(month from a.startsAt), "
-            + "extract(day from a.startsAt), extract(hour from a.startsAt), count(a)) "
+            + "extract(day from a.startsAt), extract(hour from a.startsAt), a.severity, count(a)) "
             + "from AlertPo a where a.namespace = :namespace and a.startsAt >= :from and a.startsAt < :to "
             + "and (:severity is null or a.severity = :severity) "
             + "group by extract(year from a.startsAt), extract(month from a.startsAt), "
-            + "extract(day from a.startsAt), extract(hour from a.startsAt) "
+            + "extract(day from a.startsAt), extract(hour from a.startsAt), a.severity "
             + "order by extract(year from a.startsAt), extract(month from a.startsAt), "
-            + "extract(day from a.startsAt), extract(hour from a.startsAt)")
+            + "extract(day from a.startsAt), extract(hour from a.startsAt), a.severity")
     List<TimeseriesBucket> timeseriesHourly(
             @Param("namespace") String namespace,
             @Param("from") Instant from,
@@ -118,13 +118,13 @@ public interface AlertRepository extends JpaRepository<AlertPo, Long> {
 
     @Query("select new com.imsw.observe.alerting.application.TimeseriesBucket("
             + "extract(year from a.startsAt), extract(month from a.startsAt), "
-            + "extract(day from a.startsAt), 0, count(a)) "
+            + "extract(day from a.startsAt), 0, a.severity, count(a)) "
             + "from AlertPo a where a.namespace = :namespace and a.startsAt >= :from and a.startsAt < :to "
             + "and (:severity is null or a.severity = :severity) "
             + "group by extract(year from a.startsAt), extract(month from a.startsAt), "
-            + "extract(day from a.startsAt) "
+            + "extract(day from a.startsAt), a.severity "
             + "order by extract(year from a.startsAt), extract(month from a.startsAt), "
-            + "extract(day from a.startsAt)")
+            + "extract(day from a.startsAt), a.severity")
     List<TimeseriesBucket> timeseriesDaily(
             @Param("namespace") String namespace,
             @Param("from") Instant from,

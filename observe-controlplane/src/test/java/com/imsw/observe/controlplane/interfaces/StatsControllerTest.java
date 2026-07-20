@@ -74,7 +74,7 @@ class StatsControllerTest {
         Instant from = Instant.now().minusSeconds(7200);
         Instant to = Instant.now();
         when(alertQueryService.alertTimeseries(eq("billing"), eq(from), eq(to), eq("1h"), eq(null)))
-                .thenReturn(List.of(new TimeseriesPoint(from, 7L)));
+                .thenReturn(List.of(new TimeseriesPoint(from, 7L, null)));
 
         var resp = controller.alertTimeseries("billing", from, to, "1h", null);
 
