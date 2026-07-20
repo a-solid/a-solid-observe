@@ -14,11 +14,13 @@ import com.imsw.observe.controlplane.application.DashboardStatsService;
 import com.imsw.observe.controlplane.interfaces.dto.AlertStatsDto;
 import com.imsw.observe.controlplane.interfaces.dto.DashboardStatsDto;
 import com.imsw.observe.controlplane.interfaces.dto.ExecutionStatsDto;
+import com.imsw.observe.controlplane.interfaces.dto.ExecutionTimeseriesPointDto;
 import com.imsw.observe.controlplane.interfaces.dto.TimeseriesPointDto;
 import com.imsw.observe.controlplane.interfaces.web.ApiResponse;
 import com.imsw.observe.controlplane.interfaces.web.ErrorCode;
 import com.imsw.observe.controlplane.interfaces.web.ErrorResponseException;
 import com.imsw.observe.pipeline.application.ExecutionQueryService;
+import com.imsw.observe.pipeline.application.ExecutionTimeseriesPoint;
 
 /**
  * 看板统计接口（B6，ADR-0002 软隔离：{@code ?namespace=} 必填）。
@@ -85,6 +87,25 @@ public class StatsController {
             @RequestParam(name = "trigger_type", required = false) final String triggerType) {
         return ApiResponse.ok(ExecutionStatsDto.from(
                 executionQueryService.executionStats(namespace, from, to, pipelineId, triggerType)));
+    }
+
+    @GetMapping("/executions/timeseries")
+    public ApiResponse<List<ExecutionTimeseriesPointDto>> executionTimeseries(
+            @RequestParam final String namespace,
+            @RequestParam final Instant from,
+            @RequestParam final Instant to,
+            @RequestParam(name = "bucket", required = false, defaultValue = "1h") final String bucket,
+            @RequestParam(name = "pipeline_id", required = false) final Long pipelineId,
+            @RequestParam(name = "trigger_type", required = false) final String triggerType) {
+        if (!"1h".equalsIgnoreCase(bucket) && !"1d".equalsIgnoreCase(bucket)
+                && !"5d".equalsIgnoreCase(bucket) && !"7d".equalsIgnoreCase(bucket)) {
+            throw new ErrorResponseException(
+                    ErrorCode.BAD_REQUEST.httpStatus(), ErrorCode.BAD_REQUEST,
+                    "bucket must be one of: 1h, 1d, 5d, 7d");
+        }
+        List<ExecutionTimeseriesPoint> points = executionQueryService.executionTimeseries(
+                namespace, from, to, bucket, pipelineId, triggerType);
+        return ApiResponse.ok(points.stream().map(ExecutionTimeseriesPointDto::from).toList());
     }
 
     /**
