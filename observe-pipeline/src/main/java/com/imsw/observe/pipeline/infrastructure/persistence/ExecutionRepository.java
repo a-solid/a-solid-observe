@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import com.imsw.observe.pipeline.application.DimensionCount;
+import com.imsw.observe.pipeline.application.ExecutionTimeseriesBucket;
 
 public interface ExecutionRepository extends JpaRepository<ExecutionPo, Long> {
 
@@ -63,4 +64,58 @@ public interface ExecutionRepository extends JpaRepository<ExecutionPo, Long> {
             @Param("from") Instant from,
             @Param("to") Instant to,
             @Param("pageable") org.springframework.data.domain.Pageable pageable);
+
+    // ---------- B6 扩展：执行时间序列 ----------
+
+    @Query("select new com.imsw.observe.pipeline.application.ExecutionTimeseriesBucket("
+            + "extract(year from e.startedAt), extract(month from e.startedAt), "
+            + "extract(day from e.startedAt), extract(hour from e.startedAt), e.status, count(e)) "
+            + "from ExecutionPo e where e.namespace = :namespace "
+            + "and e.startedAt >= :from and e.startedAt < :to "
+            + "and (:pipelineId is null or e.pipelineId = :pipelineId) "
+            + "and (:triggerType is null or e.triggerType = :triggerType) "
+            + "group by extract(year from e.startedAt), extract(month from e.startedAt), "
+            + "extract(day from e.startedAt), extract(hour from e.startedAt), e.status "
+            + "order by extract(year from e.startedAt), extract(month from e.startedAt), "
+            + "extract(day from e.startedAt), extract(hour from e.startedAt), e.status")
+    List<ExecutionTimeseriesBucket> timeseriesHourlyByStatus(
+            @Param("namespace") String namespace,
+            @Param("from") Instant from,
+            @Param("to") Instant to,
+            @Param("pipelineId") Long pipelineId,
+            @Param("triggerType") String triggerType);
+
+    @Query("select new com.imsw.observe.pipeline.application.ExecutionTimeseriesBucket("
+            + "extract(year from e.startedAt), extract(month from e.startedAt), "
+            + "extract(day from e.startedAt), 0, e.status, count(e)) "
+            + "from ExecutionPo e where e.namespace = :namespace "
+            + "and e.startedAt >= :from and e.startedAt < :to "
+            + "and (:pipelineId is null or e.pipelineId = :pipelineId) "
+            + "and (:triggerType is null or e.triggerType = :triggerType) "
+            + "group by extract(year from e.startedAt), extract(month from e.startedAt), "
+            + "extract(day from e.startedAt), e.status "
+            + "order by extract(year from e.startedAt), extract(month from e.startedAt), "
+            + "extract(day from e.startedAt), e.status")
+    List<ExecutionTimeseriesBucket> timeseriesDailyByStatus(
+            @Param("namespace") String namespace,
+            @Param("from") Instant from,
+            @Param("to") Instant to,
+            @Param("pipelineId") Long pipelineId,
+            @Param("triggerType") String triggerType);
+
+    @Query("select floor(extract(epoch from e.startedAt) / :stepSeconds) * :stepSeconds as epochSec, "
+            + "e.status, count(e) "
+            + "from ExecutionPo e where e.namespace = :namespace "
+            + "and e.startedAt >= :from and e.startedAt < :to "
+            + "and (:pipelineId is null or e.pipelineId = :pipelineId) "
+            + "and (:triggerType is null or e.triggerType = :triggerType) "
+            + "group by floor(extract(epoch from e.startedAt) / :stepSeconds) * :stepSeconds, e.status "
+            + "order by epochSec, e.status")
+    List<Object[]> timeseriesEpochByStatus(
+            @Param("namespace") String namespace,
+            @Param("from") Instant from,
+            @Param("to") Instant to,
+            @Param("stepSeconds") long stepSeconds,
+            @Param("pipelineId") Long pipelineId,
+            @Param("triggerType") String triggerType);
 }

@@ -1,6 +1,7 @@
 package com.imsw.observe.pipeline.application;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -20,6 +21,11 @@ import com.imsw.observe.pipeline.infrastructure.persistence.ExecutionRepository;
 public class ExecutionQueryService {
 
     private static final int FETCH_SIZE = 1000;
+
+    private static final long STEP_1H = 3_600L;
+    private static final long STEP_1D = 86_400L;
+    private static final long STEP_5D = 432_000L;
+    private static final long STEP_7D = 604_800L;
 
     private final ExecutionRepository executionRepository;
 
@@ -82,6 +88,70 @@ public class ExecutionQueryService {
         long failedCount = byStatus.getOrDefault("FAILED", 0L);
         double successRate = total == 0 ? 1.0 : (double) (total - failedCount) / total;
         return new ExecutionStats(namespace, from, to, byStatus, total, failedCount, successRate);
+    }
+
+    public List<ExecutionTimeseriesPoint> executionTimeseries(
+            final String namespace,
+            final Instant from,
+            final Instant to,
+            final String bucket,
+            final Long pipelineId,
+            final String triggerType) {
+        String normTrigger = triggerType == null || triggerType.isBlank() ? null : triggerType.toUpperCase();
+        boolean daily = "1d".equalsIgnoreCase(bucket);
+        boolean coarse = "5d".equalsIgnoreCase(bucket) || "7d".equalsIgnoreCase(bucket);
+
+        long fromEpoch = from.getEpochSecond();
+        long toEpoch = to.getEpochSecond();
+        List<String> statuses = List.of("SUCCESS", "SHORT_CIRCUITED", "FAILED");
+
+        if (coarse) {
+            long stepSeconds = "5d".equalsIgnoreCase(bucket) ? STEP_5D : STEP_7D;
+            List<Object[]> rows = executionRepository.timeseriesEpochByStatus(
+                    namespace, from, to, stepSeconds, pipelineId, normTrigger);
+            Map<String, Long> byKey = new LinkedHashMap<>();
+            for (Object[] row : rows) {
+                long epochSec = ((Number) row[0]).longValue();
+                String status = (String) row[1];
+                long count = ((Number) row[2]).longValue();
+                byKey.put(epochSec + "|" + status, count);
+            }
+            List<ExecutionTimeseriesPoint> result = new ArrayList<>();
+            long cursor = (fromEpoch / stepSeconds) * stepSeconds;
+            while (cursor < toEpoch) {
+                Instant start = Instant.ofEpochSecond(cursor);
+                for (String st : statuses) {
+                    String key = cursor + "|" + st;
+                    result.add(new ExecutionTimeseriesPoint(start, byKey.getOrDefault(key, 0L), st));
+                }
+                cursor += stepSeconds;
+            }
+            return result;
+        }
+
+        long stepSeconds = daily ? STEP_1D : STEP_1H;
+        List<ExecutionTimeseriesBucket> rows = daily
+                ? executionRepository.timeseriesDailyByStatus(namespace, from, to, pipelineId, normTrigger)
+                : executionRepository.timeseriesHourlyByStatus(namespace, from, to, pipelineId, normTrigger);
+
+        Map<String, Long> byKey = new LinkedHashMap<>();
+        for (ExecutionTimeseriesBucket b : rows) {
+            java.time.ZonedDateTime z = java.time.ZonedDateTime.of(
+                    b.year(), b.month(), b.day(), daily ? 0 : b.hour(), 0, 0, 0, java.time.ZoneOffset.UTC);
+            byKey.put(z.toInstant().toString() + "|" + b.status(), b.count());
+        }
+
+        List<ExecutionTimeseriesPoint> result = new ArrayList<>();
+        long cursor = (fromEpoch / stepSeconds) * stepSeconds;
+        while (cursor < toEpoch) {
+            Instant start = Instant.ofEpochSecond(cursor);
+            for (String st : statuses) {
+                String key = start.toString() + "|" + st;
+                result.add(new ExecutionTimeseriesPoint(start, byKey.getOrDefault(key, 0L), st));
+            }
+            cursor += stepSeconds;
+        }
+        return result;
     }
 
     private static Map<String, Long> toMap(final List<DimensionCount> rows) {
