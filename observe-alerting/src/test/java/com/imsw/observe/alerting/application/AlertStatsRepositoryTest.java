@@ -115,7 +115,7 @@ class AlertStatsRepositoryTest {
 
         List<TimeseriesPoint> points = alertQueryService.alertTimeseries("ns", from, to, "1h", null);
 
-        assertThat(points).hasSize(6);
+        assertThat(points).hasSize(9);
         // 10:00 桶
         assertThat(points.get(0))
                 .usingRecursiveComparison()
@@ -123,20 +123,29 @@ class AlertStatsRepositoryTest {
         assertThat(points.get(1))
                 .usingRecursiveComparison()
                 .isEqualTo(new TimeseriesPoint(Instant.parse("2026-07-19T10:00:00Z"), 1L, "WARNING"));
-        // 11:00 桶补零
         assertThat(points.get(2))
                 .usingRecursiveComparison()
-                .isEqualTo(new TimeseriesPoint(Instant.parse("2026-07-19T11:00:00Z"), 0L, "CRITICAL"));
+                .isEqualTo(new TimeseriesPoint(Instant.parse("2026-07-19T10:00:00Z"), 0L, "INFO"));
+        // 11:00 桶补零
         assertThat(points.get(3))
                 .usingRecursiveComparison()
-                .isEqualTo(new TimeseriesPoint(Instant.parse("2026-07-19T11:00:00Z"), 0L, "WARNING"));
-        // 12:00 桶补零
+                .isEqualTo(new TimeseriesPoint(Instant.parse("2026-07-19T11:00:00Z"), 0L, "CRITICAL"));
         assertThat(points.get(4))
                 .usingRecursiveComparison()
-                .isEqualTo(new TimeseriesPoint(Instant.parse("2026-07-19T12:00:00Z"), 0L, "CRITICAL"));
+                .isEqualTo(new TimeseriesPoint(Instant.parse("2026-07-19T11:00:00Z"), 0L, "WARNING"));
         assertThat(points.get(5))
                 .usingRecursiveComparison()
+                .isEqualTo(new TimeseriesPoint(Instant.parse("2026-07-19T11:00:00Z"), 0L, "INFO"));
+        // 12:00 桶补零
+        assertThat(points.get(6))
+                .usingRecursiveComparison()
+                .isEqualTo(new TimeseriesPoint(Instant.parse("2026-07-19T12:00:00Z"), 0L, "CRITICAL"));
+        assertThat(points.get(7))
+                .usingRecursiveComparison()
                 .isEqualTo(new TimeseriesPoint(Instant.parse("2026-07-19T12:00:00Z"), 0L, "WARNING"));
+        assertThat(points.get(8))
+                .usingRecursiveComparison()
+                .isEqualTo(new TimeseriesPoint(Instant.parse("2026-07-19T12:00:00Z"), 0L, "INFO"));
     }
 
     @Test
@@ -148,7 +157,7 @@ class AlertStatsRepositoryTest {
 
         List<TimeseriesPoint> points = alertQueryService.alertTimeseries("ns", from, to, "1d", null);
 
-        assertThat(points).hasSize(4);
+        assertThat(points).hasSize(6);
         // 07-19 桶
         assertThat(points.get(0))
                 .usingRecursiveComparison()
@@ -156,13 +165,19 @@ class AlertStatsRepositoryTest {
         assertThat(points.get(1))
                 .usingRecursiveComparison()
                 .isEqualTo(new TimeseriesPoint(Instant.parse("2026-07-19T00:00:00Z"), 1L, "WARNING"));
-        // 07-20 桶补零
         assertThat(points.get(2))
                 .usingRecursiveComparison()
-                .isEqualTo(new TimeseriesPoint(Instant.parse("2026-07-20T00:00:00Z"), 0L, "CRITICAL"));
+                .isEqualTo(new TimeseriesPoint(Instant.parse("2026-07-19T00:00:00Z"), 0L, "INFO"));
+        // 07-20 桶补零
         assertThat(points.get(3))
                 .usingRecursiveComparison()
+                .isEqualTo(new TimeseriesPoint(Instant.parse("2026-07-20T00:00:00Z"), 0L, "CRITICAL"));
+        assertThat(points.get(4))
+                .usingRecursiveComparison()
                 .isEqualTo(new TimeseriesPoint(Instant.parse("2026-07-20T00:00:00Z"), 0L, "WARNING"));
+        assertThat(points.get(5))
+                .usingRecursiveComparison()
+                .isEqualTo(new TimeseriesPoint(Instant.parse("2026-07-20T00:00:00Z"), 0L, "INFO"));
     }
 
     // ---------- B9 dashboard Top-N 聚合 ----------

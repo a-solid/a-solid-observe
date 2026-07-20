@@ -5,7 +5,6 @@ import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -133,12 +132,11 @@ public class AlertQueryService {
                 ? alertRepository.timeseriesDaily(namespace, from, to, normSeverity)
                 : alertRepository.timeseriesHourly(namespace, from, to, normSeverity);
         // 从数据中收集已知的 severity 级别，用于补零
-        Set<String> knownSeverities = new LinkedHashSet<>();
-        for (TimeseriesBucket b : rows) {
-            knownSeverities.add(b.severity());
-        }
+        Set<String> knownSeverities;
         if (normSeverity != null) {
             knownSeverities = Set.of(normSeverity);
+        } else {
+            knownSeverities = Set.of("CRITICAL", "WARNING", "INFO");
         }
         // 按 (桶起点 → 级别 → 计数) 分组
         Map<Instant, Map<String, Long>> byStart = new LinkedHashMap<>();
