@@ -21,6 +21,7 @@ import com.imsw.observe.controlplane.application.DashboardStatsService;
 import com.imsw.observe.controlplane.interfaces.dto.DashboardStatsDto;
 import com.imsw.observe.controlplane.interfaces.web.ErrorResponseException;
 import com.imsw.observe.pipeline.application.ExecutionQueryService;
+import com.imsw.observe.pipeline.application.ExecutionTimeseriesPoint;
 
 /**
  * StatsController 契约测试：覆盖 alerts / alerts/timeseries / executions / dashboard（B9 新增）四个端点。
@@ -120,5 +121,46 @@ class StatsControllerTest {
         assertThat(resp.data().alertsTotal()).isEqualTo(8L);
         assertThat(resp.data().topPipelines()).hasSize(1);
         verify(dashboardStatsService).aggregate(eq("billing"), eq(null), eq(null), eq(5));
+    }
+
+    @Test
+    void executionTimeseriesRejectsInvalidBucket() {
+        Instant from = Instant.now().minusSeconds(3600);
+        Instant to = Instant.now();
+        assertThatThrownBy(() -> controller.executionTimeseries("billing", from, to, "5m", null, null))
+                .isInstanceOf(ErrorResponseException.class)
+                .hasMessageContaining("bucket");
+    }
+
+    @Test
+    void executionTimeseriesDelegatesForValidBucket() {
+        Instant from = Instant.now().minusSeconds(7200);
+        Instant to = Instant.now();
+        when(executionQueryService.executionTimeseries(eq("billing"), eq(from), eq(to), eq("1h"), eq(null), eq(null)))
+                .thenReturn(List.of(
+                        new ExecutionTimeseriesPoint(from, 88L, "SUCCESS"),
+                        new ExecutionTimeseriesPoint(from, 2L, "FAILED")));
+
+        var resp = controller.executionTimeseries("billing", from, to, "1h", null, null);
+
+        assertThat(resp.data()).hasSize(2);
+        assertThat(resp.data().get(0).status()).isEqualTo("SUCCESS");
+        assertThat(resp.data().get(0).count()).isEqualTo(88L);
+        assertThat(resp.data().get(1).status()).isEqualTo("FAILED");
+        assertThat(resp.data().get(1).count()).isEqualTo(2L);
+    }
+
+    @Test
+    void executionTimeseriesPassesFilters() {
+        Instant from = Instant.now().minusSeconds(7200);
+        Instant to = Instant.now();
+        when(executionQueryService.executionTimeseries(eq("billing"), eq(from), eq(to), eq("1d"), eq(101L), eq("CRON")))
+                .thenReturn(List.of());
+
+        var resp = controller.executionTimeseries("billing", from, to, "1d", 101L, "CRON");
+
+        assertThat(resp.data()).isEmpty();
+        verify(executionQueryService)
+                .executionTimeseries(eq("billing"), eq(from), eq(to), eq("1d"), eq(101L), eq("CRON"));
     }
 }

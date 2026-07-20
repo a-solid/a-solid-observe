@@ -101,52 +101,67 @@ public class ExecutionQueryService {
         boolean daily = "1d".equalsIgnoreCase(bucket);
         boolean coarse = "5d".equalsIgnoreCase(bucket) || "7d".equalsIgnoreCase(bucket);
 
-        long fromEpoch = from.getEpochSecond();
-        long toEpoch = to.getEpochSecond();
-        List<String> statuses = List.of("SUCCESS", "SHORT_CIRCUITED", "FAILED");
-
+        Map<String, Long> byKey;
+        long stepSeconds;
         if (coarse) {
-            long stepSeconds = "5d".equalsIgnoreCase(bucket) ? STEP_5D : STEP_7D;
-            List<Object[]> rows = executionRepository.timeseriesEpochByStatus(
-                    namespace, from, to, stepSeconds, pipelineId, normTrigger);
-            Map<String, Long> byKey = new LinkedHashMap<>();
-            for (Object[] row : rows) {
-                long epochSec = ((Number) row[0]).longValue();
-                String status = (String) row[1];
-                long count = ((Number) row[2]).longValue();
-                byKey.put(epochSec + "|" + status, count);
-            }
-            List<ExecutionTimeseriesPoint> result = new ArrayList<>();
-            long cursor = (fromEpoch / stepSeconds) * stepSeconds;
-            while (cursor < toEpoch) {
-                Instant start = Instant.ofEpochSecond(cursor);
-                for (String st : statuses) {
-                    String key = cursor + "|" + st;
-                    result.add(new ExecutionTimeseriesPoint(start, byKey.getOrDefault(key, 0L), st));
-                }
-                cursor += stepSeconds;
-            }
-            return result;
+            stepSeconds = "5d".equalsIgnoreCase(bucket) ? STEP_5D : STEP_7D;
+            byKey = loadCoarseBuckets(namespace, from, to, stepSeconds, pipelineId, normTrigger);
+        } else {
+            stepSeconds = daily ? STEP_1D : STEP_1H;
+            byKey = loadFineBuckets(namespace, from, to, daily, pipelineId, normTrigger);
         }
+        return zeroFill(from.getEpochSecond(), to.getEpochSecond(), stepSeconds, byKey);
+    }
 
-        long stepSeconds = daily ? STEP_1D : STEP_1H;
+    private Map<String, Long> loadCoarseBuckets(
+            final String namespace,
+            final Instant from,
+            final Instant to,
+            final long stepSeconds,
+            final Long pipelineId,
+            final String triggerType) {
+        List<Object[]> rows =
+                executionRepository.timeseriesEpochByStatus(namespace, from, to, stepSeconds, pipelineId, triggerType);
+        Map<String, Long> byKey = new LinkedHashMap<>();
+        for (Object[] row : rows) {
+            long epochSec = ((Number) row[0]).longValue();
+            String status = (String) row[1];
+            long count = ((Number) row[2]).longValue();
+            byKey.put(epochSec + "|" + status, count);
+        }
+        return byKey;
+    }
+
+    private Map<String, Long> loadFineBuckets(
+            final String namespace,
+            final Instant from,
+            final Instant to,
+            final boolean daily,
+            final Long pipelineId,
+            final String triggerType) {
         List<ExecutionTimeseriesBucket> rows = daily
-                ? executionRepository.timeseriesDailyByStatus(namespace, from, to, pipelineId, normTrigger)
-                : executionRepository.timeseriesHourlyByStatus(namespace, from, to, pipelineId, normTrigger);
-
+                ? executionRepository.timeseriesDailyByStatus(namespace, from, to, pipelineId, triggerType)
+                : executionRepository.timeseriesHourlyByStatus(namespace, from, to, pipelineId, triggerType);
         Map<String, Long> byKey = new LinkedHashMap<>();
         for (ExecutionTimeseriesBucket b : rows) {
-            java.time.ZonedDateTime z = java.time.ZonedDateTime.of(
-                    b.year(), b.month(), b.day(), daily ? 0 : b.hour(), 0, 0, 0, java.time.ZoneOffset.UTC);
-            byKey.put(z.toInstant().toString() + "|" + b.status(), b.count());
+            long epochSec = java.time.ZonedDateTime.of(
+                            b.year(), b.month(), b.day(), daily ? 0 : b.hour(), 0, 0, 0, java.time.ZoneOffset.UTC)
+                    .toInstant()
+                    .getEpochSecond();
+            byKey.put(epochSec + "|" + b.status(), b.count());
         }
+        return byKey;
+    }
 
+    private static List<ExecutionTimeseriesPoint> zeroFill(
+            final long fromEpoch, final long toEpoch, final long stepSeconds, final Map<String, Long> byKey) {
+        List<String> statuses = List.of("SUCCESS", "SHORT_CIRCUITED", "FAILED");
         List<ExecutionTimeseriesPoint> result = new ArrayList<>();
         long cursor = (fromEpoch / stepSeconds) * stepSeconds;
         while (cursor < toEpoch) {
             Instant start = Instant.ofEpochSecond(cursor);
             for (String st : statuses) {
-                String key = start.toString() + "|" + st;
+                String key = cursor + "|" + st;
                 result.add(new ExecutionTimeseriesPoint(start, byKey.getOrDefault(key, 0L), st));
             }
             cursor += stepSeconds;

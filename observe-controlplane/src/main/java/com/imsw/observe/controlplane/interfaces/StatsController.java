@@ -97,15 +97,17 @@ public class StatsController {
             @RequestParam(name = "bucket", required = false, defaultValue = "1h") final String bucket,
             @RequestParam(name = "pipeline_id", required = false) final Long pipelineId,
             @RequestParam(name = "trigger_type", required = false) final String triggerType) {
-        if (!"1h".equalsIgnoreCase(bucket) && !"1d".equalsIgnoreCase(bucket)
-                && !"5d".equalsIgnoreCase(bucket) && !"7d".equalsIgnoreCase(bucket)) {
+        if (!"1h".equalsIgnoreCase(bucket)
+                && !"1d".equalsIgnoreCase(bucket)
+                && !"5d".equalsIgnoreCase(bucket)
+                && !"7d".equalsIgnoreCase(bucket)) {
             throw new ErrorResponseException(
-                    ErrorCode.BAD_REQUEST.httpStatus(), ErrorCode.BAD_REQUEST,
-                    "bucket must be one of: 1h, 1d, 5d, 7d");
+                    ErrorCode.BAD_REQUEST.httpStatus(), ErrorCode.BAD_REQUEST, "bucket must be one of: 1h, 1d, 5d, 7d");
         }
-        List<ExecutionTimeseriesPoint> points = executionQueryService.executionTimeseries(
-                namespace, from, to, bucket, pipelineId, triggerType);
-        return ApiResponse.ok(points.stream().map(ExecutionTimeseriesPointDto::from).toList());
+        List<ExecutionTimeseriesPoint> points =
+                executionQueryService.executionTimeseries(namespace, from, to, bucket, pipelineId, triggerType);
+        return ApiResponse.ok(
+                points.stream().map(ExecutionTimeseriesPointDto::from).toList());
     }
 
     /**
